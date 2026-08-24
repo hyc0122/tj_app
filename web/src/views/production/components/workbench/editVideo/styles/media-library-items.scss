@@ -1,0 +1,267 @@
+%flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mediaLibrary {
+  .mediaLibraryContent {
+    // 转场列表
+    .transitionList {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(0, 150px));
+      gap: 10px;
+
+      .transitionItem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        background: var(--td-bg-color-container);
+        border: 2px solid transparent;
+        border-radius: 12px;
+        cursor: grab;
+        transition: all 0.2s;
+
+        &:hover {
+          border-color: var(--td-brand-color-10);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        &.dragging {
+          opacity: 0.6;
+          cursor: grabbing;
+          transform: scale(0.95);
+        }
+
+        .transitionItemPreview {
+          width: 36px;
+          height: 36px;
+          @extend %flex-center;
+          background: rgba(102, 126, 234, 0.1);
+          border-radius: 8px;
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+
+        .transitionItemName {
+          font-size: 12px;
+          font-weight: 400;
+          color: var(--td-text-color-primary);
+          line-height: 1.4;
+        }
+      }
+    }
+
+    // 特效列表
+    .effectList {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(0, 150px));
+      gap: 10px;
+
+      .effectItem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        background: var(--td-bg-color-container);
+        border: 2px solid transparent;
+        border-radius: 12px;
+        cursor: grab;
+        transition: all 0.2s;
+
+        &:hover {
+          border-color: var(--td-brand-color-10);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        &.dragging {
+          opacity: 0.6;
+          cursor: grabbing;
+          transform: scale(0.95);
+        }
+
+        .effectItemPreview {
+          width: 36px;
+          height: 36px;
+          @extend %flex-center;
+          background: rgba(102, 126, 234, 0.1);
+          border-radius: 8px;
+          flex-shrink: 0;
+        }
+
+        .effectItemName {
+          font-size: 12px;
+          font-weight: 400;
+          color: var(--td-text-color-primary);
+          line-height: 1.4;
+        }
+      }
+    }
+
+    // 滤镜列表
+    .filterList {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(0, 150px));
+      gap: 10px;
+
+      .filterItem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        background: var(--td-bg-color-container);
+        border: 2px solid transparent;
+        border-radius: 12px;
+        cursor: grab;
+        transition: all 0.2s;
+
+        &:hover {
+          border-color: var(--td-brand-color-10);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        &.dragging {
+          opacity: 0.6;
+          cursor: grabbing;
+          transform: scale(0.95);
+        }
+
+        .filterItemPreview {
+          width: 36px;
+          height: 36px;
+          @extend %flex-center;
+          background: rgba(102, 126, 234, 0.1);
+          border-radius: 8px;
+          flex-shrink: 0;
+        }
+
+        .filterItemName {
+          font-size: 12px;
+          font-weight: 400;
+          color: var(--td-text-color-primary);
+          line-height: 1.4;
+        }
+      }
+    }
+
+    // 音频列表
+    .audioList {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(0, 150px));
+      gap: 10px;
+
+      .audioItem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        background: var(--td-bg-color-container);
+        border: 2px solid transparent;
+        border-radius: 12px;
+        cursor: grab;
+        transition: all 0.2s;
+
+        &:hover {
+          border-color: var(--td-brand-color-10);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        &.dragging {
+          opacity: 0.6;
+          cursor: grabbing;
+          transform: scale(0.95);
+        }
+
+        .audioItemPreview {
+          width: 36px;
+          height: 36px;
+          @extend %flex-center;
+          background: rgba(102, 126, 234, 0.1);
+          border-radius: 8px;
+          flex-shrink: 0;
+          position: relative;
+
+          .mediaItemLoading {
+            position: absolute;
+            inset: 0;
+            @extend %flex-center;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+          }
+        }
+
+        .audioItemInfo {
+          flex: 1;
+          min-width: 0;
+
+          .audioItemName {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--td-text-color-primary);
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+        }
+      }
+    }
+
+    // 文本列表
+    .textList {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(0, 150px));
+      gap: 10px;
+      .textItem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        background: var(--td-bg-color-container);
+        border: 2px solid transparent;
+        border-radius: 12px;
+        cursor: grab;
+        transition: all 0.2s;
+
+        &:hover {
+          border-color: var(--td-brand-color-10);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        &.dragging {
+          opacity: 0.6;
+          cursor: grabbing;
+          transform: scale(0.95);
+        }
+
+        .textItemPreview {
+          width: 36px;
+          height: 36px;
+          @extend %flex-center;
+          background: rgba(102, 126, 234, 0.1);
+          border-radius: 8px;
+          flex-shrink: 0;
+
+          .textItemContent {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--td-brand-color-10);
+          }
+        }
+
+        .textItemName {
+          font-size: 12px;
+          font-weight: 400;
+          color: var(--td-text-color-primary);
+          line-height: 1.4;
+        }
+      }
+    }
+  }
+}

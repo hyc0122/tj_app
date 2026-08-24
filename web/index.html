@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>天将漫创</title>
+    <!-- 首屏主题预应用：在 Vue 挂载前根据持久化偏好着色，避免先浅色再赛博闪烁 -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("setting");
+          var mode = "cyberpunk";
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            var m = parsed && parsed.themeSetting && parsed.themeSetting.mode;
+            if (m === "light" || m === "dark" || m === "auto" || m === "cyberpunk") mode = m;
+          }
+          var root = document.documentElement;
+          if (mode === "cyberpunk") {
+            root.classList.add("dark", "cyberpunk");
+            root.setAttribute("data-theme", "cyberpunk");
+            root.setAttribute("theme-mode", "dark");
+          } else if (mode === "dark" || (mode === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+            root.classList.add("dark");
+            root.setAttribute("theme-mode", "dark");
+          }
+        } catch (e) {
+          document.documentElement.classList.add("dark", "cyberpunk");
+          document.documentElement.setAttribute("data-theme", "cyberpunk");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

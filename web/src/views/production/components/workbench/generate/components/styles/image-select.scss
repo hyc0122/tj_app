@@ -1,0 +1,162 @@
+.imageUploadBox {
+  gap: 8px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  padding-bottom: 6px;
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #696969;
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background-color: var(--td-bg-color-secondarycontainer);
+    border-radius: 4px;
+  }
+  .imageTitleWrap {
+    z-index: 999;
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    padding: 0 5px;
+    font-size: 11px;
+    line-height: 18px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+    user-select: none;
+    white-space: nowrap;
+  }
+  .uploadBtn {
+    width: 80px;
+    min-width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+    position: relative;
+    border: 1px dashed var(--td-component-border);
+    border-radius: 8px;
+    &:hover {
+      border-color: var(--td-text-color);
+      cursor: pointer;
+    }
+
+    .uploadPreview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 8px;
+      position: relative;
+      .imageToolsWrap {
+        height: 100%;
+        transform: scale(0.6);
+        transform-origin: bottom right;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      &:hover {
+        .imageToolsWrap {
+          opacity: 1;
+          pointer-events: auto;
+        }
+      }
+    }
+    .mediaPreview {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      gap: 4px;
+      .mediaLabel {
+        font-size: 11px;
+        color: var(--td-text-color-secondary);
+      }
+      &.audioPreview {
+        background: var(--td-bg-color-secondarycontainer);
+        color: var(--td-brand-color);
+      }
+      &.videoPreview {
+        background: #000;
+        overflow: hidden;
+      }
+    }
+    .clearBtn {
+      z-index: 999999999999999;
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      &:hover {
+        background: rgba(0, 0, 0, 0.85);
+      }
+    }
+    &:hover .clearBtn {
+      display: flex;
+    }
+    .source {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      &:hover {
+        background: rgba(0, 0, 0, 0.85);
+      }
+    }
+    &:hover .source {
+      display: flex;
+    }
+  }
+  .storyboardGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 4px;
+    .storyboardItem {
+      cursor: pointer;
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
+      &:hover {
+        border-color: var(--td-brand-color);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      }
+      img {
+        width: 100%;
+        aspect-ratio: 16/9;
+        object-fit: cover;
+        display: block;
+      }
+      .textBox {
+        aspect-ratio: 16/9;
+        width: 100%;
+        text-align: center;
+        border: 1px solid #ccc;
+      }
+    }
+  }
+}

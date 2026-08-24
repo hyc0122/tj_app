@@ -1,0 +1,72 @@
+.generateImage {
+  .data {
+    gap: 20px;
+    .uploadReferenceImage .upload {
+      margin-top: 10px;
+    }
+    .rawPicturePrompt {
+      margin-top: 20px;
+      .input {
+        margin-top: 10px;
+      }
+    }
+    .selectModel {
+      margin-top: 20px;
+    }
+    .resultImages {
+      height: 600px;
+      overflow: auto;
+      .image {
+        gap: 10px;
+        .resultImage {
+          width: 180px;
+          height: 180px;
+          cursor: pointer;
+          border-radius: 20px;
+          transition: all 0.3s ease;
+          position: relative;
+          border: 2px solid #d9d9d9;
+          &:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+          }
+          &.is-selected {
+            border: 2px solid #000;
+          }
+          &.is-disabled {
+            cursor: not-allowed;
+            opacity: 0.8;
+          }
+          .generating-overlay,
+          .failed-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            z-index: 5;
+          }
+          .preview {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+          }
+          .selected {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+          }
+          .delImage {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 10;
+          }
+        }
+      }
+    }
+    .keep {
+      margin-top: 15px;
+    }
+  }
+}

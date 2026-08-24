@@ -1,0 +1,171 @@
+%flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.propertyPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-border-level-1-color);
+  border-radius: 10px;
+  overflow: hidden;
+
+  .panelHeader {
+    flex-shrink: 0;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--td-border-level-1-color);
+    background: var(--td-bg-color-container);
+
+    .panelTitle {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--td-text-color-primary);
+    }
+  }
+
+  .panelContent {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: var(--td-scrollbar-color);
+      border-radius: 2px;
+    }
+
+    .emptyState {
+      @extend %flex-center;
+      flex-direction: column;
+      height: 100%;
+      gap: 12px;
+
+      .emptyIconWrapper {
+        width: 64px;
+        height: 64px;
+        @extend %flex-center;
+        background: var(--td-bg-color-container);
+        border-radius: 16px;
+        border: 1px solid var(--td-border-level-1-color);
+      }
+
+      .emptyText {
+        font-size: 13px;
+        color: var(--td-text-color-placeholder);
+      }
+    }
+
+    .properties {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+
+      .sectionCard {
+        background: var(--td-bg-color-container);
+        border: 1px solid transparent;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.2s;
+
+        &:hover {
+          border-color: var(--td-text-color-primary);
+          box-shadow: 0 4px 12px var(--td-shadow-1);
+        }
+
+        .sectionHeader {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--td-bg-color-secondarycontainer);
+
+          .sectionIconBadge {
+            width: 28px;
+            height: 28px;
+            @extend %flex-center;
+            background: var(--td-brand-color-light);
+            border-radius: 8px;
+            flex-shrink: 0;
+            color: var(--td-text-color-primary);
+          }
+
+          .sectionLabel {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--td-text-color-primary);
+          }
+        }
+
+        .sectionBody {
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+      }
+
+      .propRow {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .propRowHead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .propRowInline {
+        display: flex;
+        gap: 10px;
+
+        .propField {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          min-width: 0;
+        }
+      }
+
+      .propLabel {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--td-text-color-placeholder);
+        line-height: 1;
+      }
+
+      .propValueText {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--td-text-color-primary);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .durationRow {
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 4px;
+        border-top: 1px dashed var(--td-border-level-1-color);
+
+        .durationLabel {
+          font-size: 12px;
+          color: var(--td-text-color-placeholder);
+        }
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+    }
+  }
+}

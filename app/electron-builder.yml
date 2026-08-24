@@ -1,0 +1,104 @@
+appId: com.tianjiang.manchuang
+productName: 天将漫创
+copyright: Copyright © 2026
+# rcedit 的 FileVersion 必须由构建端直接收到 Windows 四段版本。
+buildVersion: 1.1.11.0
+# Beta 通道已由 feed 目录隔离；关闭版本后缀推导以固定 latest* metadata 文件名。
+detectUpdateChannel: false
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - build/**/*
+  - env/**/*
+  - package.json
+  - node_modules/**/*
+  - "!node_modules/**/*.{md,ts,map}"
+  - "!node_modules/**/LICENSE*"
+  - "!node_modules/**/{README,readme}*"
+  - "!**/*.d.ts"
+  - "!src/**/*"
+  - "!scripts/**/*.ts"
+  - "!scripts/*.ts"
+
+asar: true
+asarUnpack:
+  - "**/node_modules/sharp/**"
+  - "**/node_modules/@img/**"
+
+extraResources:
+  - from: data/web
+    to: data/web
+  - from: data/serve
+    to: data/serve
+  - from: src/tianjiang/skills/builtin
+    to: data/builtin-skills
+  - from: src/tianjiang/skills/builtin-skills-manifest.json
+    to: data/builtin-skills-manifest.json
+  # 共享只读模型种子（安装包内一份，不按账号复制）
+  - from: data/models
+    to: data/models
+  # 即梦受管安装只读取这份签名外的批准发行清单；CLI 二进制不会随应用静默分发。
+  - from: resources/dreamina-cli/approved-releases.json
+    to: dreamina-cli/approved-releases.json
+
+win:
+  # 产品 Beta 明确不做 Authenticode；仍由 electron-builder/rcedit 写入品牌资源与版本信息。
+  forceCodeSigning: false
+  signAndEditExecutable: true
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: ./scripts/logo.ico
+  # Windows 专属：VC++ 与托盘图标，不污染 macOS/Linux 资源树。
+  extraResources:
+    - from: ../.local/prerequisites/vc_redist.x64.exe
+      to: prerequisites/vc_redist.x64.exe
+    - from: build/tray.ico
+      to: build/tray.ico
+
+nsis:
+  oneClick: false
+  # 使用 installer.nsh 的自有目录页，避免 electron-builder 自动追加 APP_FILENAME。
+  allowToChangeInstallationDirectory: false
+  perMachine: true
+  shortcutName: ${productName}
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
+  installerIcon: './scripts/logo.ico'
+  uninstallerIcon: './scripts/logo.ico'
+  include: ./scripts/installer.nsh
+
+mac:
+  # 产品 Beta 明确不使用 Developer ID、hardened runtime 或 Apple 公证。
+  identity: null
+  hardenedRuntime: false
+  # 架构只由发布矩阵传入的 --x64/--arm64 决定，禁止在目标层再次扩张为双架构。
+  target:
+    - target: dmg
+    - target: zip
+  icon: ./scripts/logo.icns
+  category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  extraResources:
+    - from: build/trayTemplate.png
+      to: build/trayTemplate.png
+    - from: build/trayTemplate@2x.png
+      to: build/trayTemplate@2x.png
+
+linux:
+  # Linux Runner 只生成 CLI 指定的本机架构未签名 AppImage，目标层不得内嵌架构列表。
+  target:
+    - target: AppImage
+  icon: ./scripts/logo.png
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+  category: Development
+
+# feed URL 由构建环境注入，不写凭据。
+publish:
+  provider: generic
+  url: ${env.TIANJIANG_UPDATE_FEED_URL}
+  # 单 Range 对 CDN/代理兼容性更好；差分失败由 electron-updater 自动回退完整包。
+  useMultipleRangeRequest: false

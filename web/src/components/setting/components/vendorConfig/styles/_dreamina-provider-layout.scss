@@ -1,0 +1,224 @@
+.dreaminaProviderPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 14px 28px 2px;
+  overflow: auto;
+  color: var(--product-text, var(--td-text-color-primary));
+
+  * {
+    box-sizing: border-box;
+  }
+
+  h3,
+  h4,
+  p {
+    margin: 0;
+  }
+
+  .dreaminaHero {
+    position: relative;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 138px;
+    padding: 24px 26px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 82% 4%, color-mix(in srgb, var(--td-brand-color) 20%, transparent), transparent 36%),
+      linear-gradient(135deg, var(--product-surface, var(--td-bg-color-container)), var(--product-surface-soft, var(--td-bg-color-secondarycontainer)));
+    border: 1px solid var(--product-border, var(--td-component-border));
+    border-radius: calc(var(--product-radius-card, 16px) + 4px);
+    box-shadow: var(--product-shadow, var(--td-shadow-2));
+  }
+
+  .dreaminaHero::after {
+    position: absolute;
+    right: -54px;
+    bottom: -78px;
+    width: 220px;
+    height: 220px;
+    content: "";
+    border: 1px solid color-mix(in srgb, var(--td-brand-color) 22%, transparent);
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 28px color-mix(in srgb, var(--product-border-strong) 20%, transparent),
+      0 0 0 58px color-mix(in srgb, var(--product-border) 14%, transparent);
+  }
+
+  .dreaminaHero__identity,
+  .dreaminaHero__actions,
+  .cardHeader,
+  .cardActions,
+  .accountIdentity,
+  .dependencyItem,
+  .authDialogFooter,
+  .authDialogFooter__actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .dreaminaHero__identity {
+    position: relative;
+    z-index: 1;
+    gap: 18px;
+    min-width: 0;
+  }
+
+  .dreaminaHero__mark {
+    display: grid;
+    flex: 0 0 62px;
+    height: 62px;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--td-text-color-anti);
+    place-items: center;
+    background: linear-gradient(145deg, var(--td-brand-color-hover), var(--td-brand-color) 58%, var(--td-brand-color-active));
+    border: 1px solid var(--product-border-strong, var(--td-component-border));
+    border-radius: 18px;
+    box-shadow: var(--product-shadow, var(--td-shadow-2));
+  }
+
+  .dreaminaHero__eyebrow,
+  .cardHeader__kicker {
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--td-text-color-brand, var(--td-brand-color));
+  }
+
+  .dreaminaHero h3 {
+    margin-bottom: 5px;
+    font-size: 23px;
+    line-height: 1.2;
+  }
+
+  .dreaminaHero p {
+    max-width: 680px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+  }
+
+  .dreaminaHero__actions {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    gap: 10px;
+  }
+
+  .dreaminaHero__enable {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .dreaminaSummary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .summaryTile {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 8px;
+    gap: 12px;
+    align-items: center;
+    min-width: 0;
+    padding: 14px 16px;
+    background: var(--product-surface, var(--td-bg-color-container));
+    border: 1px solid var(--product-border, var(--td-component-border));
+    border-radius: var(--product-radius-card, 16px);
+  }
+
+  .summaryTile__icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+    place-items: center;
+    border-radius: 12px;
+  }
+
+  .summaryTile__icon--purple { color: var(--td-brand-color); background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+  .summaryTile__icon--blue { color: var(--td-text-color-link); background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+  .summaryTile__icon--cyan { color: var(--td-brand-color-hover); background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+  .summaryTile__icon--green { color: var(--td-success-color); background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+
+  .summaryTile div {
+    min-width: 0;
+  }
+
+  .summaryTile span:not(.summaryTile__icon) {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 12px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+  }
+
+  .summaryTile strong {
+    display: block;
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .statusDot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .statusDot--success { color: var(--td-success-color); background: var(--td-success-color-light); }
+  .statusDot--warning { color: var(--td-warning-color); background: var(--td-warning-color-light); }
+  .statusDot--danger { color: var(--td-error-color); background: var(--td-error-color-light); }
+  .statusDot--neutral { color: var(--product-text-muted, var(--td-text-color-placeholder)); background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+
+  i.statusDot.statusDot--success { background: var(--td-success-color); box-shadow: 0 0 0 4px var(--td-success-color-light); }
+  i.statusDot.statusDot--warning { background: var(--td-warning-color); box-shadow: 0 0 0 4px var(--td-warning-color-light); }
+  i.statusDot.statusDot--danger { background: var(--td-error-color); box-shadow: 0 0 0 4px var(--td-error-color-light); }
+  i.statusDot.statusDot--neutral { background: var(--product-text-muted, var(--td-text-color-placeholder)); box-shadow: 0 0 0 4px var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+
+  .dreaminaFeedback {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 11px 14px;
+    font-size: 13px;
+    border: 1px solid;
+    border-radius: 12px;
+  }
+
+  .dreaminaFeedback--success { color: var(--td-success-color); background: var(--td-success-color-light); border-color: var(--td-success-color); }
+  .dreaminaFeedback--error { color: var(--td-error-color); background: var(--td-error-color-light); border-color: var(--td-error-color); }
+
+  .dreaminaCardGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .dreaminaCard,
+  .dreaminaEnvironmentPanel {
+    min-width: 0;
+    padding: 20px;
+    background: var(--product-surface, var(--td-bg-color-container));
+    border: 1px solid var(--product-border, var(--td-component-border));
+    border-radius: var(--product-radius-card, 16px);
+    box-shadow: var(--product-shadow, var(--td-shadow-2));
+  }
+
+  .dreaminaCard--wide {
+    grid-column: 1 / -1;
+  }
+
+  .cardHeader {
+    gap: 16px;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+}

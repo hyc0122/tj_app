@@ -1,0 +1,9 @@
+# 排除 data 目录，避免编译产物等污染 GitHub Languages 统计
+data/** linguist-generated=true
+
+# 整个 build 编译产物目录（如被提交）
+build/** linguist-generated=true
+
+# 供应商模板会逐字生成 vendor.json；固定 CRLF，避免不同工作树因换行策略产生伪差异。
+src/provider-templates/*.ts.template text eol=crlf
+src/lib/vendor.json text eol=lf

@@ -1,0 +1,65 @@
+.linkAdd,
+.importAdd,
+.codeAdd {
+  margin-top: 20px;
+}
+
+.linkAction {
+  width: 100%;
+  margin-top: 10px;
+  text-align: right;
+}
+
+.uploadArea {
+  padding: 42px 20px;
+  margin-top: 20px;
+  text-align: center;
+  cursor: pointer;
+  border: 2px dashed #969494;
+  border-radius: 8px;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: #000;
+  }
+
+  .dragIcon {
+    margin-bottom: 12px;
+  }
+
+  .uploadText {
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+
+  .uploadHint {
+    margin: 0;
+    font-size: 12px;
+  }
+}
+
+.editorToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+
+  .editorInfo,
+  .editorActions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .editorInfo {
+    gap: 6px;
+    font-size: 13px;
+    color: #666;
+  }
+}
+
+.editorWrapper {
+  overflow: hidden;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+}

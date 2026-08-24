@@ -1,0 +1,12 @@
+# 文本默认自动归一；内置 Skills 文本固定 LF。
+* text=auto
+app/src/tianjiang/skills/builtin/**/*.md text eol=lf -whitespace
+app/src/tianjiang/skills/builtin/**/*.json text eol=lf -whitespace
+app/src/tianjiang/skills/builtin/**/*.txt text eol=lf -whitespace
+app/src/tianjiang/skills/builtin/**/*.png binary
+app/src/tianjiang/skills/builtin/**/*.jpg binary
+app/src/tianjiang/skills/builtin/**/*.jpeg binary
+app/src/tianjiang/skills/builtin/**/*.webp binary
+app/src/tianjiang/skills/builtin/**/*.gif binary
+app/src/tianjiang/skills/builtin-skills-manifest.json text eol=lf
+app/data/models/** binary

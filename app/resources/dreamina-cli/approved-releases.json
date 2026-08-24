@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "sourceVersionUrl": "https://lf3-static.bytednsdoc.com/obj/eden-cn/psj_hupthlyk/ljhwZthlaukjlkulzlp/dreamina_cli_beta/version.json",
+  "releases": [
+    {
+      "releaseId": "74c0de7a451f09d58f4429071015cde2d311d728e43b92ea9813741b4d2a15ac",
+      "buildLabel": "a857341-dirty",
+      "platform": "windows-x64",
+      "url": "https://lf3-static.bytednsdoc.com/obj/eden-cn/psj_hupthlyk/ljhwZthlaukjlkulzlp/dreamina_cli_beta/dreamina_cli_windows_amd64.exe",
+      "size": 31931904,
+      "sha256": "74c0de7a451f09d58f4429071015cde2d311d728e43b92ea9813741b4d2a15ac",
+      "publishedAt": "2026-08-13T13:13:31.169Z"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# 本机证据与临时输出
+/.local/
+/.tmp/
+**/.local/
+**/.tmp/
+
+# 依赖、缓存与构建产物
+**/node_modules/
+/app/dist/
+/app/build/main.js
+/web/dist/
+**/coverage/
+**/.cache/
+**/.vite/
+
+# 运行数据；只保留随源码发布的只读模型种子
+**/data/
+!app/src/tianjiang/data/
+!app/src/tianjiang/data/**
+!app/data/
+app/data/*
+!app/data/models/
+!app/data/models/**
+**/tmp/
+**/temp/
+**/logs/
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+
+# 环境和认证材料
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa
+id_ed25519
+
+# 操作系统与编辑器产物
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo

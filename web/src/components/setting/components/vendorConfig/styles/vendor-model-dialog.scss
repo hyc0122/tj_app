@@ -1,0 +1,105 @@
+.addBox {
+  max-height: 70vh;
+  padding-right: 16px;
+  padding-left: 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.videoModeEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  align-items: flex-start;
+}
+
+.mixedModeEditor {
+  padding: 6px 12px;
+  margin-top: 6px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.mixedModeGroup {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.mixedModeCount {
+  width: 80px;
+}
+
+.drmEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--td-component-border, #e5e5e5);
+  border-radius: 6px;
+
+  .drmHeader {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--td-component-border, #e5e5e5);
+  }
+
+  .drmHeaderIndex,
+  .drmHeaderArrow {
+    flex-shrink: 0;
+    width: 20px;
+  }
+
+  .drmHeaderLabel {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--td-text-color-secondary, #888);
+  }
+
+  .drmHeaderAction {
+    flex-shrink: 0;
+    width: 28px;
+  }
+
+  .drmRow {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .drmRowIndex {
+    flex-shrink: 0;
+    width: 20px;
+    padding-top: 6px;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+  }
+
+  .drmInput {
+    flex: 1;
+  }
+
+  .drmArrow {
+    flex-shrink: 0;
+    padding-top: 6px;
+    font-size: 16px;
+    color: #bbb;
+  }
+
+  .t-button {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .addDrmRow {
+    margin-top: 16px;
+  }
+}

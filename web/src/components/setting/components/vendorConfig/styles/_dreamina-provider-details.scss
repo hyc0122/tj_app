@@ -1,0 +1,303 @@
+.dreaminaProviderPanel {
+  .cardHeader h4 {
+    font-size: 16px;
+  }
+
+  .stateBadge {
+    flex: 0 0 auto;
+    width: auto;
+    height: auto;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-weight: 650;
+    border: 1px solid currentcolor;
+    border-radius: 999px;
+  }
+
+  .installVisual {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer));
+    border-radius: 12px;
+  }
+
+  .installVisual__icon,
+  .accountIdentity__avatar {
+    display: grid;
+    flex: 0 0 44px;
+    height: 44px;
+    font-size: 21px;
+    color: var(--td-text-color-brand, var(--td-brand-color));
+    place-items: center;
+    background: var(--product-overlay, var(--td-bg-color-container-active));
+    border-radius: 12px;
+  }
+
+  .installVisual p,
+  .accountIdentity p,
+  .queueHint,
+  .dependencyItem p,
+  .emptyState p {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+  }
+
+  .metadataList {
+    margin: 0;
+  }
+
+  .metadataList > div {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--product-border, var(--td-component-border));
+  }
+
+  .metadataList dt {
+    font-size: 12px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+  }
+
+  .metadataList dd {
+    min-width: 0;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .pathValue {
+    overflow: hidden;
+    font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cardActions {
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .cardActions--wrap {
+    flex-wrap: wrap;
+  }
+
+  .accountOverview {
+    display: grid;
+    grid-template-columns: minmax(240px, 1.7fr) repeat(3, minmax(120px, 0.65fr));
+    gap: 10px;
+  }
+
+  .accountIdentity {
+    gap: 12px;
+    min-width: 0;
+    padding: 13px;
+    background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer));
+    border-radius: 12px;
+  }
+
+  .accountMetric {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    padding: 13px;
+    background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer));
+    border-radius: 12px;
+  }
+
+  .accountMetric span {
+    margin-bottom: 5px;
+    font-size: 11px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+  }
+
+  .accountMetric strong {
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dependencyList {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .dependencyItem {
+    gap: 12px;
+    padding: 12px;
+    background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer));
+    border-radius: 12px;
+  }
+
+  .dependencyItem__icon {
+    display: grid;
+    flex: 0 0 32px;
+    height: 32px;
+    place-items: center;
+    border-radius: 50%;
+  }
+
+  .dependencyItem__icon.is-ready { color: var(--td-success-color); background: var(--td-success-color-light); }
+  .dependencyItem__icon.is-missing { color: var(--product-text-muted, var(--td-text-color-placeholder)); background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer)); }
+
+  .dependencyItem__body {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dependencyItem__title {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .dependencyItem__title span {
+    padding: 2px 6px;
+    font-size: 9px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+    background: var(--product-overlay, var(--td-bg-color-container-active));
+    border-radius: 5px;
+  }
+
+  .dependencyItem code {
+    display: block;
+    margin-top: 4px;
+    overflow: hidden;
+    font-size: 10px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .environmentNotice,
+  .environmentError {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    margin-top: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    background: var(--td-warning-color-light);
+    border: 1px solid var(--td-warning-color);
+    border-radius: 10px;
+  }
+
+  .environmentError { color: var(--td-error-color); background: var(--td-error-color-light); border-color: var(--td-error-color); }
+  .environmentError p { margin-top: 3px; color: inherit; }
+
+  .environmentSkeleton {
+    display: grid;
+    gap: 9px;
+  }
+
+  .environmentSkeleton i {
+    height: 58px;
+    background: linear-gradient(90deg, var(--product-surface-soft), var(--product-overlay), var(--product-surface-soft));
+    background-size: 220% 100%;
+    border-radius: 12px;
+    animation: dreamina-shimmer 1.3s linear infinite;
+  }
+
+  .capabilityTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .emptyState {
+    display: grid;
+    min-height: 150px;
+    text-align: center;
+    place-content: center;
+    place-items: center;
+  }
+
+  .emptyState > .t-icon,
+  .emptyState > i {
+    margin-bottom: 9px;
+    font-size: 30px;
+    color: var(--td-text-color-brand, var(--td-brand-color));
+  }
+
+  .emptyState--compact { min-height: 110px; }
+
+  .queueMetrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .queueMetrics > div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 13px;
+    background: var(--product-surface-soft, var(--td-bg-color-secondarycontainer));
+    border-radius: 11px;
+  }
+
+  .queueMetrics strong { font-size: 22px; }
+  .queueMetrics span { font-size: 11px; color: var(--product-text-secondary, var(--td-text-color-secondary)); }
+  .queueReason {
+    margin: 12px 0 0;
+    color: var(--product-text-primary, var(--td-text-color-primary));
+    font-size: 13px;
+  }
+
+  .queueControls {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .queueControls__field {
+    display: grid;
+    gap: 6px;
+    min-width: 150px;
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+    font-size: 12px;
+  }
+
+  .queueControls__field input {
+    width: 100%;
+    min-height: 36px;
+    padding: 0 10px;
+    color: var(--product-text-primary, var(--td-text-color-primary));
+    background: var(--td-bg-color-container-hover);
+    border: 1px solid var(--td-border-level-1-color);
+    border-radius: 6px;
+  }
+  .queueHint { margin-top: 12px; }
+
+  .executablePathField {
+    display: grid;
+    gap: 6px;
+    margin: 12px 0;
+  }
+
+  .executablePathField span {
+    color: var(--product-text-secondary, var(--td-text-color-secondary));
+    font-size: 12px;
+  }
+
+  .executablePathField input {
+    min-height: 38px;
+    padding: 0 10px;
+    color: var(--product-text, var(--td-text-color-primary));
+    background: var(--product-surface, var(--td-bg-color-container));
+    border: 1px solid var(--product-border, var(--td-component-border));
+    border-radius: 9px;
+  }
+}

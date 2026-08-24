@@ -1,0 +1,420 @@
+/**
+ * 佳速 API 通用供应商适配。
+ *
+ * 路由只由业务能力决定，模型名称仅作为 model 参数透传：
+ * - 文本：POST /chat/completions
+ * - 图片生成：POST /images/create（文生图、单参考图、多参考图统一入口）
+ * - 视频创建：POST /video/generations
+ * - 视频查询：GET /video/generations/{task_id}
+ *
+ * @version 4.2
+ */
+
+type VideoMode =
+  | "singleImage"
+  | "startEndRequired"
+  | "endFrameOptional"
+  | "startFrameOptional"
+  | "text"
+  | (`videoReference:${number}` | `imageReference:${number}` | `audioReference:${number}`)[];
+
+interface TextModel {
+  name: string;
+  modelName: string;
+  type: "text";
+  think: boolean;
+}
+
+interface ImageModel {
+  name: string;
+  modelName: string;
+  type: "image";
+  mode: ("text" | "singleImage" | "multiReference")[];
+}
+
+interface VideoModel {
+  name: string;
+  modelName: string;
+  type: "video";
+  mode: VideoMode[];
+  audio: "optional" | boolean;
+  durationResolutionMap: { duration: number[]; resolution: string[] }[];
+}
+
+interface TTSModel {
+  name: string;
+  modelName: string;
+  type: "tts";
+  voices: { title: string; voice: string }[];
+}
+
+interface VendorConfig {
+  id: string;
+  version: string;
+  name: string;
+  author: string;
+  description: string;
+  icon: string;
+  inputs: { key: string; label: string; type: "text" | "password" | "url"; required: boolean }[];
+  inputValues: Record<string, string>;
+  models: (TextModel | ImageModel | VideoModel | TTSModel)[];
+}
+
+type ReferenceItem = {
+  type: "image" | "audio" | "video";
+  sourceType: "base64";
+  base64: string;
+};
+
+interface ImageConfig {
+  prompt: string;
+  referenceList?: ReferenceItem[];
+  size: "1K" | "2K" | "4K";
+  aspectRatio: `${number}:${number}`;
+}
+
+interface VideoConfig {
+  duration: number;
+  resolution: string;
+  aspectRatio: string;
+  prompt: string;
+  referenceList?: ReferenceItem[];
+  audio?: boolean;
+  mode: VideoMode[];
+}
+
+interface TTSConfig {
+  text: string;
+  voice: string;
+  speechRate: number;
+  pitchRate: number;
+  volume: number;
+}
+
+interface PollResult {
+  completed: boolean;
+  data?: string;
+  error?: string;
+}
+
+interface ApiErrorPayload {
+  request_id?: unknown;
+  error?: {
+    code?: unknown;
+    message?: unknown;
+    retryable?: unknown;
+    retry_after_seconds?: unknown;
+  };
+}
+
+interface VideoTaskPayload {
+  id?: unknown;
+  task_id?: unknown;
+  status?: unknown;
+  url?: unknown;
+  error?: unknown;
+  message?: unknown;
+}
+
+declare const createOpenAI: any;
+declare const fetch: any;
+declare const pollTask: (
+  fn: () => Promise<PollResult>,
+  interval?: number,
+  timeout?: number,
+) => Promise<PollResult>;
+declare const exports: {
+  vendor: VendorConfig;
+  textRequest: (model: TextModel, think: boolean, thinkLevel: 0 | 1 | 2 | 3) => any;
+  imageRequest: (config: ImageConfig, model: ImageModel) => Promise<string>;
+  videoRequest: (config: VideoConfig, model: VideoModel) => Promise<string>;
+  ttsRequest: (config: TTSConfig, model: TTSModel) => Promise<string>;
+  queryTask: (remoteTaskId: string) => Promise<Record<string, unknown>>;
+  checkForUpdates: () => Promise<{ hasUpdate: boolean; latestVersion: string; notice: string }>;
+  updateVendor: () => Promise<string>;
+};
+
+const PRODUCTION_BASE_URL = "https://js.jiasuapi.com/v1";
+const LEGACY_BASE_URL = "https://api.tianjiang.net/v1";
+
+const vendor: VendorConfig = {
+  id: "tianjiang",
+  version: "4.2",
+  author: "JiasuAPI",
+  name: "佳速 API",
+  description:
+    "## 佳速 API\n\n按能力统一接入文本、图片和视频模型。模型名称只会作为 `model` 参数透传，后续新增或替换模型时无需修改请求代码。\n\n🔗 [官方平台](https://js.jiasuapi.com/) · [令牌密钥](https://js.jiasuapi.com/keys) · [开发文档](https://jsapi.apifox.cn/)",
+  icon: "",
+  inputs: [{ key: "apiKey", label: "API密钥", type: "password", required: true }],
+  inputValues: {
+    apiKey: "",
+    baseUrl: PRODUCTION_BASE_URL,
+  },
+  models: [
+    {
+      name: "DeepSeek v4 pro",
+      modelName: "deepseek-v4-pro",
+      type: "text",
+      think: false,
+    },
+    {
+      name: "Doubao Seedream 4.0",
+      modelName: "doubao-seedream-4-0-250828",
+      type: "image",
+      mode: ["text", "singleImage", "multiReference"],
+    },
+    {
+      name: "Doubao Seedance 1.0 Pro Fast",
+      modelName: "doubao-seedance-1-0-pro-fast",
+      type: "video",
+      mode: ["text", "singleImage"],
+      audio: false,
+      durationResolutionMap: [
+        { duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], resolution: ["480p", "720p", "1080p"] },
+      ],
+    },
+  ],
+};
+
+function getApiKey(): string {
+  const apiKey = String(vendor.inputValues.apiKey ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!apiKey) throw new Error("佳速 API 尚未填写 API 密钥");
+  return apiKey;
+}
+
+function getBaseUrl(): string {
+  const configured = String(vendor.inputValues.baseUrl ?? "").trim().replace(/\/+$/, "");
+  // 已安装旧版配置时自动切到新地址；本地测试或用户显式自定义地址则保留。
+  if (!configured || configured === LEGACY_BASE_URL) return PRODUCTION_BASE_URL;
+  return configured;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function safeApiError(prefix: string, status: number, payload: ApiErrorPayload): Error {
+  const parts = [`${prefix}：HTTP ${status}`];
+  const requestId = stringValue(payload?.request_id);
+  const code = stringValue(payload?.error?.code);
+  const message = stringValue(payload?.error?.message);
+  const retryable = payload?.error?.retryable === true;
+  const retryAfter = Number(payload?.error?.retry_after_seconds);
+  if (requestId) parts.push(`请求ID ${requestId}`);
+  if (code) parts.push(`错误码 ${code}`);
+  if (code === "EDGE_CONTROL_UNAVAILABLE") {
+    parts.push("佳速 API 控制面暂不可用");
+  } else if (message) {
+    parts.push(message);
+  }
+  if (retryable) {
+    parts.push(Number.isFinite(retryAfter) && retryAfter > 0
+      ? `请在 ${Math.ceil(retryAfter)} 秒后手动重试`
+      : "请稍后手动重试");
+  }
+  // 不拼接原始响应体，避免密钥、素材或供应商内部信息进入错误日志。
+  const error = new Error(parts.join("；")) as Error & { httpStatus?: number };
+  error.httpStatus = status;
+  return error;
+}
+
+async function parseJsonResponse(response: any): Promise<Record<string, any>> {
+  try {
+    const value = await response.json();
+    return value && typeof value === "object" ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+async function requestJson(
+  path: string,
+  init: Record<string, unknown>,
+  errorPrefix: string,
+): Promise<Record<string, any>> {
+  const response = await fetch(`${getBaseUrl()}${path}`, init);
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) throw safeApiError(errorPrefix, Number(response.status), payload);
+  return payload;
+}
+
+function normalizeDimension(value: number): number {
+  return Math.max(8, Math.round(value / 8) * 8);
+}
+
+function imageSize(size: ImageConfig["size"], aspectRatio: string): string {
+  const longEdgeMap: Record<ImageConfig["size"], number> = { "1K": 1024, "2K": 2048, "4K": 4096 };
+  const longEdge = longEdgeMap[size] ?? 1024;
+  const [rawWidth, rawHeight] = aspectRatio.split(":").map(Number);
+  const widthRatio = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1;
+  const heightRatio = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 1;
+  if (widthRatio >= heightRatio) {
+    return `${longEdge}x${normalizeDimension(longEdge * heightRatio / widthRatio)}`;
+  }
+  return `${normalizeDimension(longEdge * widthRatio / heightRatio)}x${longEdge}`;
+}
+
+function resultUrl(payload: Record<string, any>, prefix: string): string {
+  const url = stringValue(payload?.data?.[0]?.url);
+  if (!url) throw new Error(`${prefix}：响应缺少图片 URL`);
+  return url;
+}
+
+const textRequest = (model: TextModel) => {
+  // 文本模型统一走 OpenAI 兼容接口，模型名称仅原样透传。
+  return createOpenAI({ baseURL: getBaseUrl(), apiKey: getApiKey() }).chat(model.modelName);
+};
+
+async function imageRequest(config: ImageConfig, model: ImageModel): Promise<string> {
+  const references = (config.referenceList ?? []).filter((item) => item.type === "image" && item.base64);
+  const size = imageSize(config.size, config.aspectRatio);
+  const images = references.map((item) => item.base64);
+  const body: Record<string, unknown> = {
+    model: model.modelName,
+    prompt: config.prompt,
+    n: 1,
+    size,
+    response_format: "url",
+  };
+  // 佳速新图片入口统一处理文生图和参考图生成；单图传字符串，多图按原顺序传数组。
+  if (images.length === 1) {
+    body.image = images[0];
+  } else if (images.length > 1) {
+    body.image = images;
+  }
+
+  const payload = await requestJson(
+    "/images/create",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getApiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    "图片生成请求失败",
+  );
+  return resultUrl(payload, "图片生成请求失败");
+}
+
+function referenceContent(reference: ReferenceItem): Record<string, unknown> {
+  if (reference.type === "audio") {
+    return { type: "audio_url", audio_url: { url: reference.base64 }, role: "reference_audio" };
+  }
+  if (reference.type === "video") {
+    return { type: "video_url", video_url: { url: reference.base64 }, role: "reference_video" };
+  }
+  return { type: "image_url", image_url: { url: reference.base64 }, role: "reference_image" };
+}
+
+function unwrapVideoTask(payload: Record<string, any>): VideoTaskPayload {
+  const nested = payload?.data;
+  return nested && typeof nested === "object" ? nested : payload;
+}
+
+async function requestVideoTask(remoteTaskId: string): Promise<VideoTaskPayload> {
+  const response = await fetch(`${getBaseUrl()}/video/generations/${encodeURIComponent(remoteTaskId)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) throw safeApiError("视频任务查询失败", Number(response.status), payload);
+  return unwrapVideoTask(payload);
+}
+
+function videoPollResult(task: VideoTaskPayload): PollResult {
+  const status = stringValue(task.status).toLowerCase();
+  if (["failed", "cancelled", "canceled"].includes(status)) {
+    const reason = stringValue((task.error as { message?: unknown } | undefined)?.message)
+      || stringValue(task.error)
+      || stringValue(task.message)
+      || "视频任务失败";
+    return { completed: false, error: reason };
+  }
+  if (status === "completed" || status === "succeeded" || status === "success") {
+    const url = stringValue(task.url);
+    return url
+      ? { completed: true, data: url }
+      : { completed: false, error: "视频任务已完成，但响应缺少视频 URL" };
+  }
+  return { completed: false };
+}
+
+async function videoRequest(config: VideoConfig, model: VideoModel): Promise<string> {
+  const content = (config.referenceList ?? []).map(referenceContent);
+  const body: Record<string, unknown> = {
+    model: model.modelName,
+    prompt: config.prompt,
+    duration: config.duration,
+    ratio: config.aspectRatio,
+    resolution: config.resolution,
+    generate_audio: Boolean(config.audio),
+  };
+  if (content.length > 0) body.content = content;
+
+  const created = await requestJson(
+    "/video/generations",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getApiKey()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    "视频生成请求失败",
+  );
+  const remoteTaskId = stringValue(created.task_id) || stringValue(created.id);
+  if (!remoteTaskId) throw new Error("视频生成请求失败：响应缺少任务 ID");
+
+  const result = await pollTask(async () => videoPollResult(await requestVideoTask(remoteTaskId)));
+  if (result.error) throw new Error(`视频生成失败：${result.error}`);
+  if (!result.completed || !result.data) throw new Error("视频生成失败：任务未返回视频 URL");
+  return result.data;
+}
+
+async function queryTask(remoteTaskId: string): Promise<Record<string, unknown>> {
+  let task: VideoTaskPayload;
+  try {
+    task = await requestVideoTask(remoteTaskId);
+  } catch (error) {
+    const status = Number((error as { httpStatus?: unknown } | undefined)?.httpStatus);
+    if (status === 404) return { state: "not_found", reason: "远端任务不存在" };
+    if (status === 410) return { state: "failed", reason: "视频任务已结束或媒体已过保留期" };
+    throw error;
+  }
+  const status = stringValue(task.status).toLowerCase();
+  if (["completed", "succeeded", "success"].includes(status)) return { state: "completed" };
+  if (["failed", "cancelled", "canceled"].includes(status)) {
+    return {
+      state: "failed",
+      reason: stringValue((task.error as { message?: unknown } | undefined)?.message)
+        || stringValue(task.error)
+        || stringValue(task.message)
+        || "视频任务失败",
+    };
+  }
+  return { state: "pending" };
+}
+
+async function ttsRequest(): Promise<string> {
+  throw new Error("佳速 API 当前模板未配置音频模型");
+}
+
+async function checkForUpdates() {
+  return { hasUpdate: false, latestVersion: vendor.version, notice: "" };
+}
+
+async function updateVendor() {
+  return "";
+}
+
+exports.vendor = vendor;
+exports.textRequest = textRequest;
+exports.imageRequest = imageRequest;
+exports.videoRequest = videoRequest;
+exports.ttsRequest = ttsRequest;
+exports.queryTask = queryTask;
+exports.checkForUpdates = checkForUpdates;
+exports.updateVendor = updateVendor;

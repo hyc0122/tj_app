@@ -1,0 +1,158 @@
+.data {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  :deep(.t-tabs) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    .t-tabs__content,
+    .t-tab-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+  }
+}
+.tabLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panelContent {
+  margin-top: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+  }
+  .data {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+.assetsList {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  .expandedContent {
+    padding: 16px 24px;
+    border-radius: 4px;
+    margin: 8px 0;
+  }
+  .promptCell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    .generating-text {
+      font-style: italic;
+    }
+  }
+}
+.previewCell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0;
+  .imageTrigger,
+  .mediaTrigger {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    &:hover {
+      transform: scale(1.05);
+      .imageHoverOverlay,
+      .mediaHoverOverlay {
+        opacity: 1;
+      }
+    }
+    img,
+    .previewImage {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .noImage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background-color: #dad8d8;
+    }
+    .imageHoverOverlay,
+    .mediaHoverOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      color: white;
+      .hoverText {
+        font-size: 12px;
+      }
+    }
+  }
+  .generatingImage {
+    flex-direction: column;
+    gap: 6px;
+    cursor: default;
+    &:hover {
+      transform: none !important;
+    }
+    .generatingLabel {
+      font-size: 11px;
+    }
+  }
+  .mediaTrigger {
+    &.videoThumb {
+      background: #1a1a2e;
+      .thumbVideo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+      }
+    }
+    &.audioThumb {
+      color: white;
+    }
+    &.noMedia {
+      cursor: default;
+      &:hover {
+        transform: none;
+      }
+    }
+  }
+}
+
+.generatePrompt,
+.generateImage {
+  cursor: pointer;
+  padding: 8px 16px;
+  &:hover {
+    background-color: #f0f0f0;
+  }
+}

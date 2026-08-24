@@ -1,0 +1,121 @@
+.history {
+  height: 100%;
+  .titleBox {
+    gap: 6px;
+    margin-bottom: 8px;
+    .title {
+      font-size: 13px;
+      color: var(--td-text-color-secondary);
+    }
+  }
+  .historyItemBox {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    height: 100%;
+    .historyItem {
+      position: relative;
+      width: 130px;
+      height: 90px;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      background: var(--td-bg-color-secondarycontainer);
+      &.active {
+        border-color: var(--td-brand-color);
+      }
+      &.generating,
+      &.failed {
+        cursor: default;
+      }
+      .videoCover {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .loadingOverlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        gap: 4px;
+        .loadingText {
+          font-size: 11px;
+          color: #fff;
+        }
+      }
+      .stateTag {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+      }
+      .selectBtn,
+      .delBtn,
+      .download,
+      .playBtn {
+        position: absolute;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.55);
+        color: #fff;
+        cursor: pointer;
+      }
+      .selectBtn {
+        bottom: 4px;
+        right: 4px;
+      }
+      .delBtn {
+        top: 4px;
+        right: 4px;
+      }
+      .download {
+        bottom: 4px;
+        left: 4px;
+      }
+      .playBtn {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      &:hover {
+        .selectBtn,
+        .delBtn,
+        .download,
+        .playBtn {
+          display: flex;
+        }
+      }
+    }
+  }
+}
+
+.videoPlayerBox {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+  .videoPlayer {
+    width: 100%;
+    max-height: 450px;
+    outline: none;
+  }
+}
+:deep(.t-card__body) {
+  overflow: auto;
+  height: calc(100% - 48px);
+}

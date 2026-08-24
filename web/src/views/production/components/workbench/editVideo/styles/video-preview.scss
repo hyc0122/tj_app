@@ -1,0 +1,126 @@
+%flexCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.videoPreview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--td-bg-color-secondarycontainer);
+  overflow: hidden;
+
+  .previewScreen {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    @extend %flexCenter;
+    position: relative;
+    overflow: hidden;
+
+    .previewScreenPlaceholder {
+      @extend %flexCenter;
+      flex-direction: column;
+      gap: 12px;
+      color: var(--td-text-color-placeholder);
+      position: absolute;
+      z-index: 1;
+
+      .placeholderIcon {
+        @extend %flexCenter;
+      }
+
+      .placeholderText {
+        font-size: 14px;
+        color: var(--td-text-color-placeholder);
+        font-weight: 500;
+      }
+
+      .placeholderTime {
+        font-size: 24px;
+        color: var(--td-text-color-primary);
+        font-family: "Courier New", monospace;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+    }
+
+    .previewScreenPlaying {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+
+      .playingIndicator {
+        @extend %flexCenter;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+    }
+  }
+
+  .previewProgress {
+    flex-shrink: 0;
+    padding: 10px 16px 12px;
+    background: var(--td-bg-color-container);
+    border-top: 1px solid var(--td-border-level-1-color);
+
+    .progressSlider {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--td-bg-color-component);
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+
+      &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        background: var(--td-bg-color-container);
+        border: 2px solid var(--td-text-color-primary);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: transform 0.15s;
+        box-shadow: var(--td-shadow-1);
+
+        &:hover {
+          transform: scale(1.2);
+        }
+      }
+
+      &::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        background: var(--td-bg-color-container);
+        border: 2px solid var(--td-text-color-primary);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: transform 0.15s;
+        box-shadow: var(--td-shadow-1);
+
+        &:hover {
+          transform: scale(1.2);
+        }
+      }
+    }
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}

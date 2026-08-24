@@ -1,0 +1,29 @@
+.projectFormDialog {
+  width: min(1180px, calc(100vw - 48px));
+}
+
+.formColumns {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
+  gap: 20px;
+  max-height: calc(100vh - 180px);
+  overflow: hidden;
+
+  .formLeft,
+  .formRight {
+    min-width: 0;
+    overflow: auto;
+  }
+}
+
+@media (max-width: 1180px) {
+  .formColumns {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+.modelRow {
+  gap: 5px;
+  width: 100%;
+}

@@ -1,0 +1,1307 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 13797,
+      "sha256": "eff88f883ba87d21f4e74e4b2fce79d107b37ecba7241faf8391085ffdfc8f8b"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 8101,
+      "sha256": "349a42ebd569875c8a96760fbe0e4b53a57c16d1a2c71056491a2b2cde3d48c8"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 4194,
+      "sha256": "033b029e2623fbcae558ff40a08a1ca617d1374342b8c61f41e3365725554f3e"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 4748,
+      "sha256": "ea33910906ea4fc727a2262292814f3adc3e98af3b60cf035bfbeafaa18a1ce5"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 6800,
+      "sha256": "908ca3484c02de425e85bde6039e5e751330c94ddbac07721d44c4a75590b124"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 5833,
+      "sha256": "45f839f13323312a23e7b6b8e3aa6ca28278bbeb0d11ec72715a025662f2e85f"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 591,
+      "sha256": "3b535b88339424c6ccd5ed8eac908819e5cec0e005ff9faeb9bf848a1dc2c1b8"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 5276,
+      "sha256": "c107ce8e2fde1ff79cc4b218736bbf5465f61dee1f743ead52282af504414c47"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 2500,
+      "sha256": "0ed959607eb52410f42e6bcce8c3e5d4a8a695434f70ea9f651bd9760104ae2d"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 9997,
+      "sha256": "1301aa4e0c658fa22b5cd6aa1584c1ba3d7dcf9aff5e8eef0ed8db9cf37094f1"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/images/1.png",
+      "version": "1.0.0",
+      "size": 1720108,
+      "sha256": "fb971daa63d7855c8864c831d8dc6fd095b3ec09098cf5c9712ec1b769b266fa"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/prefix.md",
+      "version": "1.0.0",
+      "size": 5324,
+      "sha256": "b3dad06bc04f46a7fef7ffcbd9ac1e8341373f832e9eb0a8beb3c8cdc75713b5"
+    },
+    {
+      "path": "art_skills/2D_90s_japanese_anime/README.md",
+      "version": "1.0.0",
+      "size": 1684,
+      "sha256": "1e64575bdfb7ffe6c3364c5a0756bd8decb65dbaca1c032725475a3a70ab69ce"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 15077,
+      "sha256": "c9f0a701e250550ae3d492f22e101976bedb14f8606c692300fcb806f1e84577"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 7912,
+      "sha256": "d0a2f2013ff3900dc08a401251d182f71dd21386b00e096ff0631b0b6a23e414"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 5376,
+      "sha256": "280ff7839a1afecf72339eb10f7336ccf98eae9fbb0fbabc4ee1072c85ea165c"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 6022,
+      "sha256": "4f9c8e14dea07f0ae02561c94cc98647085de19c87c1fd3b3aed04594bb7f3cc"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 7354,
+      "sha256": "6207275ada7f1b6d5e7fbd378b8f14e992e553aac52609d1d802112eef8e231b"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 6766,
+      "sha256": "5d20474dd2366eaf9f3bc769a545c95155d8f4934ab517db0b4d952921723b06"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 621,
+      "sha256": "f974e580da1cd4abba291b0990513b10bb95b97e1d2f3a0688f6b51f0fb7ad41"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 7095,
+      "sha256": "8679c29afcb07a22e86a92a02ea9e925bf76e1edc82ec7812475b284f598ed4b"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 5486,
+      "sha256": "f787ac534999d93365ec04cdc5099ba4240f6ad5edc4e17b646272f78caa0c8e"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 10042,
+      "sha256": "d8f0b1b723187b3c5e1c4f01a660b5fc6d551dd15ad243c0f695d938eab5c5bc"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/images/1.png",
+      "version": "1.0.0",
+      "size": 2001808,
+      "sha256": "19ec3ba6b6ccfceb34b5415320c98342a04712457e7f1d025c22b2dbed7df718"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/prefix.md",
+      "version": "1.0.0",
+      "size": 4167,
+      "sha256": "a1c1e172d9b84d7f4663bbe55b821280e30b92530d4ab155aa99e11fb3867e87"
+    },
+    {
+      "path": "art_skills/2D_chinese_guofeng/README.md",
+      "version": "1.0.0",
+      "size": 1573,
+      "sha256": "8aae717de92e79c83b9bc76710af578e7493dac1eb6c0582da68398d5b9ae5da"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 14153,
+      "sha256": "2b4b12158f49e53b6c3c91db2c3da0810a5589ef4d4e6ccfc12edf896a4781dd"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 8422,
+      "sha256": "4b34711a1ad5a606dad64f413493647a161f8b30e8eac20f0ee342b20b08638e"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 4799,
+      "sha256": "40830ce9e440bece5418eb580a528846225916ac1386774967273e320861f344"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 5209,
+      "sha256": "7694993609f13c7827daa7dc5a37736e2dd2fcf52ecd5211970fb7864feaa0a5"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 7111,
+      "sha256": "bd276b27931c4bd720bb71db3c73f2afb0aa2442ac93c2af527223867d87ae27"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 6245,
+      "sha256": "b928e30a3695204bbbbd2d8c353a5dabe34fc07e842926cab2676778d97029a3"
+    },
+    {
+      "path": "art_skills/2D_flat_design/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 558,
+      "sha256": "b565575d8c5804bb6dc6858f23a2ba05c2eba0126b42bb699bebd8fbee667841"
+    },
+    {
+      "path": "art_skills/2D_flat_design/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 4829,
+      "sha256": "1ecc2886b388a82c2311de8548db38a9068963747caa5a083d868c8c8f705e67"
+    },
+    {
+      "path": "art_skills/2D_flat_design/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 2251,
+      "sha256": "dff5e41031934dfdb3e3265f588d9efb9e8d33da8c25cfb8012cc553b39de61f"
+    },
+    {
+      "path": "art_skills/2D_flat_design/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 9276,
+      "sha256": "ea4d19838482f90300f6a9d9a949905c29aac7b68d19a90b0b19bdd5e86f08de"
+    },
+    {
+      "path": "art_skills/2D_flat_design/images/1.png",
+      "version": "1.0.0",
+      "size": 1344451,
+      "sha256": "65dfadd44a3d8ba2164271ddf94920ab1183cb2e48848ce26a8b47e3383c5f79"
+    },
+    {
+      "path": "art_skills/2D_flat_design/prefix.md",
+      "version": "1.0.0",
+      "size": 5215,
+      "sha256": "f8f5a33d5b152b794808cbac962e4b9ce716096af749ea5e46d7fcc948b8b8b4"
+    },
+    {
+      "path": "art_skills/2D_flat_design/README.md",
+      "version": "1.0.0",
+      "size": 1641,
+      "sha256": "b692a62aabdfe9efc848795b428333a1d6030c4ed09e3bbd6887c8253cbbe329"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 17439,
+      "sha256": "fe838be827c1e701661d50ba4a9980aef41f9fe04c102b96f4db07f1172c8e41"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 9296,
+      "sha256": "bbe7f708e6e73e9f18ef0f94e77768f054d26da6601ed4ef127c2a5bf6628e3b"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 5286,
+      "sha256": "11124b37bd6483ccc0e6b82477f17d668eeb8b27eb0a2bd0d16f66481cc80f5c"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 5751,
+      "sha256": "7d0a33f4e2f8bd4fb2b74c22f76ab383ce6b0d4bbb641ac2dd1d53a82afda797"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 7412,
+      "sha256": "98a4e98855d32663e1cfaed19df7e91c489f6d25b98f97c1281c0eaa95567ee0"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 6753,
+      "sha256": "5d2097511a9f3a3bb58da6675bae60050ded9018f088361cf924c6bd7244e386"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 638,
+      "sha256": "e7bc6e0f466910d95817ca93e6e2403b420843b336b46b83f6d38cf20e9dad40"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 6574,
+      "sha256": "3d58023ab1ece2ddfec215a80c17a723f1b9d1a25ab88080906819f323b1a7b6"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 3547,
+      "sha256": "e06ff3006d3fa104c17d6e3683fa8085ba4ca7fbe07e437ad31d78874b2751e0"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 10208,
+      "sha256": "2a835f19afdb8b15044aaadb31160cdc3edd0cb80a0463862b3cb246506c516d"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/images/1.png",
+      "version": "1.0.0",
+      "size": 1198018,
+      "sha256": "58af1c5f7ae6054715f5ad4bd0d5bce07a8e9e35f5e1e121c1f409735bbf04f9"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/images/2.png",
+      "version": "1.0.0",
+      "size": 966256,
+      "sha256": "da3a37b13e435a3564c4f9cf278502257d80a58c4fae3139d1e3ee85e6ddd784"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/prefix.md",
+      "version": "1.0.0",
+      "size": 5867,
+      "sha256": "12f739e756113d64d5df0182f8cc0601961929e8cc581512db6eabc0e5d52dc7"
+    },
+    {
+      "path": "art_skills/2D_mature_urban_romance/README.md",
+      "version": "1.0.0",
+      "size": 1693,
+      "sha256": "32cbfe8398cbfa53d6ab8bc07ef2a606fed063c00cf349b6271e1ed63294ef5c"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 16641,
+      "sha256": "d7c4bb1706e780b255722b7cbafdd1dff0dd927d72142b13675918660251e97c"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 9574,
+      "sha256": "e47433014c282ff8cd9ec1476151f0c90843187b3274f37fb814af59b1160652"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 5603,
+      "sha256": "69dbe6e78d913b4e9ef281d1f938646f3237af1c475a5362e3c2df2d4a9f6482"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 5812,
+      "sha256": "672fac1a6cb4581aa4f8bf142ee6a35c90880c8b75519420844039dbf62769af"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 8880,
+      "sha256": "b1b62f11d9ccb36ed9d4c334b0890253640c97482462dc5dacad939605ed5338"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 7545,
+      "sha256": "400efb93c3ddb40e146547aff26ab1c60bac5179a2cd084709fa14c223ac3b47"
+    },
+    {
+      "path": "art_skills/3D_anime_render/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 600,
+      "sha256": "d80419eecdb327e9405f12511400fc601a8022de6fdf4a84189ec99bcdf501d7"
+    },
+    {
+      "path": "art_skills/3D_anime_render/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 4983,
+      "sha256": "865cdcdfdec765dc212f1499c9e64f63187a2904afd7efe68e4a10c6c9209e16"
+    },
+    {
+      "path": "art_skills/3D_anime_render/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 2443,
+      "sha256": "2bd74ccfcde4a7c1c755dacb8b44790aec5bf509ce10bb6e3fe34fb6c8031f89"
+    },
+    {
+      "path": "art_skills/3D_anime_render/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 10033,
+      "sha256": "e6c13365d696bb21377739746e2d671b9ad684fdd304b445ca0f79fe5fea2768"
+    },
+    {
+      "path": "art_skills/3D_anime_render/images/1.png",
+      "version": "1.0.0",
+      "size": 1825675,
+      "sha256": "d841b86f91bad3158ac8f36fca61b9bb38fec72d4910f867897f49f11cf0eab2"
+    },
+    {
+      "path": "art_skills/3D_anime_render/prefix.md",
+      "version": "1.0.0",
+      "size": 5348,
+      "sha256": "9a0af8de0fa227522fe2e37b853113f08fac8b530c8674ac1b24891623bcf0c3"
+    },
+    {
+      "path": "art_skills/3D_anime_render/README.md",
+      "version": "1.0.0",
+      "size": 1644,
+      "sha256": "c69d8f5e416379a03c79abb83a9fdfb0f01931b83147e92974c35f3d05933515"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 15101,
+      "sha256": "32cb87aa58b5aa4ef3d91a66a5086f13c4b943fd8c2209b138eb21765b1194d8"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 7849,
+      "sha256": "479231452a34b68ca0d10ccf64aa08fef9862fc9d63037e8347f3c6e0344cfa9"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 4689,
+      "sha256": "f0e190e9d7a9bd4d11e052deb7abf08dea5abc13df7fdf0a361085168cabfdc8"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 4999,
+      "sha256": "1634b7447883174f114760dbddc727c478619a519be91b8835a09f466902ba6c"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 7487,
+      "sha256": "69631347533922fe87e22c055bed2d27abfed76a1d01bc2dff475e1f096e1c28"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 6917,
+      "sha256": "176e0a3bdb6d9b62bafa4edb838d8ce1d925e54e29ce02ca1f8a348705fd803f"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 581,
+      "sha256": "b908a5cd3978ad2540e52bbc2be4d7b1abdfa1ba2685cbe794e641de6d445c60"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 6430,
+      "sha256": "adc06cd0506d2cd4f5ef025ec84e12be559bb19970bcb5dc7e8b9f80c2f1cfa0"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 3122,
+      "sha256": "8dc19c7cf2e8dfd65e41570e9a184a9827bf6227cb20bdf5e4ecb54f8b33177e"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 9348,
+      "sha256": "0adf161e6dd35cf90431abd84f09be35a61235026394a24c837a2831b8465bfb"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/images/1.png",
+      "version": "1.0.0",
+      "size": 1314484,
+      "sha256": "c502fe628295f3035836aef8c7e436679810885be9d2a2fe6129c7bdbb657f8a"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/prefix.md",
+      "version": "1.0.0",
+      "size": 3948,
+      "sha256": "abde4e492cf5d00eaa2b182ac97d52b516fecb10331c7a3986722b3faf372ba0"
+    },
+    {
+      "path": "art_skills/3D_chinese_traditional/README.md",
+      "version": "1.0.0",
+      "size": 1556,
+      "sha256": "efcec8e0c9171abe7736fa372ba18d518fa2de6c011343631f825d7068275943"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 10510,
+      "sha256": "0fc84075a24851f954bd2a8df10bce91ad7e11bdf11fec8e863d0a38ef19de78"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 7190,
+      "sha256": "9584881f8adaf2455eab947730bd16ba2c935596ae55b56d4aa30e9713cb2e64"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 4245,
+      "sha256": "e32057892bfc5fed48d31d6b1c8d4b6a29f72f059f984f171a1d4d289eaadb9d"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 4867,
+      "sha256": "5b51ed354f20b36cc51a3d72269a2443475eab95677f8c386eb1dd5f78b0a33a"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 6887,
+      "sha256": "70c23871a3efa0480fde60b8918ce9ad9d87de1e2cce26dd0724b776b6a3780a"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 6554,
+      "sha256": "997f5387274d6da0d0a29ac5e37234dcfd0654929231fb5368c51580841da751"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 606,
+      "sha256": "1de6e666584043a32bae31ba93aa3e8936e013c3d6bfa54941235537f9f0b918"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 4722,
+      "sha256": "cb89216faf9f7dd6e24bf041ad25cc4c890aec445f5b1e37eea5a226efd8231f"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 2474,
+      "sha256": "692463b51957c30573dfdf5af60160fa9be858a21acb4d2edef9a56115355a7f"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 10148,
+      "sha256": "a64bc9c88be9a5688240f83968c5fd44241c492b992e161c8080bbdd2f3c5a23"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/images/1.png",
+      "version": "1.0.0",
+      "size": 1225349,
+      "sha256": "299a3829872f2fd13423537a928a783b76d08d04e1aa4de63a0244dca6c77987"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/prefix.md",
+      "version": "1.0.0",
+      "size": 5310,
+      "sha256": "ce143c685ec73cbf7dbb44604172d5b556ab1ec606a808ab6f0c7672f76d8c79"
+    },
+    {
+      "path": "art_skills/3D_clay_stopmotion/README.md",
+      "version": "1.0.0",
+      "size": 1666,
+      "sha256": "c792e2202bca67711ea06ca5a1b78c415006bfd607858e9ed0cd9dd7ea81be1c"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 37123,
+      "sha256": "4920905f2bb7e0ae75b3cf43a7fe9ab41fc9ae3f5752c0fe151513abe99b4315"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 480,
+      "sha256": "9b83abac8a72bb7646cc5473383d63074f0f1d9ef41938fd50f48f9accc34647"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 11231,
+      "sha256": "55c2258bbc5d29dac9230699b37a0c69318e38bdac45b7a621fc1d6c8684ac3d"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 19512,
+      "sha256": "d495aa1329556043a3713fbe08bbf56a740664f82a8154a7945e519bbfcf3202"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 18024,
+      "sha256": "5aff57c1df50a564e61c4fc66801447201ce703cbc5a72da9f286218453ed051"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 20956,
+      "sha256": "388ef83c273b0a684deae15933010e0961c4f87ab550c498c4e50c2ea9c5eb7c"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 1322,
+      "sha256": "b79c1f8b47de3e097bbb479e6866c0c9a8fa4c038534c24c901dfa15e6c2a554"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 16578,
+      "sha256": "84ad452c8625f0612af40a16b51e6d09e8c3abd5f442860ed026953a09e8956b"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 11292,
+      "sha256": "2c4f00f550dc2f8e1eb5a1f70b4a7dbcbf2ca6e9c6a5879a7309e5992eed9a23"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 25079,
+      "sha256": "387a35be71e465a62e5d3b7625e82fa577e990ec115e8cde582f155c60ddd9d2"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/images/0d631a31-eb61-49ad-855f-396afb5fb48a.jpg",
+      "version": "1.0.0",
+      "size": 740336,
+      "sha256": "71e5d7669da65660efd8255fb1bc9933786cfa780665ceb4efdd7ba9e1fda63e"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/prefix.md",
+      "version": "1.0.0",
+      "size": 21,
+      "sha256": "02954f602154a914a7135671f065ed1098d35d487bf0705a6c0554fc4de29188"
+    },
+    {
+      "path": "art_skills/3D_guofeng_cyber/README.md",
+      "version": "1.0.0",
+      "size": 12498,
+      "sha256": "eeba202b5214a0ae88d2c63513b4873faeea96d0af69bc65008a90ba9935ee98"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 15796,
+      "sha256": "38785ac7accc26054215131853b4e6db44c35b74f25b14d4cdc069c047a1a809"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 9566,
+      "sha256": "80eb179d0091910216dae9995be0b3d69a982f197b6a1d77e8546dd3ede5b3f5"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 4596,
+      "sha256": "c45469593002bac2b87f98345401406dbde12d4adad878430af43baf4fa0c1ed"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 4942,
+      "sha256": "2c35729007eae178c7d2311fc96a72d30f55047b12189a51998458aeb9d5b4ad"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 7469,
+      "sha256": "91486c9319aafb24c71652cfb45cc2a60eb11dc9810d2c445543268b4b15b34f"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 7043,
+      "sha256": "341e653d61daefad6db802ee2d144cd4f0a10ec8038a308282f6fb14bee78b5b"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 534,
+      "sha256": "af5eb2b48d2a4365a1cba3e3a325024ccfc2e00adf10f3d5bec30896c135d93b"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 5257,
+      "sha256": "29eabc28eb232ea82c0325d90699678d02fd57d06dab817544a2e10ca40638fd"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 2491,
+      "sha256": "591f7fdbf7000c766ded2e3ab5cd533c7c0635c31647bc3d202279e6058d5b05"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 13852,
+      "sha256": "11b3f7dad64acd1a20212260506f1b3177ac52db5ba4f595b540fd0df0e967ac"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/images/1.png",
+      "version": "1.0.0",
+      "size": 1039609,
+      "sha256": "6e1d93a473fca8c4e6905d8f6479a17f6bf94ff28a1811fbfc7d36b47c647eaf"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/images/场景原始.png",
+      "version": "1.0.0",
+      "size": 1720244,
+      "sha256": "31155a33792e7c900b8bf4fb93c0d994dc405e186e21c5fed5def5d154848d2f"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/images/场景衍生.png",
+      "version": "1.0.0",
+      "size": 1497975,
+      "sha256": "d3350e88e2d1ab4fce848b6ff779c236f13654901e933ceaa777f55234fddc55"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/images/女生原始.png",
+      "version": "1.0.0",
+      "size": 869212,
+      "sha256": "142d7f61b8e88bdf79c6126d67d96b4cad903a1d9ce42e2af93b7144434bebe5"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/images/女生衍生.png",
+      "version": "1.0.0",
+      "size": 987269,
+      "sha256": "378ada13dfb1a9d9757a8879d506ab62303f60202e56de9c6eed6d6e25dc2237"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/prefix.md",
+      "version": "1.0.0",
+      "size": 5716,
+      "sha256": "38e915acefd3159b8e988c60afcf8edad6aaaeb2297af99559dcd5d22af7fc79"
+    },
+    {
+      "path": "art_skills/realpeople_ancient_chinese/README.md",
+      "version": "1.0.0",
+      "size": 1614,
+      "sha256": "230bc3093f0c56e33f8ed5885181e73058e64bbf069315276de0d988c6f2d14b"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 25627,
+      "sha256": "70ea5155bf25ea75a41746ef423ccddacf9d363fa2ab40075a94f048c98fd060"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 25616,
+      "sha256": "d47684ef8ffc293658b341c848df09e7e3160f13527aa2d879bbc57e40161249"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 12032,
+      "sha256": "0fc4aedcff3ef3666a9553eaf4f6201b204065b1baf0e52b7b2eceefe86c7865"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 14370,
+      "sha256": "512cdedae46b9596c31e2dc2aa0f858d1f0dbe1bfb397a7c0c1f98e033f92006"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 13970,
+      "sha256": "0dc8700d7fe2c04852672e3bfd8010ae354a5a538527688442102a1a105a2983"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 17874,
+      "sha256": "43b484e7dd43f92a924756754d747426af0094d72d4f33edf6ca25624415c58f"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 1057,
+      "sha256": "b4f02e5ab032702a7bcc62116fa9fc2819e602080520320bebda958f348ad49e"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 18359,
+      "sha256": "76fc49f7ab64992714b57f7fa086e2a727f2b7450b07467cb40e27803b4492db"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 16934,
+      "sha256": "ea7b6f4dff5b7d32c8ebc7e9186b17225d1fd340198d6936935e5d8e413cd001"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 18220,
+      "sha256": "8074dc061d656267341963c520d6a85c3fa8115fb66663e3dceed754a338eb5b"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/images/120acd4a-e368-4e70-8060-dc4136a292f7.jpg",
+      "version": "1.0.0",
+      "size": 17217,
+      "sha256": "44906d719f9e799debb3a2392965c2986aff93c3bb3d8c0425335bb6e5420989"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/images/67be161b-3b32-42e0-9b7e-1a4f8e885042.jpg",
+      "version": "1.0.0",
+      "size": 54910,
+      "sha256": "67be1df5894cd3e9e601102a9bfe2ba1096e503eaede2a351b62f9f278acbf4b"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/images/748b3dec-9419-464f-a3cc-62d7f9c3a25a.jpg",
+      "version": "1.0.0",
+      "size": 21583,
+      "sha256": "f90112ef047a84b7cb4edf5133532e9932307754bb0314e8752aee950b2a8780"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/images/b52881f9-568b-4574-8fa2-bac540935eec.jpg",
+      "version": "1.0.0",
+      "size": 18457,
+      "sha256": "f3e800ff91650f5d0c50cb1ef610786e2788f8784d9bf01e6f94fcbaf9309f8b"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/images/bf3df34a-8b85-4eed-89f4-6ff33f5729ce.jpg",
+      "version": "1.0.0",
+      "size": 29388,
+      "sha256": "70e60612d420d25b790003d1bcff3792938f9ed1b6339902b23531777e5de8fe"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/prefix.md",
+      "version": "1.0.0",
+      "size": 11537,
+      "sha256": "0605a7a28124c34d34996bb1c04f4a60609614d602c18b7cd06136f89637c0c1"
+    },
+    {
+      "path": "art_skills/realpeople_modern_city/README.md",
+      "version": "1.0.0",
+      "size": 19907,
+      "sha256": "f5e8c1be667d3349b221beb3098113fe3a7af98db2960f4d26ff0e4c6cb82ea9"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_character_derivative.md",
+      "version": "1.0.0",
+      "size": 13805,
+      "sha256": "660858e4e73fce162f2ed2fcd68ef6ef8f513571a372da61e85e43a6db1389d5"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_character.md",
+      "version": "1.0.0",
+      "size": 8492,
+      "sha256": "f968922c4f4ebbb09859a258bd6ede6da3738ee226c251d49ffdbcf02028bd68"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_prop_derivative.md",
+      "version": "1.0.0",
+      "size": 3508,
+      "sha256": "117c1dbae5e55de0241ef9421c950be3129257c7e5ca6f334835b5b51cc8e648"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_prop.md",
+      "version": "1.0.0",
+      "size": 5120,
+      "sha256": "782586a39eb080c1d97a8b6c2449b5e15484cdbe811e54f3494d78228b2560e1"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_scene_derivative.md",
+      "version": "1.0.0",
+      "size": 7482,
+      "sha256": "b7ef0be5b96d97f485b2fddadb4d5e8c23d42e889cd561767fd0d02582ac1661"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_scene.md",
+      "version": "1.0.0",
+      "size": 6997,
+      "sha256": "76d8b8741859bce4dea7f949594ebf56d0552df51ac0240b1b1555e3abf08fcb"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/art_prompt/art_storyboard_video.md",
+      "version": "1.0.0",
+      "size": 540,
+      "sha256": "726cf292af8d4ad6893d69447e6132d9d4d083abf69fc3b01fa404c0b353f094"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/driector_skills/director_planning_style.md",
+      "version": "1.0.0",
+      "size": 4997,
+      "sha256": "a519b28e34f6b7f0edeae904fa67b8f98a2cd209a9db512af00b6aa4ae04fbdc"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/driector_skills/director_storyboard_table_style.md",
+      "version": "1.0.0",
+      "size": 2584,
+      "sha256": "f072292e1dec0ee34a19f147570cb1ce38c2af2dc82193dbd56080dcca507d6c"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/driector_skills/director_storyboard.md",
+      "version": "1.0.0",
+      "size": 10067,
+      "sha256": "d359f02db1a92e3b38e25c446827302c0f9ad3947ad636df62378af1e0769be1"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/images/1.png",
+      "version": "1.0.0",
+      "size": 1255760,
+      "sha256": "4b769b4abbf9dad7413e53eee0b4bc6f03a841ca99f337226882f3a9176aae72"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/prefix.md",
+      "version": "1.0.0",
+      "size": 5603,
+      "sha256": "e8912d6fc6bc9d33fb0464a4a912a95a38a30ff34e7fdd1d3fa5858c410775ca"
+    },
+    {
+      "path": "art_skills/realpeople_urban_modern/README.md",
+      "version": "1.0.0",
+      "size": 1661,
+      "sha256": "79453b80fdc09ea1ac6e2481627ec6f055871347ee6dbe99c8556a76b93e753d"
+    },
+    {
+      "path": "production_agent_decision.md",
+      "version": "1.0.0",
+      "size": 10502,
+      "sha256": "36d6b0057a043241aa06f0ac01d38b15c5678c72cf51e26908fe5100d147974a"
+    },
+    {
+      "path": "production_agent_supervision.md",
+      "version": "1.0.0",
+      "size": 18025,
+      "sha256": "b9b9e1951a7462890ac082ca1e219fd345695a70a572cc1564ba4731a01fafd5"
+    },
+    {
+      "path": "production_execution_derive_assets.md",
+      "version": "1.0.0",
+      "size": 6355,
+      "sha256": "2f8b9d5a9c1346061de4cff289d8f6a24bc0b5447b5afad477bac7f7e4ea59a8"
+    },
+    {
+      "path": "production_execution_director_plan.md",
+      "version": "1.0.0",
+      "size": 11057,
+      "sha256": "eb17da43aa4aafc0412a917144605c1e42b8bcbb94a08c2c60ed7b67f0514d82"
+    },
+    {
+      "path": "production_execution_generate_assets.md",
+      "version": "1.0.0",
+      "size": 1196,
+      "sha256": "eca64200b83d948107ef535a39c7d23c37ba4d7301bd5d482306980b3a2ec1b5"
+    },
+    {
+      "path": "production_execution_storyboard_gen.md",
+      "version": "1.0.0",
+      "size": 1227,
+      "sha256": "90550490b8dcd575548aaefbd0c0b4fc73af1b0c70b1b485de544e0f97ccc235"
+    },
+    {
+      "path": "production_execution_storyboard_panel.md",
+      "version": "1.0.0",
+      "size": 13302,
+      "sha256": "e00998cec47632954a9f451f09d45c17926c9d9fd0f1fa967feee7cbd4fdf92f"
+    },
+    {
+      "path": "production_execution_storyboard_table.md",
+      "version": "1.0.0",
+      "size": 13347,
+      "sha256": "02c57fae212b813d2d95cf1423106dd2ba4f20cf27dbc4f858644e7360eb4381"
+    },
+    {
+      "path": "production_skills/storyboard_prompt_techniques.md",
+      "version": "1.0.0",
+      "size": 26065,
+      "sha256": "e06aeb0b99436b0a19adcda0f1ded3be721a9bbf819f97b968c90a63e6e70bd7"
+    },
+    {
+      "path": "production_skills/storyboard_table_techniques.md",
+      "version": "1.0.0",
+      "size": 14032,
+      "sha256": "9280b6b1c6b391d88338adf916b049168861ee18482fbbbb6fde0368532b96cc"
+    },
+    {
+      "path": "script_agent_decision.md",
+      "version": "1.0.0",
+      "size": 11865,
+      "sha256": "d3f5cc18e4a1d251d486692b99757990e066d32e40cedda94eaea6971c9a6f02"
+    },
+    {
+      "path": "script_agent_supervision.md",
+      "version": "1.0.0",
+      "size": 20406,
+      "sha256": "2c1551bce3cc22f36e78d52e64dbe0094c18d543ce17cfc390b33c1f2a9caeec"
+    },
+    {
+      "path": "script_execution_adaptation.md",
+      "version": "1.0.0",
+      "size": 12142,
+      "sha256": "2dee187d2ed331e6b0a614f62abd7b96a63451c01b73359f50b7c02d4ab557aa"
+    },
+    {
+      "path": "script_execution_script.md",
+      "version": "1.0.0",
+      "size": 24534,
+      "sha256": "54667677759fa66a3dcf53182bb7fb2203d141f4930652118ad14064fbd2a426"
+    },
+    {
+      "path": "script_execution_skeleton.md",
+      "version": "1.0.0",
+      "size": 27376,
+      "sha256": "8950af81523bbdbedafd4318eebe5881dc669501307307c95bbb14c0d6144603"
+    },
+    {
+      "path": "story_skills/Comedy_humor/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8527,
+      "sha256": "8ce593f9f1479228808859550f86f2cb117148c811deba4a90f08932d16f1865"
+    },
+    {
+      "path": "story_skills/Comedy_humor/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6525,
+      "sha256": "d1c78c374b167e429994589ed344f3e38776709a4f2366784ddba94dd2a6ba84"
+    },
+    {
+      "path": "story_skills/Comedy_humor/images/title.png",
+      "version": "1.0.0",
+      "size": 6988,
+      "sha256": "639e912ad732af77f7731a0451c3b8978dfe0f7668659269baddcac5adcc55ad"
+    },
+    {
+      "path": "story_skills/Comedy_humor/README.md",
+      "version": "1.0.0",
+      "size": 3246,
+      "sha256": "7df61b36456581373f66adfa340c5044abbca4d487f6cf62b85b8e63ea0002a6"
+    },
+    {
+      "path": "story_skills/Coming_of_age/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8427,
+      "sha256": "26e3152141fcf910acc2033d087e6a96f9495734c6d8858ac022dd9b84080fb3"
+    },
+    {
+      "path": "story_skills/Coming_of_age/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6478,
+      "sha256": "844f6802f31863a8885fd8ccbd2ab5475eba842604385047b9e5972d071af945"
+    },
+    {
+      "path": "story_skills/Coming_of_age/images/title.png",
+      "version": "1.0.0",
+      "size": 7553,
+      "sha256": "33f0adfca14c0ac181d3ce4aab3bdcc600fa3945fe4aee07ebf78da2f71f015c"
+    },
+    {
+      "path": "story_skills/Coming_of_age/README.md",
+      "version": "1.0.0",
+      "size": 2791,
+      "sha256": "aa26c6aa398d1081719fa7681374bdb8ea380a2a036a50dd2a9fdccecf64392a"
+    },
+    {
+      "path": "story_skills/Family_warmth/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8565,
+      "sha256": "af8b3bd8618ab2f1d92096f0ee0b2589f9793455c6ace43f6be779d1d0c90e78"
+    },
+    {
+      "path": "story_skills/Family_warmth/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6348,
+      "sha256": "277746960b32674f63292c1b27a90ddb3f309ca0d2c9b2c64a79f9c502fbf06c"
+    },
+    {
+      "path": "story_skills/Family_warmth/images/title.png",
+      "version": "1.0.0",
+      "size": 8449,
+      "sha256": "d1932eeeeaba874330ba3e6dec00da291192173ad2c254f594f149fb373c181c"
+    },
+    {
+      "path": "story_skills/Family_warmth/README.md",
+      "version": "1.0.0",
+      "size": 2780,
+      "sha256": "01c1edcae4b86059587c55695e7e7a4f01020559ed449a794fcf69a89c29dd89"
+    },
+    {
+      "path": "story_skills/Historical_epic/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8286,
+      "sha256": "1247aad1a3ce84408c2d2b3cd7ea03ec009cc79ad476f7b7d55d7f9aa19b98ee"
+    },
+    {
+      "path": "story_skills/Historical_epic/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6139,
+      "sha256": "cde5564b80746457af91156d668a662144a3bd0f440f990a9fb70d8cfc31f14b"
+    },
+    {
+      "path": "story_skills/Historical_epic/images/title.png",
+      "version": "1.0.0",
+      "size": 6024,
+      "sha256": "2d8a1bc536cf4b1bb43d505b10309a8be449c5326ff089a15201fb2510e5b134"
+    },
+    {
+      "path": "story_skills/Historical_epic/README.md",
+      "version": "1.0.0",
+      "size": 2685,
+      "sha256": "978e83e0876a99504a518991ace6ac7f4d43a47e0493717563ea98078db789fe"
+    },
+    {
+      "path": "story_skills/Horror_supernatural/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8386,
+      "sha256": "4ee9ff6e319fc813bb34fec2eccf85e8ed2a5a176d811c08d1a26458364d9a6c"
+    },
+    {
+      "path": "story_skills/Horror_supernatural/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6384,
+      "sha256": "62cd3f1bff014ddb67809359d1c5cbcfa4a2e2f97df391272cb94e8bb4e9437e"
+    },
+    {
+      "path": "story_skills/Horror_supernatural/images/title.png",
+      "version": "1.0.0",
+      "size": 8249,
+      "sha256": "6800d32b6c9ab30a8401b5fe6f68cd61411211f978f963c294b3950750699733"
+    },
+    {
+      "path": "story_skills/Horror_supernatural/README.md",
+      "version": "1.0.0",
+      "size": 2587,
+      "sha256": "366d68998e393410b071579d596461ca705c9cae502ecf271b5892222b176f42"
+    },
+    {
+      "path": "story_skills/Hot_blooded_action/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8170,
+      "sha256": "458dda9943c61547a61de4a1c95159939328b619a019c7a7af76b5bc70945860"
+    },
+    {
+      "path": "story_skills/Hot_blooded_action/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6197,
+      "sha256": "4a44671bc2368760df9f8c340e7c570dde9988d84c4b41f904fd0d8ed9e97f62"
+    },
+    {
+      "path": "story_skills/Hot_blooded_action/images/title.png",
+      "version": "1.0.0",
+      "size": 7506,
+      "sha256": "7e3c4e6bdbada55089e547799d1293e2f79c697492ecfcc9e95cd85aaf77e20d"
+    },
+    {
+      "path": "story_skills/Hot_blooded_action/README.md",
+      "version": "1.0.0",
+      "size": 3259,
+      "sha256": "ab5abee957da6e850b11f91bdd4acc3dd0ff3561ef2c1b8fd135a5c194488bca"
+    },
+    {
+      "path": "story_skills/Mystery_thriller/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8844,
+      "sha256": "faac16791569398af380b440a63c0197058bbc31b69f4f4faa620fd0bb3edddd"
+    },
+    {
+      "path": "story_skills/Mystery_thriller/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 7643,
+      "sha256": "130913780c2ca0aac77aabeeef19f90394d20d21637744e364c9cdea5164be18"
+    },
+    {
+      "path": "story_skills/Mystery_thriller/images/title.png",
+      "version": "1.0.0",
+      "size": 8297,
+      "sha256": "48bdbe4d396b6190c9e84f70b250421e67832e6cf8a342517772c6fb37435072"
+    },
+    {
+      "path": "story_skills/Mystery_thriller/README.md",
+      "version": "1.0.0",
+      "size": 3280,
+      "sha256": "ef9053183ca7b6d0fa1d244354d954c595f9de8939ca8b54ec1f19b66f1a2d2b"
+    },
+    {
+      "path": "story_skills/Psychological_drama/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 9013,
+      "sha256": "5ed89e866af9b98d8ec4d7c2261d019ef4dfd26eea2400cab41430a014589b1d"
+    },
+    {
+      "path": "story_skills/Psychological_drama/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6730,
+      "sha256": "86e55a6c6f97aab7b81e92cf60a8914b2ee15782e3e50c231a886be951bfb2df"
+    },
+    {
+      "path": "story_skills/Psychological_drama/images/title.png",
+      "version": "1.0.0",
+      "size": 7389,
+      "sha256": "f5fe22ef97a30cde6686ef72cec1252eea3370965e78b8d0af68f186089bcb56"
+    },
+    {
+      "path": "story_skills/Psychological_drama/README.md",
+      "version": "1.0.0",
+      "size": 2722,
+      "sha256": "bf7fd76411a274650d2daa6bdf9e65ac6635c7cb1245762d1080596abb24c1da"
+    },
+    {
+      "path": "story_skills/Scifi_post_apocalypse/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8788,
+      "sha256": "46755d6dc6db0c459cfb269c9d0b1fac09ffc265b2e43140a30be4dbd73c754c"
+    },
+    {
+      "path": "story_skills/Scifi_post_apocalypse/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6972,
+      "sha256": "4dce31880afb29c5d01cafb7d964744ed0eec097e71f2da25cd89fe14a872ef6"
+    },
+    {
+      "path": "story_skills/Scifi_post_apocalypse/images/title.png",
+      "version": "1.0.0",
+      "size": 7543,
+      "sha256": "ede78e1f64ea6b94f91391e0fa047b046756c729a52972b5e1a8a5784ab199d3"
+    },
+    {
+      "path": "story_skills/Scifi_post_apocalypse/README.md",
+      "version": "1.0.0",
+      "size": 3351,
+      "sha256": "44ea3c7d48f6eb3f70dab8504442e92fd0bb679267c41fe4e6929cad1faa52de"
+    },
+    {
+      "path": "story_skills/Sweet_romance_novel/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 7626,
+      "sha256": "4a2af74334e6fd4542615560def2db72ae3277eb358e1a12cfac27b77ae99daf"
+    },
+    {
+      "path": "story_skills/Sweet_romance_novel/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 5353,
+      "sha256": "bb1e3b085e468c4645a886df0cd58320eaadb8b3a0609f42abb36b2a1e7f59d1"
+    },
+    {
+      "path": "story_skills/Sweet_romance_novel/images/title.png",
+      "version": "1.0.0",
+      "size": 5996,
+      "sha256": "8903e3f3f8ad6cf431e543e2cadf1e9927a63a3b39406c6e37207fc25833e79a"
+    },
+    {
+      "path": "story_skills/Sweet_romance_novel/README.md",
+      "version": "1.0.0",
+      "size": 3146,
+      "sha256": "3af7d1e14839f4d980d8ec694f4644b5fb7d982a0f7109cb52d1f556a5475ee8"
+    },
+    {
+      "path": "story_skills/Urban_workplace_drama/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8526,
+      "sha256": "d1b3bc9ae084049adbf87a998fb449de0a5595ad66b0bdf2eb6fb61ab150ffde"
+    },
+    {
+      "path": "story_skills/Urban_workplace_drama/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6709,
+      "sha256": "4c4063d83b1d1e11a8bd651367c53d84b155f13e2ee1910c162f8c89fe8621b5"
+    },
+    {
+      "path": "story_skills/Urban_workplace_drama/images/title.png",
+      "version": "1.0.0",
+      "size": 7765,
+      "sha256": "a54e835a6e09afae4032cb6b5fcb85b1b7e32af10b17f808e2c4fddff34fcb8c"
+    },
+    {
+      "path": "story_skills/Urban_workplace_drama/README.md",
+      "version": "1.0.0",
+      "size": 3263,
+      "sha256": "2b35053164ecae532952564ae8c6b08f8009c9dbb11e562358e8fd6d1b81181f"
+    },
+    {
+      "path": "story_skills/Xianxia_fantasy/driector_skills/director_planning_narrative.md",
+      "version": "1.0.0",
+      "size": 8191,
+      "sha256": "3d514bb1ddc22b9014abe997d5b7b4bbec9eb3ef2530381699c07e2ff0b539a3"
+    },
+    {
+      "path": "story_skills/Xianxia_fantasy/driector_skills/director_storyboard_table_narrative.md",
+      "version": "1.0.0",
+      "size": 6311,
+      "sha256": "9b28469b53d0c5e5e302a00a95d7c51e575792532cc0fe7dce246334373e59dd"
+    },
+    {
+      "path": "story_skills/Xianxia_fantasy/images/title.png",
+      "version": "1.0.0",
+      "size": 7173,
+      "sha256": "9027a1080f6ff4768ea6aa81b6d55f9d93cc75aa1211ee6ee37469beb18afa13"
+    },
+    {
+      "path": "story_skills/Xianxia_fantasy/README.md",
+      "version": "1.0.0",
+      "size": 3217,
+      "sha256": "317064862e7af93f7046c16c98285b2d778bf685b4a33a9c0f535781c9985894"
+    },
+    {
+      "path": "tianjiang-project-workflow/references/storyboard-checklist.md",
+      "version": "1.0.0",
+      "size": 382,
+      "sha256": "1b74f52dbe988e8dd73b19f6037c78ca9dea771b5719b4c0d60da80dd93100bf"
+    },
+    {
+      "path": "tianjiang-project-workflow/SKILL.md",
+      "version": "1.0.0",
+      "size": 867,
+      "sha256": "f7d68be98d0876f1460c70d6b0793f969093598f9ed765cbcebeba405164536b"
+    }
+  ]
+}

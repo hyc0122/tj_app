@@ -1,0 +1,45 @@
+.mediaPreviewDialog {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0 16px;
+  .mediaPlayer {
+    display: block;
+    border-radius: 6px;
+    outline: none;
+  }
+  .videoPlayer {
+    width: 100%;
+    max-height: 60vh;
+    background: #000;
+  }
+  .audioWrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    padding: 16px 0;
+    .audioIcon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .audioName {
+      margin: 0;
+      font-size: 14px;
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .audioPlayer {
+      width: 100%;
+    }
+  }
+}

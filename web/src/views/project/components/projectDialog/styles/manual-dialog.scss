@@ -1,0 +1,125 @@
+.nameAndCoverRow {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+
+  .nameField,
+  .mdFileLocation {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .mdFileLocation {
+    margin-top: 10px;
+  }
+
+  .coverField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 20px;
+  }
+
+  .fieldLabel {
+    font-size: 14px;
+    color: var(--td-text-color-primary);
+  }
+}
+
+.coverUploadArea {
+  width: 100%;
+
+  .coverPreview {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .coverImg {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border: 1px solid var(--td-component-border);
+    border-radius: 6px;
+  }
+
+  &.multiCoverUploadArea {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+
+    .coverPreview {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .coverImg {
+      display: block;
+    }
+
+    .coverImgRemove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      font-size: 10px;
+      color: #fff;
+      cursor: pointer;
+      background: var(--td-error-color);
+      border-radius: 50%;
+
+      &:hover {
+        background: var(--td-error-color-hover);
+      }
+    }
+  }
+
+  .coverUploadTrigger {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    font-size: 12px;
+    color: var(--td-text-color-placeholder);
+    white-space: nowrap;
+    cursor: pointer;
+    border: 2px dashed var(--td-component-border);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+
+    &:hover {
+      color: var(--td-brand-color);
+      border-color: var(--td-brand-color);
+    }
+  }
+}
+
+.promptEditorWrapper {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+:deep(.md-editor) {
+  border-radius: 6px;
+}
+
+:deep(.artStyleDialog) {
+  .t-dialog__body {
+    height: 75vh;
+    overflow-y: auto;
+  }
+}

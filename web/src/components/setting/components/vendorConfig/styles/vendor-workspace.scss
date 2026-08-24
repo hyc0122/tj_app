@@ -1,0 +1,110 @@
+.modelServe {
+  display: flex;
+  width: 100%;
+  height: 100%;
+
+  .modelList {
+    width: 300px;
+    height: 90%;
+    min-height: 0;
+
+    .listContent {
+      flex: 1;
+      height: 100%;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .listFooter {
+      padding: 0 10px 10px;
+      margin-right: 6px;
+    }
+  }
+
+  .modelParameter {
+    width: 100%;
+    height: 100%;
+
+    .infoBox {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+
+    .configuration {
+      height: 95%;
+      padding-right: 10px;
+      overflow-y: auto;
+    }
+
+    .modelCard {
+      width: 100%;
+      margin-top: 10px;
+
+      .topInfo {
+        margin-right: 4px;
+        margin-left: 4px;
+      }
+
+      .modelCardNameWrap {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .modelCardName {
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .tags {
+        margin-top: 16px;
+
+        & > * {
+          margin-right: 4px;
+          margin-left: 4px;
+        }
+      }
+    }
+
+    .updateAction {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+
+      & > * {
+        margin-left: 8px;
+      }
+    }
+
+    .requiredLabel {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+      font-weight: 600;
+    }
+
+    .requiredMark {
+      font-size: 16px;
+      line-height: 1;
+      color: #d54941;
+    }
+
+    .requiredText {
+      font-size: 12px;
+      font-weight: 700;
+      color: #d54941;
+    }
+
+    .inputHelp {
+      color: #666;
+    }
+
+    .optionalSection {
+      margin-bottom: 12px;
+    }
+  }
+
+  :deep(.t-default-menu) {
+    width: 100% !important;
+  }
+}
