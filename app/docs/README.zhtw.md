@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) · [English](./README.en.md) · [日本語](./README.ja.md) · [Русский](./README.ru.md) · [ไทย](./README.th.md) · [Tiếng Việt](./README.vi.md) · [繁體中文](./README.zhtw.md)
 
-天將漫創是本機 AI 漫劇製作客戶端，涵蓋小說整理、劇本改編、角色與場景資產、分鏡及影片生成。專案與個人模型設定儲存在目前中央帳號專屬的本機資料區。
+天將漫創是 Windows AI 漫劇製作客戶端，涵蓋小說整理、劇本改編、角色與場景資產、分鏡、生成佇列及任務中心。Apache-2.0 客戶端原始碼發布於 [hyc0122/tj_app](https://github.com/hyc0122/tj_app)；中央帳號、團隊服務、管理後台及部署設定不在公開倉庫範圍內。
 
 ## 系統需求
 
@@ -29,7 +29,8 @@
 - 端點、模型名稱及金鑰屬於目前帳號的本機設定。
 - 私密資料不得寫入日誌、團隊同步或其他帳號目錄。
 - 請分別驗證文字、圖片及影片供應商。
-- 更新檢查需要部署方設定 `TIANJIANG_UPDATE_MANIFEST_URL`；未設定不會阻擋工作台。
+- 客戶端同時檢查 Stable 與 Beta；新版 Stable 在登入時強制更新，Beta 則由使用者選擇是否安裝測試版。
+- Windows x64 固定目錄為 `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`，前端不能提交任意更新網址。
 
 ## 資料遷移
 
@@ -41,10 +42,11 @@
 cd app
 yarn install --frozen-lockfile
 yarn dev
-yarn test:tianjiang
 yarn lint
 yarn build
 ```
+
+請以 `node --import tsx --test <定向測試檔>` 執行本次變更相關 App 測試。Beta 使用 `.github/workflows/app-release.yml`，Stable 使用 `.github/workflows/app-stable-release.yml`。
 
 ## 疑難排解
 
@@ -55,4 +57,4 @@ yarn build
 
 ## 授權與第三方聲明
 
-著作權與授權條款見 [LICENSE](../LICENSE)，第三方元件與來源歸屬見 [NOTICES.txt](../NOTICES.txt)。重新散布時必須保留兩者。
+客戶端採 Apache-2.0，完整條款見 [LICENSE](../LICENSE)，第三方元件與來源歸屬見 [NOTICES.txt](../NOTICES.txt)。重新散布時必須保留兩者。

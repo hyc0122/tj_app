@@ -1,6 +1,6 @@
 {
   "name": "tianjiang",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "description": "天将漫创是一款 AI 漫剧创作工具，支持从小说、剧本到分镜与成片的完整制作流程。",
   "author": "HBAI-Ltd <ltlctools@outlook.com>",
   "license": "Apache-2.0",
@@ -24,7 +24,7 @@
     "electron-builder": "node scripts/electron-builder-cli.cjs",
     "pack": "node scripts/package-electron.mjs --installer",
     "pack:verify": "node scripts/package-web-assets.mjs verify-package dist/win-unpacked ../web/dist",
-    "installer:verify": "node scripts/verify-installer-structure.mjs dist/天将漫创-1.1.11-win-x64-setup.exe dist/win-unpacked",
+    "installer:verify": "node scripts/verify-installer-structure.mjs dist/天将漫创-1.1.12-win-x64-setup.exe dist/win-unpacked",
     "dist": "node scripts/package-electron.mjs --installer",
     "dist:win": "node scripts/package-electron.mjs --installer",
     "dist:win:x64": "node scripts/package-electron.mjs --installer --target windows-x64",

@@ -2,7 +2,9 @@
 
 [简体中文](./README.md) · [English](./docs/README.en.md) · [日本語](./docs/README.ja.md) · [Русский](./docs/README.ru.md) · [ไทย](./docs/README.th.md) · [Tiếng Việt](./docs/README.vi.md) · [繁體中文](./docs/README.zhtw.md)
 
-天将漫创是面向 AI 漫剧生产的本地客户端，覆盖小说整理、剧本改编、角色与场景资产、分镜制作和视频生成。桌面端与本地运行时随同一安装包交付，用户项目和个人模型配置保存在当前账号的本机数据目录。
+天将漫创是面向 AI 漫剧生产的 Windows 桌面客户端，覆盖小说整理、剧本改编、角色与场景资产、分镜制作、生成队列和任务中心。桌面端、本地运行时与 Vue 工作台由同一安装包交付，用户项目和个人模型配置保存在当前中央账号的本机数据目录。
+
+客户端源码以 Apache-2.0 发布在 [hyc0122/tj_app](https://github.com/hyc0122/tj_app)。中央账号、团队协作、管理后台与部署配置不属于客户端开源仓库。
 
 ## 运行要求
 
@@ -29,7 +31,8 @@
 - 供应商地址、模型名和密钥在当前账号的本机配置中维护；选中供应商后，设置页会直接加载、显示并允许编辑当前账号的完整值。
 - 私密配置不得写入日志、团队同步或其他账号目录。
 - 请分别验证文本、图片和视频模型；某一供应商不可用不会自动代表其他供应商可用。
-- “检查更新”需要部署方设置 `TIANJIANG_UPDATE_MANIFEST_URL`；未配置时只关闭更新提示，不影响工作台。
+- 客户端同时检查 Stable 与 Beta 平台目录。Stable 高于当前版本时在登录阶段强制更新；Beta 仅提供用户主动选择的测试版更新。
+- Windows x64 固定目录为 `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`，前端不接受自定义更新地址。
 
 ## 数据与迁移
 
@@ -56,21 +59,20 @@ yarn dev:gui
 ## 验证
 
 ```powershell
-yarn test:tianjiang
 yarn lint
 yarn build
 ```
 
-根目录 `.github/workflows/app-release.yml` 是当前生效的 Windows x64 Release 工作流。正式打包只应通过受控工作流或仓库脚本执行。
+按改动范围用 `node --import tsx --test <定向测试文件>` 运行 App 测试；不得把超时或强制结束记为通过。根目录 `.github/workflows/app-release.yml` 发布 Beta，`.github/workflows/app-stable-release.yml` 发布 Stable。正式打包只应通过受控工作流或仓库脚本执行。
 
 ## 故障排查
 
 - 无法登录：先区分中央服务不可达、认证失败和本地运行时启动失败；不要用管理员运行规避数据目录错误。
 - 模型调用失败：核对供应商地址、密钥、模型名和当前账号，再查看任务中心的公共错误码与请求 ID。
-- 更新提示不可用：确认部署方已配置更新清单地址；此状态不会阻止创作。
+- 更新提示不可用：分别检查 Stable/Beta 平台目录、当前版本和网络状态，不要在前端临时填写下载地址。
 - 启动提示迁移或数据冲突：保留 `migration-backups` 与 recovery 目录，不要手工删除任一账号数据库。
 - 安装器或原生模块失败：确认使用 Windows x64 正式包，并保留诊断信息供维护人员定位。
 
 ## 许可与第三方声明
 
-版权主体、许可条款及历史版本过渡条款见 [LICENSE](./LICENSE)。第三方组件和来源归属见 [NOTICES.txt](./NOTICES.txt)；再分发时必须同时检查并保留这两个文件。
+客户端采用 Apache-2.0，完整条款见 [LICENSE](./LICENSE)。第三方组件和来源归属见 [NOTICES.txt](./NOTICES.txt)；再分发时必须同时检查并保留这两个文件。

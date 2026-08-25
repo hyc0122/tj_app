@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) · [English](./README.en.md)
 
-This directory contains the Vue frontend embedded in the Tianjiang desktop client. It handles central sign-in, the workbench, production workflows, task state, and local settings. It works with the authenticated local runtime shipped in the same installer and is not an unauthenticated standalone public web service.
+This directory contains the Vue frontend embedded in the Tianjiang desktop client. It handles central sign-in, the workbench, production workflows, task state, and local settings. It works with the authenticated local runtime shipped in the same installer and is not an unauthenticated standalone public web service. The Apache-2.0 client source is published at [hyc0122/tj_app](https://github.com/hyc0122/tj_app); central services and administration are not included.
 
 ## Requirements
 
@@ -44,6 +44,12 @@ The generated `dist` directory is a frontend artifact, not a verified desktop in
 - The update manifest URL is configured by the backend; the frontend cannot submit a custom update URL.
 - Project databases and user data must not be embedded in static assets.
 
+## Stable and Beta updates
+
+- The App reads fixed Stable and Beta Windows x64 platform catalogs; Web only displays results validated by the local runtime.
+- A newer Stable release is mandatory at sign-in. Beta is an optional test release selected by the user.
+- Web `dist` is not an independent updater payload and cannot pass an arbitrary URL to the installer.
+
 ## Troubleshooting
 
 - Separate central API, local-runtime, and authentication failures.
@@ -53,4 +59,4 @@ The generated `dist` directory is a frontend artifact, not a verified desktop in
 
 ## License and notices
 
-Copyright and license terms are in [LICENSE](../LICENSE). Third-party components and attribution are in [NOTICES.txt](../NOTICES.txt). Preserve both files when redistributing the frontend.
+The client uses Apache-2.0; complete terms are in [LICENSE](../LICENSE). Third-party components and attribution are in [NOTICES.txt](../NOTICES.txt). Preserve both files when redistributing the frontend.

@@ -11,6 +11,8 @@ import {
 } from "./platform-release-contract.mjs";
 
 const CHANNELS = ["stable", "beta"];
+// Windows 安装包接近 300 MiB，显式覆盖 ali-oss 默认 60 秒请求超时。
+const OSS_RELEASE_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 
 function fail(reason) {
   throw new Error(`Stable Windows 远端发布失败：${reason}`);
@@ -518,6 +520,7 @@ export async function createPlatformOssRemoteFromEnvironment(environment = proce
     accessKeySecret: environment.OSS_ACCESS_KEY_SECRET.trim(),
     authorizationV4: true,
     secure: true,
+    timeout: OSS_RELEASE_REQUEST_TIMEOUT_MS,
   });
   const headersFor = (bytes, metadata, immutable) => ({
     "Content-MD5": contentMd5(bytes),

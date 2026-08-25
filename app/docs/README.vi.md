@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) · [English](./README.en.md) · [日本語](./README.ja.md) · [Русский](./README.ru.md) · [ไทย](./README.th.md) · [Tiếng Việt](./README.vi.md) · [繁體中文](./README.zhtw.md)
 
-Tianjiang là ứng dụng cục bộ để sản xuất manga drama bằng AI, bao gồm chuẩn bị truyện, chuyển thể kịch bản, tài sản nhân vật và bối cảnh, storyboard và tạo video. Dự án cùng cấu hình mô hình cá nhân được lưu trong vùng dữ liệu cục bộ của tài khoản trung tâm đang đăng nhập.
+Tianjiang là ứng dụng Windows để sản xuất manga drama bằng AI, bao gồm chuẩn bị truyện, kịch bản, tài sản, storyboard, hàng đợi tạo nội dung và Trung tâm tác vụ. Mã nguồn ứng dụng theo Apache-2.0 được công bố tại [hyc0122/tj_app](https://github.com/hyc0122/tj_app); tài khoản trung tâm, dịch vụ nhóm, quản trị và triển khai không thuộc kho công khai.
 
 ## Yêu cầu
 
@@ -29,7 +29,8 @@ Tianjiang là ứng dụng cục bộ để sản xuất manga drama bằng AI, 
 - Endpoint, tên mô hình và khóa thuộc cấu hình cục bộ của tài khoản hiện tại.
 - Không đưa bí mật vào nhật ký, đồng bộ nhóm hoặc thư mục của tài khoản khác.
 - Kiểm tra riêng nhà cung cấp văn bản, hình ảnh và video.
-- Kiểm tra cập nhật cần `TIANJIANG_UPDATE_MANIFEST_URL`; thiếu cấu hình này không chặn bàn làm việc.
+- Ứng dụng kiểm tra cả Stable và Beta. Stable mới là bắt buộc khi đăng nhập; Beta là bản thử nghiệm tùy chọn do người dùng chọn.
+- Danh mục Windows x64 dùng `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`; giao diện không nhận URL cập nhật tùy ý.
 
 ## Di chuyển dữ liệu
 
@@ -41,10 +42,11 @@ Tianjiang là ứng dụng cục bộ để sản xuất manga drama bằng AI, 
 cd app
 yarn install --frozen-lockfile
 yarn dev
-yarn test:tianjiang
 yarn lint
 yarn build
 ```
+
+Chạy các kiểm thử App đã thay đổi bằng `node --import tsx --test <tệp-kiểm-thử>`. Beta dùng `.github/workflows/app-release.yml`, Stable dùng `.github/workflows/app-stable-release.yml`.
 
 ## Khắc phục sự cố
 
@@ -55,4 +57,4 @@ yarn build
 
 ## Giấy phép và thông báo
 
-Bản quyền và điều khoản nằm trong [LICENSE](../LICENSE); thành phần bên thứ ba và ghi nhận nguồn nằm trong [NOTICES.txt](../NOTICES.txt). Phải giữ cả hai tệp khi phân phối lại.
+Ứng dụng dùng Apache-2.0; điều khoản đầy đủ nằm trong [LICENSE](../LICENSE), còn thành phần bên thứ ba và ghi nhận nguồn nằm trong [NOTICES.txt](../NOTICES.txt). Phải giữ cả hai tệp khi phân phối lại.

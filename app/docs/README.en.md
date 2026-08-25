@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) · [English](./README.en.md) · [日本語](./README.ja.md) · [Русский](./README.ru.md) · [ไทย](./README.th.md) · [Tiếng Việt](./README.vi.md) · [繁體中文](./README.zhtw.md)
 
-Tianjiang is a local AI manga-drama production client for story preparation, screenplay adaptation, character and scene assets, storyboards, and video generation. Projects and personal model settings are stored in the local data area of the signed-in central account.
+Tianjiang is a Windows desktop client for AI manga-drama production: story preparation, screenplay adaptation, character and scene assets, storyboards, generation queues, and Task Center. The Apache-2.0 client source is published at [hyc0122/tj_app](https://github.com/hyc0122/tj_app); central accounts, team services, administration, and deployment remain outside that public repository.
 
 ## Requirements
 
@@ -29,7 +29,8 @@ Tianjiang is a local AI manga-drama production client for story preparation, scr
 - Provider endpoints, model names, and keys belong to the active account's local settings.
 - Secrets must not enter logs, team synchronization, or another account's directory.
 - Verify text, image, and video providers independently.
-- Update checks require the deployment variable `TIANJIANG_UPDATE_MANIFEST_URL`; a missing manifest disables update hints without blocking the workbench.
+- The client checks both Stable and Beta platform catalogs. A newer Stable release is mandatory at sign-in; Beta remains an optional test update selected by the user.
+- Windows x64 catalogs use `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`; the frontend cannot submit a custom update URL.
 
 ## Data migration
 
@@ -41,12 +42,11 @@ The current machine identifier is `tianjiang` and the desktop protocol is `tianj
 cd app
 yarn install --frozen-lockfile
 yarn dev
-yarn test:tianjiang
 yarn lint
 yarn build
 ```
 
-Use `yarn dev:gui` for Electron debugging. The active Windows x64 release workflow is `.github/workflows/app-release.yml` at the repository root.
+Use `yarn dev:gui` for Electron debugging and run changed App tests with `node --import tsx --test <target-test-file>`. `.github/workflows/app-release.yml` publishes Beta and `.github/workflows/app-stable-release.yml` publishes Stable.
 
 ## Troubleshooting
 
@@ -57,4 +57,4 @@ Use `yarn dev:gui` for Electron debugging. The active Windows x64 release workfl
 
 ## License and notices
 
-Copyright, license terms, and historical transition terms are in [LICENSE](../LICENSE). Third-party components and attribution are listed in [NOTICES.txt](../NOTICES.txt). Both files must be reviewed and preserved when redistributing the application.
+The client uses Apache-2.0; the complete terms are in [LICENSE](../LICENSE). Third-party components and attribution are listed in [NOTICES.txt](../NOTICES.txt). Preserve both files when redistributing the application.

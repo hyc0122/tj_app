@@ -380,6 +380,31 @@ test("OSS 可变对象使用普通 PutObject 且不发送任何条件头", async
   assert.equal(calls[0].headers["If-None-Match"], undefined);
 });
 
+test("OSS 发布客户端必须为 Windows 大安装包配置十五分钟请求超时", async () => {
+  let clientOptions: Record<string, unknown> | undefined;
+  class FakeOssClient {
+    constructor(options: Record<string, unknown>) {
+      clientOptions = { ...options };
+    }
+
+    async put(key: string) {
+      return { name: key };
+    }
+  }
+  const remote = await createPlatformOssRemoteFromEnvironment(fakeEnvironment(), {
+    loadOss: async () => ({ default: FakeOssClient }),
+    fetch: async () => { throw new Error("本测试不得访问公开 HTTP"); },
+  });
+
+  await remote.putImmutable(
+    "desktop/stable/windows/x64/fixture.exe",
+    Buffer.from("fixture", "utf8"),
+    { contentType: "application/octet-stream", cacheControl: "public,max-age=31536000,immutable" },
+  );
+
+  assert.equal(clientOptions?.timeout, 15 * 60 * 1000);
+});
+
 test("单写者证明缺失或错误时不读取也不写入远端", async () => {
   for (const [name, singleWriterProof] of [
     ["missing", undefined],

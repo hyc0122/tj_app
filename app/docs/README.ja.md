@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) · [English](./README.en.md) · [日本語](./README.ja.md) · [Русский](./README.ru.md) · [ไทย](./README.th.md) · [Tiếng Việt](./README.vi.md) · [繁體中文](./README.zhtw.md)
 
-Tianjiang は、小説整理、脚本化、キャラクター／シーン素材、絵コンテ、動画生成を一つの流れで扱うローカル AI 漫画ドラマ制作クライアントです。プロジェクトと個人モデル設定は、ログイン中の中央アカウント専用のローカル領域に保存されます。
+Tianjiang は、小説整理、脚本化、キャラクター／シーン素材、絵コンテ、生成キュー、タスクセンターを一つの流れで扱う Windows 用 AI 漫画ドラマ制作クライアントです。Apache-2.0 のクライアントソースは [hyc0122/tj_app](https://github.com/hyc0122/tj_app) で公開され、中央アカウント、チームサービス、管理画面、配備設定は公開範囲に含まれません。
 
 ## 動作要件
 
@@ -29,7 +29,8 @@ Tianjiang は、小説整理、脚本化、キャラクター／シーン素材�
 - エンドポイント、モデル名、キーは現在のアカウントのローカル設定に保存されます。
 - 秘密情報をログ、チーム同期、別アカウントの領域へ入れてはいけません。
 - 文章・画像・動画の各プロバイダーを個別に検証してください。
-- 更新確認には `TIANJIANG_UPDATE_MANIFEST_URL` が必要ですが、未設定でも作業画面は利用できます。
+- クライアントは Stable と Beta の両方を確認します。新しい Stable はログイン時に必須、Beta は利用者が選ぶ任意のテスト更新です。
+- Windows x64 の固定先は `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64` で、画面から任意 URL は指定できません。
 
 ## データ移行
 
@@ -41,10 +42,11 @@ Tianjiang は、小説整理、脚本化、キャラクター／シーン素材�
 cd app
 yarn install --frozen-lockfile
 yarn dev
-yarn test:tianjiang
 yarn lint
 yarn build
 ```
+
+変更した App テストは `node --import tsx --test <対象テスト>` で実行します。Beta は `.github/workflows/app-release.yml`、Stable は `.github/workflows/app-stable-release.yml` から公開します。
 
 ## トラブルシューティング
 
@@ -55,4 +57,4 @@ yarn build
 
 ## ライセンスと第三者表記
 
-著作権とライセンス条項は [LICENSE](../LICENSE)、第三者コンポーネントと帰属は [NOTICES.txt](../NOTICES.txt) を参照してください。再配布時は両方を保持する必要があります。
+クライアントは Apache-2.0 です。完全な条項は [LICENSE](../LICENSE)、第三者コンポーネントと帰属は [NOTICES.txt](../NOTICES.txt) を参照してください。再配布時は両方を保持する必要があります。
