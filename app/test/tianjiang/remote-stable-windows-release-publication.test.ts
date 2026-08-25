@@ -403,6 +403,40 @@ test("CDN 压缩导致 Range 回退 200 时必须完整校验后再接受首段"
   assert.deepEqual(range.bytes, expectedRange);
 });
 
+test("CDN 压缩的完整 200 响应按解压后大小与摘要校验", async () => {
+  const payload = Buffer.from("经过 CDN gzip 解压后的完整发布清单".repeat(64), "utf8");
+  const fetchMock = async () => ({
+    status: 200,
+    headers: new Headers({
+      // 真实 fetch 会保留压缩传输长度，但响应流已经自动解压。
+      "content-length": "128",
+      "content-encoding": "gzip",
+    }),
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(payload.subarray(0, Math.floor(payload.length / 2)));
+        controller.enqueue(payload.subarray(Math.floor(payload.length / 2)));
+        controller.close();
+      },
+    }),
+    arrayBuffer() {
+      throw new Error("测试禁止整包 arrayBuffer");
+    },
+  });
+  class FakeOssClient {}
+  const remote = await createPlatformOssRemoteFromEnvironment(fakeEnvironment(), {
+    loadOss: async () => ({ default: FakeOssClient }),
+    fetch: fetchMock,
+  });
+
+  const summary = await remote.readPublicObject(
+    "desktop/stable/windows/x64/catalog/releases/1.1.11/release-manifest.json",
+    payload.length,
+    sha256(payload),
+  );
+  assert.deepEqual(summary, { size: payload.length, sha256: sha256(payload) });
+});
+
 test("OSS 可变对象使用普通 PutObject 且不发送任何条件头", async () => {
   const calls: Array<{ key: string; headers: Record<string, string> }> = [];
   class FakeOssClient {

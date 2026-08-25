@@ -628,7 +628,11 @@ export async function createPlatformOssRemoteFromEnvironment(environment = proce
         throw sanitize(error);
       }
       if (response.status !== 200) fail(`OSS 公开对象回读失败，HTTP ${response.status}`);
-      return readBoundedHttpBody(response, expectedSize, { expectedSha256 });
+      // fetch 会自动解压 CDN 响应；传输 Content-Length 可小于解压后的受信对象大小。
+      return readBoundedHttpBody(response, expectedSize, {
+        expectedSha256,
+        allowEncodedContentLength: true,
+      });
     },
     async readPublicRange(key, start, end, expectedFullSize, expectedFullSha256) {
       let response;
