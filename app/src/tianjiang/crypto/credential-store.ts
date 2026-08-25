@@ -44,6 +44,11 @@ export interface CredentialStore {
    * 已存在备份时不覆盖（幂等）；不删除原键、不删整个凭据文件。
    */
   backupUnreadableCiphertext(name: string): boolean;
+  /**
+   * 一次性提交多键变更。实现必须先准备全部密文，再通过一次原子文件替换落盘，
+   * 禁止把 active username、密码和会话拆成可见的半迁移状态。
+   */
+  applyBatch(input: { set: Record<string, string>; delete: string[] }): void;
 }
 
 export class MemoryCredentialStore implements CredentialStore {
@@ -83,6 +88,15 @@ export class MemoryCredentialStore implements CredentialStore {
   delete(name: string): void {
     this.values.delete(name);
     this.undecryptable.delete(name);
+  }
+
+  applyBatch(input: { set: Record<string, string>; delete: string[] }): void {
+    const next = new Map(this.values);
+    for (const name of input.delete) next.delete(name);
+    for (const [name, value] of Object.entries(input.set)) next.set(name, value);
+    this.values.clear();
+    for (const [name, value] of next) this.values.set(name, value);
+    for (const name of [...input.delete, ...Object.keys(input.set)]) this.undecryptable.delete(name);
   }
 
   backupUnreadableCiphertext(name: string): boolean {
@@ -143,6 +157,27 @@ export class ElectronCredentialStore implements CredentialStore {
   delete(name: string): void {
     const values = this.readAll();
     delete values[name];
+    this.writeAll(values);
+  }
+
+  applyBatch(input: { set: Record<string, string>; delete: string[] }): void {
+    const encryptedEntries: Record<string, string> = {};
+    try {
+      const { safeStorage } = require("electron") as typeof import("electron");
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new CredentialDecryptionError("encryption_unavailable", "credential-batch");
+      }
+      // 中文注释：先加密全部新值；任何一个值失败时，磁盘文件保持原样。
+      for (const [name, value] of Object.entries(input.set)) {
+        encryptedEntries[name] = safeStorage.encryptString(value).toString("base64");
+      }
+    } catch (error) {
+      if (error instanceof CredentialDecryptionError) throw error;
+      throw new CredentialDecryptionError("encryption_unavailable", "credential-batch");
+    }
+    const values = this.readAll();
+    for (const name of input.delete) delete values[name];
+    Object.assign(values, encryptedEntries);
     this.writeAll(values);
   }
 
@@ -225,6 +260,17 @@ export class ScopedCredentialStore implements CredentialStore {
   delete(name: string): void {
     const values = this.readAll();
     delete values[name];
+    this.writeAll(values);
+  }
+
+  applyBatch(input: { set: Record<string, string>; delete: string[] }): void {
+    const packedEntries: Record<string, string> = {};
+    for (const [name, value] of Object.entries(input.set)) {
+      packedEntries[name] = encryptScoped(value, this.scopeId);
+    }
+    const values = this.readAll();
+    for (const name of input.delete) delete values[name];
+    Object.assign(values, packedEntries);
     this.writeAll(values);
   }
 

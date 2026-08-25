@@ -79,8 +79,8 @@ test("启动迁移只重试明确的 SQLite 瞬时错误，并且每次创建全
   assert.deepEqual(delays, [50]);
 });
 
-test("权限、损坏和普通 IOERR 不得被启动重试掩盖", async () => {
-  for (const code of ["SQLITE_CORRUPT", "SQLITE_PERM", "SQLITE_IOERR"]) {
+test("权限和损坏不得被启动重试掩盖", async () => {
+  for (const code of ["SQLITE_CORRUPT", "SQLITE_PERM"]) {
     let attempts = 0;
     const expected = Object.assign(new Error(code), { code });
     await assert.rejects(
@@ -94,5 +94,5 @@ test("权限、损坏和普通 IOERR 不得被启动重试掩盖", async () => {
   }
   assert.equal(isRetryableSQLiteStartupError({ code: "SQLITE_BUSY" }), true);
   assert.equal(isRetryableSQLiteStartupError({ code: "SQLITE_IOERR_TRUNCATE" }), true);
-  assert.equal(isRetryableSQLiteStartupError({ code: "SQLITE_IOERR" }), false);
+  assert.equal(isRetryableSQLiteStartupError({ code: "SQLITE_IOERR" }), true);
 });

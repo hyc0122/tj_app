@@ -245,8 +245,11 @@ function loadStartupFailurePage(
 }
 
 let closeServeFn: (() => Promise<void>) | undefined;
+let prepareUpdaterShutdown: (() => Promise<void>) | undefined;
 const shutdownGate = new ShutdownGate({
   closeRuntime: async () => {
+    // 中文注释：下载不再占用 HTTP 请求；普通退出先取消主进程后台下载。
+    if (prepareUpdaterShutdown) await prepareUpdaterShutdown();
     if (closeServeFn) await closeServeFn();
   },
   relaunch: () => app.relaunch(),
@@ -496,20 +499,35 @@ app.whenReady().then(async () => {
           autoUpdater,
           currentVersion: app.getVersion(),
           dataRoot: path.join(app.getPath("userData"), "data"),
-          prepareInstall: async () => {
-            // 中文注释：备份和校验仍可失败，必须在关闭 HTTP/DB 前完成并让当前请求看到错误。
-            await protectUserDataBeforeUpdate({
-              userDataRoot: app.getPath("userData"),
+          // 正式装配统一走 prepareInstallShutdown；保留依赖位只用于旧测试装配兼容。
+          prepareInstall: async () => undefined,
+          prepareInstallShutdown: async () => {
+            // 安装动作由本地 HTTP 发起；先摘除自身，再通过退出门关闭 SQLite 并保护静态数据。
+            detachCurrentServeRequest();
+            quitIntent.markInstallUpdate();
+            await shutdownGate.prepareForInstaller(async () => {
+              await protectUserDataBeforeUpdate({
+                userDataRoot: app.getPath("userData"),
+              });
             });
           },
           launchVerifiedInstaller: async (filePath) => {
             await launchVerifiedInstallerWithShell(filePath, (verifiedPath) => shell.openPath(verifiedPath));
           },
+          recoverAfterInstallerLaunchFailure: async (error) => {
+            console.error("[安装器启动失败]:", error);
+            await dialog.showMessageBox({
+              type: "error",
+              title: "安装器启动失败",
+              message: "安装程序未能启动，应用将重新打开当前版本。",
+              buttons: ["重新启动应用"],
+            });
+            app.relaunch();
+            app.quit();
+          },
           finalizeInstallShutdown: async () => {
-            // 安装动作由本地 HTTP 发起；OS 受理安装器后再摘除自身，避免关闭时等待当前响应。
-            detachCurrentServeRequest();
-            quitIntent.markInstallUpdate();
-            await shutdownGate.finalizeAcceptedInstaller();
+            // 新版服务使用 prepareInstallShutdown；旧接口不得单独提前启动安装器。
+            throw new Error("安装关闭流程未使用统一退出门");
           },
           scheduleApplicationQuit: () => {
             // 中文注释：仅在 shell.openPath 已成功受理安装器后，才把应用退出排入下一轮事件循环。
@@ -519,6 +537,7 @@ app.whenReady().then(async () => {
             if (fs.existsSync(filePath)) shell.showItemInFolder(filePath);
           },
         });
+        prepareUpdaterShutdown = () => service.prepareForApplicationShutdown();
         mod.bindManualUpdateService?.(service);
         // 启动、登录和设置页复用同一服务；单飞会合并随后到达的登录检查。
         void service.runAction({ action: "check" }).catch((error) => {

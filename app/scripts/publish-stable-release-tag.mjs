@@ -44,6 +44,14 @@ function parseRemoteTagTarget(output, tag) {
 }
 
 /**
+ * 客户端 Release 只能从公开仓库发布，禁止私有主仓库误推发布 Tag。
+ */
+function isPublicClientOrigin(remoteUrl) {
+  const value = String(remoteUrl ?? "").trim();
+  return /^(?:https:\/\/github\.com\/|ssh:\/\/git@github\.com\/|git@(?:github\.com|github-[^:]+):)hyc0122\/tj_app(?:\.git)?\/?$/i.test(value);
+}
+
+/**
  * 在干净的 public main 上创建并推送注解 Stable Tag。
  * 失败时保留本地证据，不自动删除或改写任何 Tag。
  */
@@ -72,6 +80,9 @@ export function publishStableReleaseTag({
   }
   if (invoke(["branch", "--show-current"]) !== "main") {
     throw new Error("创建 Stable Tag 时必须位于 main 分支");
+  }
+  if (!isPublicClientOrigin(invoke(["remote", "get-url", "origin"]))) {
+    throw new Error("Stable Tag 只能发布到公开客户端仓库 hyc0122/tj_app");
   }
 
   invoke(["fetch", "origin", "main", "--tags"]);

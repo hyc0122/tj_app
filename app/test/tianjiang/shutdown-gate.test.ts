@@ -182,6 +182,23 @@ test("普通退出先到达时，后到的安装准备仍必须在基础关闭�
   assert.deepEqual(events, ["runtime:start", "runtime:closed", "backup:verified"]);
 });
 
+test("普通退出已经完成后到达的安装准备必须失败关闭且不得伪装已保护", async () => {
+  const events: string[] = [];
+  const gate = new ShutdownGate({
+    closeRuntime: async () => { events.push("runtime:closed"); },
+    relaunch: () => events.push("relaunch"),
+    quit: () => events.push("quit"),
+    onFailure: async () => { events.push("failure"); },
+  });
+
+  await gate.request(false);
+  await assert.rejects(
+    () => gate.prepareForInstaller(async () => { events.push("backup:verified"); }),
+    /退出.*完成|安装.*保护/,
+  );
+  assert.deepEqual(events, ["runtime:closed", "quit"]);
+});
+
 test("并发退出意图可由 quit 升级为 relaunch，再由 installer 抢占且保护只执行一次", async () => {
   let finishClose!: () => void;
   const events: string[] = [];

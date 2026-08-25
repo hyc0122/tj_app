@@ -1,6 +1,6 @@
 {
   "name": "tianjiang",
-  "version": "1.1.13",
+  "version": "1.1.15",
   "description": "天将漫创是一款 AI 漫剧创作工具，支持从小说、剧本到分镜与成片的完整制作流程。",
   "author": "HBAI-Ltd <ltlctools@outlook.com>",
   "license": "Apache-2.0",
@@ -56,6 +56,7 @@
     "axios": "1.14.0",
     "axios-retry": "4.5.0",
     "better-sqlite3": "12.9.0",
+    "builder-util-runtime": "9.7.0",
     "compressing": "2.1.0",
     "cors": "2.8.6",
     "csv-parse": "6.1.0",

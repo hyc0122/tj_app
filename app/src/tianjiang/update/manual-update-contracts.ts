@@ -6,6 +6,7 @@ export const MANUAL_UPDATE_ACTIONS = [
   "check-login-stable",
   "download-differential",
   "download-full",
+  "cancel-download",
   "install",
   "show-file",
 ] as const;
@@ -26,6 +27,7 @@ export const manualUpdateActionBodySchema = z.discriminatedUnion("action", [
     action: z.literal("download-full"),
     channel: z.enum(["stable", "beta"]),
   }).strict(),
+  z.object({ action: z.literal("cancel-download") }).strict(),
   z.object({ action: z.literal("install") }).strict(),
   z.object({ action: z.literal("show-file") }).strict(),
 ]);
@@ -39,6 +41,7 @@ export type ManualUpdateState =
   | "available"
   | "downloading"
   | "downloaded"
+  | "preparing_install"
   | "installing"
   | "error";
 
@@ -61,6 +64,7 @@ export const manualUpdateSnapshotSchema = z.object({
     "available",
     "downloading",
     "downloaded",
+    "preparing_install",
     "installing",
     "error",
   ]),
@@ -74,6 +78,9 @@ export const manualUpdateSnapshotSchema = z.object({
   releaseNotes: z.string().optional(),
   packageSizeBytes: z.number().int().nonnegative().optional(),
   progress: z.number().min(0).max(100).optional(),
+  transferredBytes: z.number().int().nonnegative().optional(),
+  totalBytes: z.number().int().nonnegative().optional(),
+  bytesPerSecond: z.number().nonnegative().optional(),
   errorMessage: z.string().optional(),
   warningMessage: z.string().optional(),
   downloadedPath: z.string().optional(),

@@ -40,14 +40,14 @@
         <t-button
           theme="primary"
           :loading="busy && snapshot.selectedChannel === 'stable'"
-          :disabled="busy || !snapshot.stable.downloadAllowed"
+          :disabled="updateLocked || !snapshot.stable.downloadAllowed"
           @click="downloadChannel('stable')"
         >
           更新正式版
         </t-button>
         <t-button
           variant="outline"
-          :disabled="busy || !snapshot.stable.downloadAllowed"
+          :disabled="updateLocked || !snapshot.stable.downloadAllowed"
           @click="downloadChannel('stable', 'download-full')"
         >
           正式版完整包
@@ -71,14 +71,14 @@
         <t-button
           theme="primary"
           :loading="busy && snapshot.selectedChannel === 'beta'"
-          :disabled="busy || snapshot.stableRequired || !snapshot.beta.downloadAllowed"
+          :disabled="updateLocked || snapshot.stableRequired || !snapshot.beta.downloadAllowed"
           @click="downloadChannel('beta')"
         >
           更新测试版
         </t-button>
         <t-button
           variant="outline"
-          :disabled="busy || snapshot.stableRequired || !snapshot.beta.downloadAllowed"
+          :disabled="updateLocked || snapshot.stableRequired || !snapshot.beta.downloadAllowed"
           @click="downloadChannel('beta', 'download-full')"
         >
           测试版完整包
@@ -87,17 +87,36 @@
     </div>
 
     <div class="operation-status" aria-live="polite">
-      <p v-if="snapshot.state === 'downloading'">下载进度：{{ snapshot.progress ?? 0 }}%</p>
+      <div v-if="snapshot.state === 'downloading'" class="download-progress-panel">
+        <div
+          class="download-progress-track"
+          role="progressbar"
+          aria-label="更新下载进度"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="progressPercent"
+        >
+          <div class="download-progress-value" :style="{ width: `${progressPercent}%` }" />
+        </div>
+        <p>下载进度：{{ progressPercent }}%</p>
+        <p v-if="progressDetails">{{ progressDetails }}</p>
+      </div>
       <p v-if="actionMessage" class="success">{{ actionMessage }}</p>
       <p v-if="actionError || snapshot.errorMessage" class="error" role="alert">
         {{ actionError || snapshot.errorMessage }}
       </p>
+      <p v-if="snapshot.state === 'preparing_install'">安装请求已受理，正在安全关闭本地服务。</p>
       <div v-if="snapshot.state === 'downloaded'" class="downloaded-actions">
         <t-button theme="primary" :disabled="busy" @click="runAction('install')">
           退出并安装
         </t-button>
         <t-button variant="outline" :disabled="busy" @click="runAction('show-file')">
           打开安装包位置
+        </t-button>
+      </div>
+      <div v-if="snapshot.state === 'downloading'" class="downloaded-actions">
+        <t-button variant="outline" :disabled="busy" @click="runAction('cancel-download')">
+          取消下载
         </t-button>
       </div>
     </div>
@@ -114,12 +133,26 @@
         <p v-if="snapshot.latestVersion">最新版本：v{{ snapshot.latestVersion }}</p>
         <p v-if="formattedPackageSize">安装包大小：{{ formattedPackageSize }}</p>
         <p v-if="snapshot.releaseNotes" class="notes">{{ snapshot.releaseNotes }}</p>
-        <p v-if="snapshot.state === 'downloading'">下载进度：{{ snapshot.progress ?? 0 }}%</p>
+        <div v-if="snapshot.state === 'downloading'" class="download-progress-panel">
+          <div
+            class="download-progress-track"
+            role="progressbar"
+            aria-label="更新下载进度"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="progressPercent"
+          >
+            <div class="download-progress-value" :style="{ width: `${progressPercent}%` }" />
+          </div>
+          <p>下载进度：{{ progressPercent }}%</p>
+          <p v-if="progressDetails">{{ progressDetails }}</p>
+        </div>
         <p v-if="snapshot.state === 'error'" class="error">
           {{ actionError || snapshot.errorMessage }}
         </p>
         <p v-if="snapshot.state === 'available'">发现可用更新，请在对应通道卡片中选择更新。</p>
         <p v-if="snapshot.state === 'downloaded'">下载完成，可退出并安装或打开安装包位置。</p>
+        <p v-if="snapshot.state === 'preparing_install'">安装请求已受理，正在安全关闭本地服务。</p>
       </div>
       <template #footer>
         <div class="footer-actions">
@@ -164,6 +197,16 @@ const formattedPackageSize = computed(() => {
     ? snapshot.value[snapshot.value.selectedChannel].packageSizeBytes
     : undefined;
   return formatPackageSize(selected ?? snapshot.value.packageSizeBytes);
+});
+
+const progressPercent = computed(() => Math.max(0, Math.min(100, Number(snapshot.value.progress ?? 0))));
+
+const progressDetails = computed(() => {
+  const transferred = formatPackageSize(snapshot.value.transferredBytes);
+  const total = formatPackageSize(snapshot.value.totalBytes);
+  const speed = formatPackageSize(snapshot.value.bytesPerSecond);
+  const amount = transferred && total ? `${transferred} / ${total}` : "";
+  return [amount, speed ? `${speed}/s` : ""].filter(Boolean).join(" · ");
 });
 
 /** 字节格式化只负责展示，不参与更新候选或版本裁定。 */
@@ -211,7 +254,9 @@ function checkUpdate(): void {
   void runAction("check");
 }
 
-async function runAction(action: "check" | "install" | "show-file"): Promise<void> {
+const updateLocked = computed(() => busy.value || ["downloading", "installing"].includes(snapshot.value.state));
+
+async function runAction(action: "check" | "cancel-download" | "install" | "show-file"): Promise<void> {
   if (action === "check") {
     await updateStore.check();
     return;
@@ -303,6 +348,20 @@ onMounted(async () => {
 
 .notes {
   white-space: pre-wrap;
+}
+
+.download-progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--td-bg-color-component);
+}
+
+.download-progress-value {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--td-brand-color);
+  transition: width 0.2s ease;
 }
 
 @media (max-width: 900px) {

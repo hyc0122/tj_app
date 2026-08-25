@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
     name: 构建 ${{ matrix.id }}
     permissions:
       contents: read
@@ -139,6 +140,7 @@ jobs:
           retention-days: 7
 
   provenance:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
     name: 生成 Sigstore 来源证明
     needs: [build]
     outputs:
@@ -217,6 +219,7 @@ jobs:
           retention-days: 7
 
   publish:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
     name: 发布 OSS 与 GitHub Prerelease
     needs: [provenance]
     permissions:

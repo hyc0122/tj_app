@@ -1,7 +1,7 @@
 <template>
   <div class="titleBar" role="banner">
     <div class="titleBar-title">
-      <span class="titleBar-text">天将漫创</span>
+      <span class="titleBar-text">{{ applicationTitle }}</span>
     </div>
     <div class="titleBar-controls">
       <button
@@ -39,7 +39,15 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { centralUser } from "@/features/tianjiang/auth/client";
+
 const isMaximized = ref(false);
+const applicationTitle = computed(() => {
+  const nickname = centralUser.value?.nickname?.trim();
+  // 标题属于展示身份，只使用昵称；昵称为空时不得泄露登录用户名。
+  return nickname ? `天将漫创 ${nickname}` : "天将漫创";
+});
 
 async function electronAction(action: string) {
   try {

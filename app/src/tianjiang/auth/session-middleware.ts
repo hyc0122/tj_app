@@ -9,6 +9,23 @@ import {
 import { isDefinitiveSessionAuthFailure } from "./session-auth-failure";
 import { writePublicContractError } from "../http/contract-error";
 
+/**
+ * 登录前必须可访问的生产路由。
+ * 更新检查与下载不读取账号数据，Stable 强制更新也必须在建立中央会话前完成。
+ */
+export const TIANJIANG_PRE_AUTH_PUBLIC_PATHS: ReadonlySet<string> = new Set([
+  "/api/tianjiang/auth/captcha",
+  "/api/tianjiang/auth/register",
+  "/api/tianjiang/auth/login",
+  "/api/tianjiang/auth/bootstrap",
+  "/api/tianjiang/auth/clear-saved-account",
+  "/api/tianjiang/public/legal-documents",
+  "/api/tianjiang/public/client-config",
+  "/api/setting/about/checkUpdate",
+  "/api/setting/about/downloadApp",
+  "/api/login/login",
+]);
+
 export interface CentralSessionMiddlewareOptions {
   gateway: CentralAuthGateway;
   sessionStore: MemoryCentralSessionStore;

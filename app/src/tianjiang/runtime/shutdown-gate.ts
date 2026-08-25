@@ -28,6 +28,10 @@ export class ShutdownGate {
   }
 
   prepareForInstaller(protectUserData: () => Promise<void>): Promise<void> {
+    if (this.allowed && this.intent !== "installer") {
+      // 中文注释：普通退出已越过不可逆边界后，后到安装不得复用已完成 Promise 冒充数据保护完成。
+      return Promise.reject(new Error("普通退出已经完成，无法再执行安装数据保护"));
+    }
     this.promoteIntent("installer");
     // 同一轮安装保护只登记一次，普通退出先到也不能吞掉这个独立阶段。
     this.protectUserData ??= protectUserData;

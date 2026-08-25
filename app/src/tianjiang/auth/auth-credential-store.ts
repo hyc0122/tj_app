@@ -32,9 +32,45 @@ export class AuthCredentialStore {
   ): void {
     const normalized = normalizeUsername(username);
     if (!normalized) throw new Error("用户名无效");
-    this.credentials.set(ACTIVE_USERNAME_KEY, normalized);
-    this.credentials.set(passwordKey(normalized), password);
-    this.credentials.set(sessionKey(normalized), JSON.stringify(session));
+    this.credentials.applyBatch({
+      set: {
+        [ACTIVE_USERNAME_KEY]: normalized,
+        [passwordKey(normalized)]: password,
+        [sessionKey(normalized)]: JSON.stringify(session),
+      },
+      delete: [],
+    });
+  }
+
+  /** 资料修改后迁移用户名键并持久化轮换后的会话，不需要用户再次输入密码。 */
+  updateAfterProfileChange(
+    previousUsername: string,
+    session: SavedCentralSessionPayload,
+  ): void {
+    const previous = normalizeUsername(previousUsername);
+    const next = normalizeUsername(session.user.username);
+    if (!next) throw new Error("用户名无效");
+    const savedPassword = this.credentials.get(passwordKey(previous));
+
+    const set: Record<string, string> = {
+      [ACTIVE_USERNAME_KEY]: next,
+      [sessionKey(next)]: JSON.stringify(session),
+    };
+    if (savedPassword !== undefined) set[passwordKey(next)] = savedPassword;
+    const deleteKeys = previous && previous !== next
+      ? [passwordKey(previous), sessionKey(previous)]
+      : [];
+    // 中文注释：新键写入、active 指针切换与旧键删除必须在一次原子凭据提交中完成。
+    this.credentials.applyBatch({ set, delete: deleteKeys });
+  }
+
+  /** 密码修改成功后只保存新密码，禁止继续自动登录旧密码。 */
+  updateAfterPasswordChange(
+    username: string,
+    newPassword: string,
+    session: SavedCentralSessionPayload,
+  ): void {
+    this.saveAfterLogin(username, newPassword, session);
   }
 
   getActiveUsername(): string | undefined {

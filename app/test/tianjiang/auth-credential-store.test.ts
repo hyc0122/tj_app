@@ -84,3 +84,73 @@ test("密码与 token 不得以明文键名落入普通 JSON 日志字段约定"
   assert.ok(memory.get("auth:password:alice"));
   assert.ok(memory.get("auth:session:alice"));
 });
+
+test("个人中心修改用户名或密码后必须迁移安全凭据且删除旧账号键", () => {
+  const memory = new MemoryCredentialStore();
+  const store = new AuthCredentialStore(memory);
+  store.saveAfterLogin("creator", "SecurePass123!", {
+    serverUrl: "https://api.j11.com.cn",
+    token: "old-token",
+    expiresAt: Date.now() + 60_000,
+    user: { id: 7, username: "creator", nickname: "创作者" },
+  });
+
+  store.updateAfterProfileChange("creator", {
+    serverUrl: "https://api.j11.com.cn",
+    token: "profile-token",
+    expiresAt: Date.now() + 120_000,
+    user: { id: 7, username: "creator_new", nickname: "新昵称" },
+  });
+  assert.deepEqual(store.getSavedCredentials(), {
+    username: "creator_new",
+    password: "SecurePass123!",
+  });
+  assert.equal(store.getSession()?.token, "profile-token");
+  assert.equal(memory.has("auth:password:creator"), false);
+  assert.equal(memory.has("auth:session:creator"), false);
+
+  store.updateAfterPasswordChange("creator_new", "NewSecure456!", {
+    serverUrl: "https://api.j11.com.cn",
+    token: "password-token",
+    expiresAt: Date.now() + 180_000,
+    user: { id: 7, username: "creator_new", nickname: "新昵称" },
+  });
+  assert.deepEqual(store.getSavedCredentials(), {
+    username: "creator_new",
+    password: "NewSecure456!",
+  });
+  assert.equal(store.getSession()?.token, "password-token");
+});
+
+test("个人中心多键迁移失败时 active、密码和会话必须全部保持旧快照", () => {
+  class FailingBatchStore extends MemoryCredentialStore {
+    failBatch = false;
+
+    override applyBatch(input: { set: Record<string, string>; delete: string[] }): void {
+      if (this.failBatch) throw new Error("injected batch failure");
+      super.applyBatch(input);
+    }
+  }
+
+  const memory = new FailingBatchStore();
+  const store = new AuthCredentialStore(memory);
+  store.saveAfterLogin("creator", "SecurePass123!", {
+    serverUrl: "https://api.j11.com.cn",
+    token: "old-token",
+    expiresAt: Date.now() + 60_000,
+    user: { id: 7, username: "creator", nickname: "创作者" },
+  });
+  memory.failBatch = true;
+
+  assert.throws(() => store.updateAfterProfileChange("creator", {
+    serverUrl: "https://api.j11.com.cn",
+    token: "new-token",
+    expiresAt: Date.now() + 120_000,
+    user: { id: 7, username: "creator_new", nickname: "新昵称" },
+  }), /injected batch failure/);
+  assert.equal(store.getActiveUsername(), "creator");
+  assert.equal(store.getPassword("creator"), "SecurePass123!");
+  assert.equal(store.getSession("creator")?.token, "old-token");
+  assert.equal(memory.has("auth:password:creator_new"), false);
+  assert.equal(memory.has("auth:session:creator_new"), false);
+});

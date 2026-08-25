@@ -34,6 +34,21 @@ export interface AuthBootstrapData {
 
 export const centralUser = shallowRef<CentralUser | null>(null);
 
+/** 兼容 Axios 已解包和未解包错误，个人中心始终优先显示服务端安全中文文案。 */
+export function authActionErrorMessage(error: unknown, fallback: string): string {
+  const payload = error as {
+    message?: unknown;
+    msg?: unknown;
+    response?: { data?: { message?: unknown; msg?: unknown } };
+  };
+  // 中文注释：标准 AxiosError 自带通用 message，必须优先采用服务端已审计的业务文案。
+  const candidate = payload?.response?.data?.message
+    ?? payload?.response?.data?.msg
+    ?? payload?.message
+    ?? payload?.msg;
+  return typeof candidate === "string" && candidate.trim() ? candidate : fallback;
+}
+
 export async function fetchCaptcha() {
   return axios.post("/tianjiang/auth/captcha");
 }
@@ -80,6 +95,26 @@ export async function centralRegister(input: {
 }) {
   // 注册只创建账号，不建立登录会话，成功后由页面回到登录表单。
   return axios.post("/tianjiang/auth/register", input);
+}
+
+export async function updateCentralProfile(input: {
+  username: string;
+  nickname: string;
+}): Promise<CentralUser> {
+  const response = await axios.patch("/tianjiang/auth/profile", input);
+  const user = response.data.user as CentralUser;
+  centralUser.value = user;
+  return user;
+}
+
+export async function changeCentralPassword(input: {
+  oldPassword: string;
+  newPassword: string;
+}): Promise<CentralUser> {
+  const response = await axios.post("/tianjiang/auth/profile/password", input);
+  const user = response.data.user as CentralUser;
+  centralUser.value = user;
+  return user;
 }
 
 export async function bootstrapAuth(): Promise<AuthBootstrapData> {

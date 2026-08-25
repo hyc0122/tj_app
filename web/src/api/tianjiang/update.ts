@@ -8,6 +8,7 @@ export type TianjiangUpdateState =
   | "available"
   | "downloading"
   | "downloaded"
+  | "preparing_install"
   | "installing"
   | "error";
 
@@ -34,6 +35,9 @@ export interface TianjiangUpdateSnapshot {
   releaseNotes?: string;
   packageSizeBytes?: number;
   progress?: number;
+  transferredBytes?: number;
+  totalBytes?: number;
+  bytesPerSecond?: number;
   errorMessage?: string;
   warningMessage?: string;
   downloadedPath?: string;
@@ -41,7 +45,7 @@ export interface TianjiangUpdateSnapshot {
 }
 
 export type TianjiangDownloadAction = "download-differential" | "download-full";
-export type TianjiangLocalAction = "install" | "show-file";
+export type TianjiangLocalAction = "cancel-download" | "install" | "show-file";
 
 function unwrapSnapshot(response: unknown): TianjiangUpdateSnapshot {
   const envelope = response as { data?: unknown } | null;
@@ -60,6 +64,11 @@ export async function downloadTianjiangUpdate(
   channel: TianjiangUpdateChannel,
 ): Promise<TianjiangUpdateSnapshot> {
   return unwrapSnapshot(await axios.post("/setting/about/downloadApp", { action, channel }));
+}
+
+/** 下载由主进程后台执行；页面只轮询同一个只读快照。 */
+export async function getTianjiangUpdateStatus(): Promise<TianjiangUpdateSnapshot> {
+  return unwrapSnapshot(await axios.get("/setting/about/downloadApp"));
 }
 
 export async function runTianjiangLocalUpdateAction(

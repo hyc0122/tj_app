@@ -2,6 +2,8 @@
  * 完全由用户触发的 electron-updater 封装。
  * autoDownload=false、autoInstallOnAppQuit=false；禁止 ZIP 覆盖用户数据。
  */
+import { CancellationError, CancellationToken } from "builder-util-runtime";
+
 import { compareDesktopVersions } from "./platform-release-contract.mjs";
 import {
   parseManualUpdateActionBody,
@@ -30,7 +32,7 @@ export interface ManualUpdaterDeps {
     allowDowngrade?: boolean;
     setFeedURL(options: { provider: "generic"; url: string }): void;
     checkForUpdates(): Promise<unknown>;
-    downloadUpdate(): Promise<unknown>;
+    downloadUpdate(cancellationToken?: CancellationToken): Promise<unknown>;
     on(event: string, listener: (...args: any[]) => void): void;
     removeListener?(event: string, listener: (...args: any[]) => void): void;
   };
@@ -53,15 +55,22 @@ export interface ManualUpdaterDeps {
     sha256: string;
   }): Promise<boolean>;
   prepareInstall: () => Promise<void>;
+  /** 正式装配使用同一个退出门完成运行时关闭与数据保护。 */
+  prepareInstallShutdown?: () => Promise<void>;
   launchVerifiedInstaller: (filePath: string) => Promise<void>;
+  recoverAfterInstallerLaunchFailure?: (error: unknown) => Promise<void>;
   finalizeInstallShutdown: () => Promise<void>;
   scheduleApplicationQuit: () => void;
   showDownloadedFile?: (filePath: string) => void;
+  /** 仅供受控测试缩短退出取消看门狗；正式环境默认 3 秒。 */
+  shutdownCancelTimeoutMs?: number;
 }
 
 export interface ManualUpdateService {
   getSnapshot(): ManualUpdateSnapshot;
   runAction(body: ManualUpdateActionBody): Promise<ManualUpdateSnapshot>;
+  startAction(body: ManualUpdateActionBody): Promise<ManualUpdateSnapshot>;
+  prepareForApplicationShutdown(): Promise<void>;
 }
 
 /** 非 Windows x64 明确返回不支持，且不会接触 Catalog 或原生 updater。 */
@@ -99,6 +108,14 @@ export class UnsupportedManualUpdaterService implements ManualUpdateService {
     }
     return this.getSnapshot();
   }
+
+  async startAction(rawBody: ManualUpdateActionBody): Promise<ManualUpdateSnapshot> {
+    return this.runAction(rawBody);
+  }
+
+  async prepareForApplicationShutdown(): Promise<void> {
+    // 不支持平台没有后台下载任务。
+  }
 }
 
 export class ManualUpdaterService {
@@ -114,6 +131,12 @@ export class ManualUpdaterService {
     policyFingerprint: string;
   } | null = null;
   private actionInFlight = false;
+  private backgroundAction: Promise<void> | null = null;
+  private downloadCancellation: CancellationToken | null = null;
+  private cancelRequested = false;
+  private shutdownCancellationFailed = false;
+  /** 原生 metadata 检查不能物理取消；旧 Promise 落定前禁止创建下一次 feed 操作。 */
+  private nativeMetadataDrain: Promise<void> | null = null;
   private checkInFlight: Promise<ManualUpdateSnapshot> | null = null;
   private checkEpoch = 0;
   private candidateEpoch = 0;
@@ -145,7 +168,10 @@ export class ManualUpdaterService {
 
   runAction(rawBody: ManualUpdateActionBody): Promise<ManualUpdateSnapshot> {
     const body = parseManualUpdateActionBody(rawBody);
-    if (this.snapshot.state === "installing") {
+    if (body.action === "cancel-download") {
+      return this.cancelActiveDownload();
+    }
+    if (this.snapshot.state === "preparing_install" || this.snapshot.state === "installing") {
       // 中文注释：系统已受理安装器后保持终态，禁止退出前的新动作清空候选或覆盖状态。
       return Promise.reject(new Error("安装程序已启动，不能开始新的更新操作"));
     }
@@ -174,6 +200,102 @@ export class ManualUpdaterService {
     });
   }
 
+  /**
+   * 下载入口只受理后台任务并立即返回，禁止用一个长 HTTP 请求占住安全退出门。
+   */
+  async startAction(rawBody: ManualUpdateActionBody): Promise<ManualUpdateSnapshot> {
+    const body = parseManualUpdateActionBody(rawBody);
+    if (
+      body.action !== "download-differential"
+      && body.action !== "download-full"
+      && body.action !== "install"
+    ) {
+      return this.runAction(body);
+    }
+    if (this.actionInFlight || this.checkInFlight) {
+      throw new Error("已有更新操作正在进行");
+    }
+    this.assertActionAllowed(body);
+    this.cancelRequested = false;
+    this.shutdownCancellationFailed = false;
+    this.actionInFlight = true;
+    if (body.action === "install") {
+      this.snapshot = { ...this.snapshot, state: "preparing_install", errorMessage: undefined };
+    } else {
+      this.snapshot = {
+        ...this.snapshot,
+        state: "downloading",
+        selectedChannel: body.channel,
+        channel: body.channel,
+        latestVersion: this.snapshot[body.channel].latestVersion,
+        progress: 0,
+        transferredBytes: 0,
+        totalBytes: this.snapshot[body.channel].packageSizeBytes,
+        bytesPerSecond: 0,
+        errorMessage: undefined,
+        downloadedPath: undefined,
+      };
+    }
+    // 中文注释：后台动作延后到下一轮事件循环，确保 Express 能先把 202 受理响应写入本地连接。
+    const operation = new Promise<void>((resolve) => setImmediate(resolve))
+      .then(() => this.performAction(body))
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.backgroundAction === operation) this.backgroundAction = null;
+        this.actionInFlight = false;
+        this.downloadCancellation = null;
+        this.cancelRequested = false;
+      });
+    this.backgroundAction = operation;
+    return this.getSnapshot();
+  }
+
+  /** 普通退出先取消下载；看门狗超时必须失败关闭，禁止把仍在运行的下载当成已取消。 */
+  async prepareForApplicationShutdown(): Promise<void> {
+    if (
+      !this.backgroundAction
+      || (this.activeOperation?.phase !== "download" && this.snapshot.state !== "downloading")
+    ) return;
+    const cancellation = this.cancelActiveDownload();
+    const timeoutMs = this.deps.shutdownCancelTimeoutMs ?? 3_000;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        cancellation.then(() => undefined),
+        new Promise<void>((_resolve, reject) => {
+          timeout = setTimeout(() => reject(new Error("更新下载未能及时取消，请稍后重试退出")), timeoutMs);
+        }),
+      ]);
+    } catch (error) {
+      this.shutdownCancellationFailed = true;
+      this.snapshot = {
+        ...this.snapshot,
+        state: "error",
+        errorMessage: error instanceof Error ? error.message : "更新下载取消失败",
+      };
+      throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  private async cancelActiveDownload(): Promise<ManualUpdateSnapshot> {
+    if (this.snapshot.state !== "downloading" && this.activeOperation?.phase !== "download") {
+      return this.getSnapshot();
+    }
+    this.cancelRequested = true;
+    this.downloadCancellation?.cancel();
+    if (this.backgroundAction) await this.backgroundAction;
+    if (
+      !this.shutdownCancellationFailed
+      && (this.snapshot.state === "downloading" || this.snapshot.state === "error")
+    ) {
+      this.restoreAvailableAfterCancellation();
+    }
+    return this.getSnapshot();
+  }
+
   /** 配置切换或显式刷新使旧检查和旧候选立即失效，延迟结果只能读取新状态。 */
   invalidate(_reason: "config-change" | "refresh" | string = "refresh"): void {
     this.checkEpoch += 1;
@@ -186,7 +308,7 @@ export class ManualUpdaterService {
     this.clearDownloadedCandidate();
   }
 
-  private async performAction(body: Exclude<ManualUpdateActionBody, { action: "check" | "check-login-stable" }>): Promise<ManualUpdateSnapshot> {
+  private async performAction(body: Exclude<ManualUpdateActionBody, { action: "check" | "check-login-stable" | "cancel-download" }>): Promise<ManualUpdateSnapshot> {
     const phase = body.action.startsWith("download-")
       ? "download"
       : body.action === "install" ? "install" : "show-file";
@@ -212,9 +334,6 @@ export class ManualUpdaterService {
             break;
           case "install":
             this.assertCandidateForPolicy(fingerprint);
-            await this.deps.prepareInstall();
-            this.assertOperationCurrent(operation);
-            this.assertCandidateForPolicy(fingerprint);
             const candidate = this.downloadedCandidate!;
             const installVerified = await this.deps.verifyDownloadedArtifact({
               filePath: candidate.filePath,
@@ -228,12 +347,22 @@ export class ManualUpdaterService {
               this.clearDownloadedCandidate();
               throw new Error("安装前安装包 SHA-256 摘要或大小二次校验失败");
             }
+            // 中文注释：必须先关闭 HTTP/WS/SQLite 并完成数据保护，再允许安装器启动。
+            if (this.deps.prepareInstallShutdown) {
+              await this.deps.prepareInstallShutdown();
+            } else {
+              await this.deps.finalizeInstallShutdown();
+              await this.deps.prepareInstall();
+            }
+            this.assertOperationCurrent(operation);
             // 中文注释：路径式二次校验仅缩小替换窗口，无法消除校验到 shell.openPath 间的同用户竞态，也不伪称句柄绑定启动。
             const installerPath = candidate.filePath;
-            await this.deps.launchVerifiedInstaller(installerPath);
-            this.assertOperationCurrent(operation);
-            // 中文注释：只有 OS 已受理安装器后，才允许进入不可逆的服务关闭阶段。
-            await this.deps.finalizeInstallShutdown();
+            try {
+              await this.deps.launchVerifiedInstaller(installerPath);
+            } catch (error) {
+              await this.deps.recoverAfterInstallerLaunchFailure?.(error);
+              throw error;
+            }
             this.assertOperationCurrent(operation);
             this.snapshot = { ...this.snapshot, state: "installing", errorMessage: undefined };
             // launcher 成功只表示操作系统已受理启动安装包；此后才允许主进程受控安排退出。
@@ -251,11 +380,19 @@ export class ManualUpdaterService {
       });
     } catch (error) {
       if (this.activeOperation === operation) {
-        this.snapshot = {
-          ...this.snapshot,
-          state: "error",
-          errorMessage: error instanceof Error ? error.message : "更新失败",
-        };
+        if (
+          operation.phase === "download"
+          && !this.shutdownCancellationFailed
+          && (error instanceof CancellationError || this.cancelRequested || this.downloadCancellation?.cancelled)
+        ) {
+          this.restoreAvailableAfterCancellation();
+        } else {
+          this.snapshot = {
+            ...this.snapshot,
+            state: "error",
+            errorMessage: error instanceof Error ? error.message : "更新失败",
+          };
+        }
       }
       throw error;
     } finally {
@@ -421,6 +558,9 @@ export class ManualUpdaterService {
       ...this.snapshot,
       state: "downloading",
       progress: 0,
+      transferredBytes: 0,
+      totalBytes: installer.size,
+      bytesPerSecond: 0,
       selectedChannel: channel,
       channel,
       latestVersion: releaseEntry.latest.version,
@@ -431,8 +571,20 @@ export class ManualUpdaterService {
       provider: "generic",
       url: resolveWindowsX64UpdateFeed(channel),
     });
-    // 中文注释：下载前重查固定原生 metadata，必须与 Catalog 版本和安装包大小逐字一致。
-    const nativeResult = await this.deps.autoUpdater.checkForUpdates();
+    const cancellation = new CancellationToken();
+    this.downloadCancellation = cancellation;
+    if (this.cancelRequested) cancellation.cancel();
+    // 中文注释：取消只中止本服务等待；底层检查落定前保留 drain，禁止下一次操作切换或复用 feed。
+    const nativeMetadata = this.deps.autoUpdater.checkForUpdates();
+    const nativeMetadataDrain = nativeMetadata
+      .then(() => undefined, () => undefined)
+      .finally(() => {
+        if (this.nativeMetadataDrain === nativeMetadataDrain) this.nativeMetadataDrain = null;
+      });
+    this.nativeMetadataDrain = nativeMetadataDrain;
+    const nativeResult = await cancellation.createPromise<unknown>((resolve, reject) => {
+      void nativeMetadata.then(resolve, reject);
+    });
     this.assertOperationCurrent(operation);
     const nativeInfo = this.extractNativeUpdateInfo(nativeResult);
     if (nativeInfo.version !== releaseEntry.latest.version) {
@@ -444,7 +596,8 @@ export class ManualUpdaterService {
     if (!nativeSizes.includes(installer.size)) {
       throw new Error("原生 updater 安装包大小与 Catalog 不一致");
     }
-    const downloaded = await this.deps.autoUpdater.downloadUpdate();
+    const downloaded = await this.deps.autoUpdater.downloadUpdate(cancellation);
+    if (cancellation.cancelled) throw new CancellationError();
     this.assertOperationCurrent(operation);
     const filePath = Array.isArray(downloaded)
       ? downloaded.find((value): value is string => typeof value === "string" && value.length > 0)
@@ -473,6 +626,9 @@ export class ManualUpdaterService {
       ...this.snapshot,
       state: "downloaded",
       progress: 100,
+      transferredBytes: installer.size,
+      totalBytes: installer.size,
+      bytesPerSecond: undefined,
       downloadedPath: filePath,
     };
   }
@@ -487,6 +643,12 @@ export class ManualUpdaterService {
   }
 
   private assertActionAllowed(body: Exclude<ManualUpdateActionBody, { action: "check" | "check-login-stable" }>): void {
+    if (
+      (body.action === "download-differential" || body.action === "download-full")
+      && this.nativeMetadataDrain
+    ) {
+      throw new Error("上一次原生 metadata 检查尚未结束，请稍后重试");
+    }
     if (
       (body.action === "download-differential" || body.action === "download-full")
       && this.snapshot.stableRequired
@@ -509,7 +671,7 @@ export class ManualUpdaterService {
   }
 
   private isCurrentCandidate(): boolean {
-    return this.snapshot.state === "downloaded"
+    return (this.snapshot.state === "downloaded" || this.snapshot.state === "preparing_install")
       && this.downloadedCandidate !== null
       && this.snapshot.selectedChannel === this.downloadedCandidate.channel
       && this.snapshot.latestVersion === this.downloadedCandidate.version
@@ -549,6 +711,9 @@ export class ManualUpdaterService {
     const {
       downloadedPath: _downloadedPath,
       progress: _progress,
+      transferredBytes: _transferredBytes,
+      totalBytes: _totalBytes,
+      bytesPerSecond: _bytesPerSecond,
       channel: _channel,
       latestVersion: _latestVersion,
       ...rest
@@ -587,11 +752,19 @@ export class ManualUpdaterService {
   ): Promise<T> {
     const removeListener = this.deps.autoUpdater.removeListener?.bind(this.deps.autoUpdater);
     if (!removeListener) return run();
-    const onProgress = (progress: { percent?: number }) => {
+    const onProgress = (progress: {
+      percent?: number;
+      transferred?: number;
+      total?: number;
+      bytesPerSecond?: number;
+    }) => {
       if (this.activeOperation !== operation || operation.phase !== "download" || this.snapshot.state !== "downloading") return;
       this.snapshot = {
         ...this.snapshot,
         progress: Math.max(0, Math.min(100, Number(progress.percent ?? 0))),
+        transferredBytes: Math.max(0, Math.trunc(Number(progress.transferred ?? 0))),
+        totalBytes: Math.max(0, Math.trunc(Number(progress.total ?? 0))),
+        bytesPerSecond: Math.max(0, Number(progress.bytesPerSecond ?? 0)),
       };
     };
     if (operation.phase === "download") this.deps.autoUpdater.on("download-progress", onProgress);
@@ -600,6 +773,22 @@ export class ManualUpdaterService {
     } finally {
       if (operation.phase === "download") removeListener("download-progress", onProgress);
     }
+  }
+
+  private restoreAvailableAfterCancellation(): void {
+    const {
+      progress: _progress,
+      transferredBytes: _transferredBytes,
+      totalBytes: _totalBytes,
+      bytesPerSecond: _bytesPerSecond,
+      downloadedPath: _downloadedPath,
+      ...rest
+    } = this.snapshot;
+    this.snapshot = {
+      ...rest,
+      state: rest.stable.downloadAllowed || rest.beta.downloadAllowed ? "available" : "idle",
+      errorMessage: undefined,
+    };
   }
 
 }

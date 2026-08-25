@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import test from "node:test";
 import express from "express";
 
@@ -7,8 +9,10 @@ import {
   CentralAuthGateway,
   MemoryCentralSessionStore,
 } from "../../src/tianjiang/auth/central-session";
-import { createCentralSessionMiddleware } from "../../src/tianjiang/auth/session-middleware";
+import * as sessionMiddlewareModule from "../../src/tianjiang/auth/session-middleware";
 import { createControlPlaneRouter } from "../../src/routes/tianjiang/control-plane";
+
+const { createCentralSessionMiddleware } = sessionMiddlewareModule;
 
 async function listen(app: express.Express): Promise<{ server: http.Server; port: number }> {
   const server = http.createServer(app);
@@ -27,13 +31,23 @@ function httpGetJson(
   pathname: string,
   headers: Record<string, string> = {},
 ): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: unknown }> {
+  return httpJson(port, "GET", pathname, headers);
+}
+
+/** 使用真实 HTTP 验证登录前 GET/POST 路由，不把中间件结果替换成函数级 mock。 */
+function httpJson(
+  port: number,
+  method: "GET" | "POST",
+  pathname: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: unknown }> {
   return new Promise((resolve, reject) => {
     const request = http.request(
       {
         host: "127.0.0.1",
         port,
         path: pathname,
-        method: "GET",
+        method,
         headers,
       },
       (response) => {
@@ -59,6 +73,48 @@ function httpGetJson(
     request.end();
   });
 }
+
+test("登录前更新检查与下载路由公开，其他设置路由仍要求中央会话", async (t) => {
+  const publicPaths = (
+    sessionMiddlewareModule as typeof sessionMiddlewareModule & {
+      TIANJIANG_PRE_AUTH_PUBLIC_PATHS?: ReadonlySet<string>;
+    }
+  ).TIANJIANG_PRE_AUTH_PUBLIC_PATHS;
+  assert.ok(publicPaths instanceof Set, "生产登录前公开路径集合必须由认证层统一导出");
+
+  const appSource = fs.readFileSync(path.resolve("src", "app.ts"), "utf8");
+  assert.match(
+    appSource,
+    /TIANJIANG_PRE_AUTH_PUBLIC_PATHS/,
+    "生产 app 必须使用同一个已测试的登录前公开路径集合",
+  );
+
+  const sessions = new MemoryCentralSessionStore();
+  const gateway = new CentralAuthGateway();
+  const app = express();
+  app.use(express.json());
+  app.use(createCentralSessionMiddleware({
+    gateway,
+    sessionStore: sessions,
+    publicPaths,
+    onSessionInvalid: async () => {},
+  }));
+  app.all("/api/setting/about/checkUpdate", (_req, res) => res.status(200).json({ ok: true }));
+  app.all("/api/setting/about/downloadApp", (_req, res) => res.status(200).json({ ok: true }));
+  app.get("/api/setting/other", (_req, res) => res.status(200).json({ ok: true }));
+  const { server, port } = await listen(app);
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  const check = await httpJson(port, "POST", "/api/setting/about/checkUpdate");
+  const downloadStatus = await httpGetJson(port, "/api/setting/about/downloadApp");
+  const downloadAction = await httpJson(port, "POST", "/api/setting/about/downloadApp");
+  const protectedSetting = await httpGetJson(port, "/api/setting/other");
+
+  assert.equal(check.status, 200);
+  assert.equal(downloadStatus.status, 200);
+  assert.equal(downloadAction.status, 200);
+  assert.equal(protectedSetting.status, 401);
+});
 
 test("生产会话中间件对无 Cookie 返回完整 AUTH_REQUIRED 契约", async (t) => {
   const sessions = new MemoryCentralSessionStore();

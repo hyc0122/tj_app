@@ -6,6 +6,8 @@ export type RuntimeStartupCode =
   | "STARTUP_RESOURCE_INVALID"
   | "NATIVE_MODULE_LOAD_FAILED"
   | "SQLITE_DATABASE_INVALID"
+  | "LOCAL_DATABASE_BUSY"
+  | "LOCAL_DATABASE_IO_FAILED"
   | "LOCAL_PORT_UNAVAILABLE"
   | "LOCAL_SERVICE_START_FAILED";
 
@@ -93,6 +95,9 @@ export function sanitizeDiagnosticText(value: unknown): string {
 export function classifyStartupError(error: unknown): ClassifiedStartupError {
   const rawTechnicalMessage = errorText(error);
   const technicalMessage = sanitizeDiagnosticText(rawTechnicalMessage);
+  const rawCode = error && typeof error === "object" && "code" in error
+    ? String(error.code).toUpperCase()
+    : "";
   if (
     error
     && typeof error === "object"
@@ -102,6 +107,27 @@ export function classifyStartupError(error: unknown): ClassifiedStartupError {
     return {
       code: "STARTUP_RESOURCE_INVALID",
       message: "客户端安装资源校验失败。请使用官方安装程序执行修复或重新安装。",
+      technicalMessage,
+    };
+  }
+  if (
+    rawCode === "SQLITE_BUSY"
+    || rawCode === "SQLITE_LOCKED"
+    || /database is locked|database is busy|数据库.*(?:锁定|占用)/i.test(rawTechnicalMessage)
+  ) {
+    return {
+      code: "LOCAL_DATABASE_BUSY",
+      message: "本地数据库正在被旧客户端占用，请关闭重复运行的客户端后重新启动。",
+      technicalMessage,
+    };
+  }
+  if (
+    rawCode.startsWith("SQLITE_IOERR")
+    || /disk I\/O error|SQLITE_IOERR|磁盘.*读写/i.test(rawTechnicalMessage)
+  ) {
+    return {
+      code: "LOCAL_DATABASE_IO_FAILED",
+      message: "本地数据库读写失败。应用未删除任何数据，请关闭重复运行的客户端后重试并查看诊断日志。",
       technicalMessage,
     };
   }

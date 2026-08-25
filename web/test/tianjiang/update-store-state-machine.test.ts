@@ -173,4 +173,23 @@ describe("桌面更新 Store 状态机", () => {
       { action: "check-login-stable" },
     );
   });
+
+  it("Store 销毁后在途检查落定也不得重新创建后台重试", async () => {
+    const check = deferred<{ data: ReturnType<typeof wireSnapshot> }>();
+    mocks.post.mockReturnValueOnce(check.promise);
+    const store = tianjiangUpdateStore();
+
+    const checking = store.check();
+    store.$dispose();
+    check.resolve({
+      data: wireSnapshot({
+        state: "error",
+        warningMessage: "正式版检查失败，将稍后重试",
+      }),
+    });
+    await checking;
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
 });

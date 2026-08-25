@@ -17,7 +17,10 @@ import { ENGINE_IO_PATH } from "@/tianjiang/socket-path";
 import { isEletron } from "@/utils/getPath";
 import { ensureThumbnail, ThumbnailSize } from "@/utils/image";
 import { centralAuthGateway, centralSessionStore } from "@/tianjiang/auth/auth-runtime";
-import { createCentralSessionMiddleware } from "@/tianjiang/auth/session-middleware";
+import {
+  createCentralSessionMiddleware,
+  TIANJIANG_PRE_AUTH_PUBLIC_PATHS,
+} from "@/tianjiang/auth/session-middleware";
 import { syncCoordinator } from "@/tianjiang/runtime/runtime";
 import tianjiangRuntimeRouter from "@/routes/tianjiang/runtime";
 import tianjiangControlPlaneRouter from "@/routes/tianjiang/control-plane";
@@ -92,6 +95,7 @@ function bindExpressWebSocketRuntime() {
 type ManualUpdateServiceLike = {
   getSnapshot: () => unknown;
   runAction: (body: ManualUpdateActionBody) => Promise<unknown>;
+  startAction: (body: ManualUpdateActionBody) => Promise<unknown>;
 };
 
 /** 主进程把 updater 注入已打包的同一个 Express 路由实例，禁止回源加载 src。 */
@@ -187,16 +191,7 @@ export default async function startServe(randomPort: Boolean = false) {
   app.use(createCentralSessionMiddleware({
     gateway: centralAuthGateway,
     sessionStore: centralSessionStore,
-    publicPaths: new Set([
-      "/api/tianjiang/auth/captcha",
-      "/api/tianjiang/auth/register",
-      "/api/tianjiang/auth/login",
-      "/api/tianjiang/auth/bootstrap",
-      "/api/tianjiang/auth/clear-saved-account",
-      "/api/tianjiang/public/legal-documents",
-      "/api/tianjiang/public/client-config",
-      "/api/login/login",
-    ]),
+    publicPaths: TIANJIANG_PRE_AUTH_PUBLIC_PATHS,
     onSessionInvalid: (session) => syncCoordinator.onSessionInvalid(session),
     isOfflineRequest: (requestPath, method) =>
       syncCoordinator.isOfflineRequest(requestPath, method),

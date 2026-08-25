@@ -124,6 +124,7 @@ function installReadyService(
   installerRuntime: {
     launchVerifiedInstaller?: (filePath: string) => Promise<void>;
     finalizeInstallShutdown?: () => Promise<void>;
+    recoverAfterInstallerLaunchFailure?: (error: unknown) => Promise<void>;
     scheduleApplicationQuit?: () => void;
     verifyDownloadedArtifact?: (candidate: {
       filePath: string;
@@ -147,6 +148,7 @@ function installReadyService(
     verifyDownloadedArtifact: installerRuntime.verifyDownloadedArtifact ?? (async () => true),
     launchVerifiedInstaller: installerRuntime.launchVerifiedInstaller ?? (async () => undefined),
     finalizeInstallShutdown: installerRuntime.finalizeInstallShutdown ?? (async () => undefined),
+    recoverAfterInstallerLaunchFailure: installerRuntime.recoverAfterInstallerLaunchFailure,
     scheduleApplicationQuit: installerRuntime.scheduleApplicationQuit ?? (() => undefined),
   } as any);
 }
@@ -290,6 +292,7 @@ test("手动更新 body 冻结显式 action，下载必须显式 channel 且禁�
     "check-login-stable",
     "download-differential",
     "download-full",
+    "cancel-download",
     "install",
     "show-file",
   ]);
@@ -801,7 +804,7 @@ test("launcher 成功后才调度退出，并只接收内部验证候选路径",
   assert.equal(calls.filter((call) => call === "install").length, 0);
 });
 
-test("安装请求的可失败阶段全部先于不可逆关闭，launcher 受理后才关闭并退出", async (t) => {
+test("安装请求必须先关闭运行时并保护数据，launcher 失败时恢复应用且绝不退出", async (t) => {
   for (const mode of ["verify-false", "open-path-error", "open-path-throw", "accepted"] as const) {
     await t.test(mode, async () => {
       const runtime = eventUpdater();
@@ -823,6 +826,7 @@ test("安装请求的可失败阶段全部先于不可逆关闭，launcher 受�
           });
         },
         finalizeInstallShutdown: async () => { events.push("irreversible-shutdown"); },
+        recoverAfterInstallerLaunchFailure: async () => { events.push("recover-application"); },
         scheduleApplicationQuit: () => { events.push("quit"); },
       });
       await downloadStableCandidate(service);
@@ -832,15 +836,21 @@ test("安装请求的可失败阶段全部先于不可逆关闭，launcher 受�
         assert.equal(installed.state, "installing");
         assert.deepEqual(events, [
           "download-verify",
-          "data-protection",
           "install-verify",
-          "open-path:C:\\fake-downloads\\candidate.exe",
           "irreversible-shutdown",
+          "data-protection",
+          "open-path:C:\\fake-downloads\\candidate.exe",
           "quit",
         ]);
       } else {
         await assert.rejects(() => service.runAction({ action: "install" }), /校验|验证|拒绝|抛错|启动失败/);
-        assert.equal(events.includes("irreversible-shutdown"), false);
+        if (mode === "verify-false") {
+          assert.equal(events.includes("irreversible-shutdown"), false);
+          assert.equal(events.includes("recover-application"), false);
+        } else {
+          assert.equal(events.includes("irreversible-shutdown"), true);
+          assert.equal(events.at(-1), "recover-application");
+        }
         assert.equal(events.includes("quit"), false);
         assert.equal(service.getSnapshot().state, "error");
       }

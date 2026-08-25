@@ -26,7 +26,6 @@ class ManualUpdaterService {
   async performAction(body) {
     switch (body.action) {
       case "install": {
-        await this.deps.prepareInstall();
         const candidate = this.downloadedCandidate;
         const installVerified = await this.deps.verifyDownloadedArtifact({
           filePath: candidate.filePath,
@@ -35,9 +34,19 @@ class ManualUpdaterService {
           sha256: candidate.sha256,
         });
         if (!installVerified) throw new Error("安装前二次校验失败");
+        if (this.deps.prepareInstallShutdown) {
+          await this.deps.prepareInstallShutdown();
+        } else {
+          await this.deps.finalizeInstallShutdown();
+          await this.deps.prepareInstall();
+        }
         const installerPath = candidate.filePath;
-        await this.deps.launchVerifiedInstaller(installerPath);
-        await this.deps.finalizeInstallShutdown();
+        try {
+          await this.deps.launchVerifiedInstaller(installerPath);
+        } catch (error) {
+          await this.deps.recoverAfterInstallerLaunchFailure?.(error);
+          throw error;
+        }
         this.deps.scheduleApplicationQuit();
         break;
       }
@@ -49,16 +58,25 @@ async function launchVerifiedInstallerWithShell(filePath, openPath) {
   if (launchError.length > 0) throw new Error(launchError);
 }
 const service = createDesktopManualUpdater({
-  prepareInstall: async () => {
-    await protectUserDataBeforeUpdate({ userDataRoot: app.getPath("userData") });
+  prepareInstall: async () => undefined,
+  prepareInstallShutdown: async () => {
+    detachCurrentServeRequest();
+    quitIntent.markInstallUpdate();
+    await shutdownGate.prepareForInstaller(async () => {
+      await protectUserDataBeforeUpdate({ userDataRoot: app.getPath("userData") });
+    });
   },
   launchVerifiedInstaller: async (filePath) => {
     await launchVerifiedInstallerWithShell(filePath, (verifiedPath) => shell.openPath(verifiedPath));
   },
+  recoverAfterInstallerLaunchFailure: async () => {
+    console.error("launch failed");
+    await dialog.showMessageBox({ message: "重新启动" });
+    app.relaunch();
+    app.quit();
+  },
   finalizeInstallShutdown: async () => {
-    detachCurrentServeRequest();
-    quitIntent.markInstallUpdate();
-    await shutdownGate.finalizeAcceptedInstaller();
+    throw new Error("安装关闭流程未使用统一退出门");
   },
   scheduleApplicationQuit: () => {
     setImmediate(() => app.quit());
@@ -285,7 +303,7 @@ test("包内容门支持 Windows、macOS 与 Linux 的受控资源布局", async
 test("实包更新结构门拒绝关键词伪装和不安全调用关系", async (t) => {
   const keywordOnly = `console.info("electron-updater disableDifferentialDownload launchVerifiedInstaller openPath bindManualUpdateService");`;
   const unsafeQuitAndInstall = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);",
+    "          await this.deps.launchVerifiedInstaller(installerPath);",
     "this.deps.autoUpdater.quitAndInstall();",
   );
   const launchWithoutAwait = VALID_UPDATER_MAIN_SOURCE.replace(
@@ -297,15 +315,15 @@ test("实包更新结构门拒绝关键词伪装和不安全调用关系", async
     "launchVerifiedInstallerWithShell(filePath, (verifiedPath) => shell.openPath(verifiedPath));",
   );
   const quitBeforeLaunch = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);\n        await this.deps.finalizeInstallShutdown();\n        this.deps.scheduleApplicationQuit();",
-    "this.deps.scheduleApplicationQuit();\n        await this.deps.launchVerifiedInstaller(installerPath);\n        await this.deps.finalizeInstallShutdown();",
+    "        try {\n          await this.deps.launchVerifiedInstaller(installerPath);",
+    "        this.deps.scheduleApplicationQuit();\n        try {\n          await this.deps.launchVerifiedInstaller(installerPath);",
   );
   const missingOpenPathRejection = VALID_UPDATER_MAIN_SOURCE.replace(
     "if (launchError.length > 0) throw new Error(launchError);",
     "if (launchError.length > 0) console.error(launchError);",
   );
   const deadBranchLaunch = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);",
+    "          await this.deps.launchVerifiedInstaller(installerPath);",
     "if (false) await this.deps.launchVerifiedInstaller(installerPath);",
   );
   const nestedDeadThrow = VALID_UPDATER_MAIN_SOURCE.replace(
@@ -317,20 +335,20 @@ test("实包更新结构门拒绝关键词伪装和不安全调用关系", async
     "if (installVerified) this.deps.scheduleApplicationQuit();",
   );
   const swallowedLaunch = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);",
-    "try { await this.deps.launchVerifiedInstaller(installerPath); } catch {}",
+    /        try \{[\s\S]*?        \}\n        this\.deps\.scheduleApplicationQuit\(\);/,
+    "        try { await this.deps.launchVerifiedInstaller(installerPath); } catch {}\n        this.deps.scheduleApplicationQuit();",
   );
   const earlyReturnBeforeLaunch = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);",
-    "if (shouldAbort) return;\n        await this.deps.launchVerifiedInstaller(installerPath);",
+    "          await this.deps.launchVerifiedInstaller(installerPath);",
+    "          if (shouldAbort) return;\n          await this.deps.launchVerifiedInstaller(installerPath);",
   );
   const earlyBreakBeforeLaunch = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);",
-    "break;\n        await this.deps.launchVerifiedInstaller(installerPath);",
+    "          await this.deps.launchVerifiedInstaller(installerPath);",
+    "          break;\n          await this.deps.launchVerifiedInstaller(installerPath);",
   );
   const earlyContinueBeforeLaunch = VALID_UPDATER_MAIN_SOURCE.replace(
-    "await this.deps.launchVerifiedInstaller(installerPath);",
-    "continue;\n        await this.deps.launchVerifiedInstaller(installerPath);",
+    "          await this.deps.launchVerifiedInstaller(installerPath);",
+    "          continue;\n          await this.deps.launchVerifiedInstaller(installerPath);",
   );
   const wrongVerifyCandidateArgument = VALID_UPDATER_MAIN_SOURCE.replace(
     "size: candidate.size,",
@@ -345,8 +363,24 @@ test("实包更新结构门拒绝关键词伪装和不安全调用关系", async
     "",
   );
   const quitWithoutIrreversibleShutdown = VALID_UPDATER_MAIN_SOURCE.replace(
-    "        await this.deps.finalizeInstallShutdown();\n",
+    "          await this.deps.prepareInstallShutdown();\n",
     "",
+  );
+  const unreachableMainLauncher = VALID_UPDATER_MAIN_SOURCE.replace(
+    "    await launchVerifiedInstallerWithShell(filePath, (verifiedPath) => shell.openPath(verifiedPath));",
+    "    return;\n    await launchVerifiedInstallerWithShell(filePath, (verifiedPath) => shell.openPath(verifiedPath));",
+  );
+  const unreachableDeferredQuit = VALID_UPDATER_MAIN_SOURCE.replace(
+    "    setImmediate(() => app.quit());",
+    "    return;\n    setImmediate(() => app.quit());",
+  );
+  const unreachablePrepareInstallShutdown = VALID_UPDATER_MAIN_SOURCE.replace(
+    "    detachCurrentServeRequest();\n    quitIntent.markInstallUpdate();",
+    "    return;\n    detachCurrentServeRequest();\n    quitIntent.markInstallUpdate();",
+  );
+  const unreachableUserDataProtection = VALID_UPDATER_MAIN_SOURCE.replace(
+    "      await protectUserDataBeforeUpdate({ userDataRoot: app.getPath(\"userData\") });",
+    "      return;\n      await protectUserDataBeforeUpdate({ userDataRoot: app.getPath(\"userData\") });",
   );
   const invalidFixtures = [
     ["keyword-only", keywordOnly],
@@ -366,6 +400,10 @@ test("实包更新结构门拒绝关键词伪装和不安全调用关系", async
     ["unreachable-failure-throw", unreachableFailureThrow],
     ["missing-second-verify", missingSecondVerify],
     ["missing-irreversible-shutdown", quitWithoutIrreversibleShutdown],
+    ["unreachable-main-launcher", unreachableMainLauncher],
+    ["unreachable-deferred-quit", unreachableDeferredQuit],
+    ["unreachable-prepare-install-shutdown", unreachablePrepareInstallShutdown],
+    ["unreachable-user-data-protection", unreachableUserDataProtection],
     ["class-name-drift", VALID_UPDATER_MAIN_SOURCE.replace(/ManualUpdaterService/g, "RenamedUpdaterService")],
     ["parse-failure", "class ManualUpdaterService {"],
   ] as const;

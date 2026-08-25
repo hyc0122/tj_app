@@ -431,24 +431,18 @@ export function verifyPackagedUpdaterMainStructure(mainSource) {
     failUpdaterStructure("install 只允许分支末尾的 switch break，禁止提前 break、continue 或 return");
   }
   if (installStatements.some((statement) => (
-    ts.isTryStatement(statement)
-    || ts.isThrowStatement(statement)
-    || ts.isForStatement(statement)
+    ts.isForStatement(statement)
     || ts.isForInStatement(statement)
     || ts.isForOfStatement(statement)
     || ts.isWhileStatement(statement)
     || ts.isDoStatement(statement)
     || ts.isSwitchStatement(statement)
   ))) {
-    failUpdaterStructure("install 安全主链禁止直接 throw、循环、嵌套 switch 或 try/catch");
+    failUpdaterStructure("install 安全主链禁止循环或嵌套 switch");
   }
-  const prepareIndexes = [];
   const candidateDeclarations = [];
   const verifyDeclarations = [];
-  const shutdownIndexes = [];
-  const scheduleIndexes = [];
   for (const [index, statement] of installStatements.entries()) {
-    if (directAwaitCall(statement, "this.deps.prepareInstall")) prepareIndexes.push(index);
     if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
       const declaration = statement.declarationList.declarations[0];
       const initializer = declaration.initializer;
@@ -469,8 +463,6 @@ export function verifyPackagedUpdaterMainStructure(mainSource) {
         verifyDeclarations.push({ statement, declaration, call: initializer.expression, index });
       }
     }
-    if (directAwaitCall(statement, "this.deps.finalizeInstallShutdown")) shutdownIndexes.push(index);
-    if (directCall(statement, "this.deps.scheduleApplicationQuit")) scheduleIndexes.push(index);
   }
   if (candidateDeclarations.length !== 1 || verifyDeclarations.length !== 1) {
     failUpdaterStructure("install 必须唯一绑定下载候选并用它执行二次校验");
@@ -497,114 +489,106 @@ export function verifyPackagedUpdaterMainStructure(mainSource) {
     failUpdaterStructure("install 二次校验的 filePath/channel/size/sha256 必须来自同一下载候选");
   }
 
-  const installerPathDeclarations = installStatements
-    .map((statement, index) => ({ statement, index }))
-    .filter(({ statement }) => {
-      if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return false;
-      const declaration = statement.declarationList.declarations[0];
-      return ts.isIdentifier(declaration.name)
-        && astMemberPath(declaration.initializer) === `${candidateName}.filePath`;
-    });
+  const installerPathDeclarations = collectAstNodes(installCase, (node) => (
+    ts.isVariableDeclaration(node)
+    && ts.isIdentifier(node.name)
+    && Boolean(node.initializer)
+    && astMemberPath(node.initializer) === `${candidateName}.filePath`
+  ));
   if (installerPathDeclarations.length !== 1) {
     failUpdaterStructure("install launcher 路径必须唯一绑定同一下载候选的 filePath");
   }
   const installerPathDeclaration = installerPathDeclarations[0];
-  const installerPathName = installerPathDeclaration.statement.declarationList.declarations[0].name.text;
-  const launchIndexes = installStatements
-    .map((statement, index) => ({ call: directAwaitCall(statement, "this.deps.launchVerifiedInstaller"), index }))
-    .filter(({ call }) => (
-      call
-      && call.arguments.length === 1
-      && ts.isIdentifier(call.arguments[0])
-      && call.arguments[0].text === installerPathName
-    ))
-    .map(({ index }) => index);
+  const installerPathName = installerPathDeclaration.name.text;
 
-  const verifyGuards = installStatements
-    .map((statement, index) => ({ statement, index }))
-    .filter(({ statement }) => {
-      if (
-        !ts.isIfStatement(statement)
-        || !ts.isPrefixUnaryExpression(statement.expression)
-        || statement.expression.operator !== ts.SyntaxKind.ExclamationToken
-        || !ts.isIdentifier(statement.expression.operand)
-        || statement.expression.operand.text !== verifiedName
-        || statement.elseStatement !== undefined
-      ) return false;
-      if (ts.isThrowStatement(statement.thenStatement)) return true;
-      if (!ts.isBlock(statement.thenStatement) || statement.thenStatement.statements.length === 0) return false;
-      const guardStatements = [...statement.thenStatement.statements];
-      const terminalThrow = guardStatements.at(-1);
-      return Boolean(
-        terminalThrow
-        && ts.isThrowStatement(terminalThrow)
-        && guardStatements.slice(0, -1).every((guardStatement) => (
-          Boolean(directCall(guardStatement, "this.clearDownloadedCandidate"))
-        )),
-      );
-    });
-  const allUnique = [prepareIndexes, verifyDeclarations, verifyGuards, launchIndexes, shutdownIndexes, scheduleIndexes]
-    .every((matches) => matches.length === 1);
-  if (!allUnique) {
-    failUpdaterStructure("install 必须以直接必经语句执行预检、二次校验、launcher、不可逆关闭与退出调度");
+  const callNodes = (memberPath) => collectAstNodes(installCase, (node) => (
+    ts.isCallExpression(node) && astMemberPath(node.expression) === memberPath
+  ));
+  const prepareShutdownCalls = callNodes("this.deps.prepareInstallShutdown");
+  const legacyFinalizeCalls = callNodes("this.deps.finalizeInstallShutdown");
+  const launchCalls = callNodes("this.deps.launchVerifiedInstaller").filter((call) => (
+    call.arguments.length === 1
+    && ts.isIdentifier(call.arguments[0])
+    && call.arguments[0].text === installerPathName
+  ));
+  const recoveryCalls = callNodes("this.deps.recoverAfterInstallerLaunchFailure");
+  const scheduleCalls = callNodes("this.deps.scheduleApplicationQuit");
+  const directScheduleCalls = installStatements
+    .map((statement) => directCall(statement, "this.deps.scheduleApplicationQuit"))
+    .filter(Boolean);
+  if (
+    prepareShutdownCalls.length !== 1
+    || legacyFinalizeCalls.length !== 1
+    || launchCalls.length !== 1
+    || recoveryCalls.length !== 1
+    || scheduleCalls.length !== 1
+    || directScheduleCalls.length !== 1
+    || directScheduleCalls[0] !== scheduleCalls[0]
+  ) {
+    failUpdaterStructure("install 必须唯一执行统一关闭、launcher、失败恢复和退出调度");
   }
-  if (installStatements.filter((statement) => ts.isIfStatement(statement)).length !== 1) {
-    failUpdaterStructure("install 只允许二次校验失败的直接终止分支");
-  }
-  const guardThrow = ts.isThrowStatement(verifyGuards[0].statement.thenStatement)
-    ? verifyGuards[0].statement.thenStatement
-    : verifyGuards[0].statement.thenStatement.statements.at(-1);
-  const installThrows = collectAstNodes(installCase, (node) => ts.isThrowStatement(node));
-  if (installThrows.length !== 1 || installThrows[0] !== guardThrow) {
-    failUpdaterStructure("install 二次校验失败 guard 必须以唯一且可达的 throw 终止");
-  }
-  const installOrder = [
-    prepareIndexes[0],
-    candidateDeclaration.index,
-    verifyDeclaration.index,
-    verifyGuards[0].index,
-    installerPathDeclaration.index,
-    launchIndexes[0],
-    shutdownIndexes[0],
-    scheduleIndexes[0],
-  ];
-  if (!installOrder.every((value, index) => index === 0 || installOrder[index - 1] < value)) {
-    failUpdaterStructure("install 必须按预检、二次校验、launcher、不可逆关闭、退出的顺序执行");
-  }
-  const approvedVariableStatements = new Set([
-    candidateDeclaration.statement,
-    verifyDeclaration.statement,
-    installerPathDeclaration.statement,
-  ]);
-  const approvedDirectStatements = installStatements.every((statement) => {
-    if (statement === trailingBreak || statement === verifyGuards[0].statement) return true;
-    if (ts.isVariableStatement(statement)) return approvedVariableStatements.has(statement);
-    if (!ts.isExpressionStatement(statement)) return false;
+  const verifyGuards = collectAstNodes(installCase, (node) => {
     if (
-      directAwaitCall(statement, "this.deps.prepareInstall")
-      || directAwaitCall(statement, "this.deps.launchVerifiedInstaller")
-      || directAwaitCall(statement, "this.deps.finalizeInstallShutdown")
-      || directCall(statement, "this.deps.scheduleApplicationQuit")
-      || directCall(statement, "this.assertCandidateForPolicy")
-      || directCall(statement, "this.assertOperationCurrent")
-    ) return true;
-    return ts.isBinaryExpression(statement.expression)
-      && statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
-      && astMemberPath(statement.expression.left) === "this.snapshot";
+      !ts.isIfStatement(node)
+      || !ts.isPrefixUnaryExpression(node.expression)
+      || node.expression.operator !== ts.SyntaxKind.ExclamationToken
+      || !ts.isIdentifier(node.expression.operand)
+      || node.expression.operand.text !== verifiedName
+    ) return false;
+    return collectAstNodes(node.thenStatement, (child) => ts.isThrowStatement(child)).length === 1;
   });
-  if (!approvedDirectStatements) {
-    failUpdaterStructure("install 只允许批准的候选校验、launcher、关闭、状态更新与末尾 break 直接语句");
+  if (verifyGuards.length !== 1) {
+    failUpdaterStructure("install 二次校验失败 guard 必须唯一且抛错终止");
   }
-  for (const memberPath of [
-    "this.deps.verifyDownloadedArtifact",
-    "this.deps.launchVerifiedInstaller",
-    "this.deps.finalizeInstallShutdown",
-    "this.deps.scheduleApplicationQuit",
-  ]) {
-    const nestedCalls = collectAstNodes(installCase, (node) => (
-      ts.isCallExpression(node) && astMemberPath(node.expression) === memberPath
-    ));
-    if (nestedCalls.length !== 1) failUpdaterStructure(`install ${memberPath} 调用缺失、重复或藏在条件分支`);
+
+  // 中文注释：launcher 必须是 install 主链直接 try 语句中的直接 await，禁止藏入条件或死分支。
+  const launchTryBlocks = installStatements.filter((statement) => {
+    if (!ts.isTryStatement(statement) || statement.tryBlock.statements.length !== 1) return false;
+    const directLaunch = directAwaitCall(
+      statement.tryBlock.statements[0],
+      "this.deps.launchVerifiedInstaller",
+    );
+    return directLaunch === launchCalls[0]
+      && directLaunch.arguments.length === 1
+      && ts.isIdentifier(directLaunch.arguments[0])
+      && directLaunch.arguments[0].text === installerPathName;
+  });
+  if (launchTryBlocks.length !== 1 || !launchTryBlocks[0].catchClause) {
+    failUpdaterStructure("installer launcher 必须由 try/catch 包裹并支持失败恢复");
+  }
+  const launchCatch = launchTryBlocks[0].catchClause;
+  const catchStatements = [...launchCatch.block.statements];
+  const catchRecoveryCall = catchStatements.length === 2
+    ? directAwaitCall(catchStatements[0], "this.deps.recoverAfterInstallerLaunchFailure")
+    : null;
+  if (
+    catchRecoveryCall !== recoveryCalls[0]
+    || !ts.isThrowStatement(catchStatements[1])
+  ) {
+    failUpdaterStructure("installer 启动失败必须先执行恢复，再重新抛出错误");
+  }
+
+  const sourceOrder = [
+    candidateDeclaration.declaration.getStart(),
+    verifyDeclaration.declaration.getStart(),
+    verifyGuards[0].getStart(),
+    prepareShutdownCalls[0].getStart(),
+    installerPathDeclaration.getStart(),
+    launchCalls[0].getStart(),
+    scheduleCalls[0].getStart(),
+  ];
+  if (!sourceOrder.every((value, index) => index === 0 || sourceOrder[index - 1] < value)) {
+    failUpdaterStructure("install 必须按候选、二次校验、关闭运行时、launcher、退出调度的顺序执行");
+  }
+
+  const legacyFallbacks = collectAstNodes(installCase, (node) => (
+    ts.isIfStatement(node)
+    && collectAstNodes(node.thenStatement, (child) => child === prepareShutdownCalls[0]).length === 1
+    && node.elseStatement !== undefined
+    && collectAstNodes(node.elseStatement, (child) => child === legacyFinalizeCalls[0]).length === 1
+  ));
+  if (legacyFallbacks.length !== 1) {
+    failUpdaterStructure("统一安装关闭必须优先，旧 finalize 只能存在于兼容 fallback");
   }
   const unsafeQuitCalls = collectAstNodes(manualUpdaterClass, (node) => (
     ts.isCallExpression(node) && astMemberPath(node.expression)?.endsWith(".quitAndInstall")
@@ -669,49 +653,35 @@ export function verifyPackagedUpdaterMainStructure(mainSource) {
   ));
   const validMainWirings = updaterFactoryCalls.filter((call) => {
     const options = call.arguments[0];
-    const prepareProperties = options.properties.filter((property) => (
-      ts.isPropertyAssignment(property) && astPropertyName(property.name) === "prepareInstall"
+    const property = (name) => options.properties.filter((item) => (
+      ts.isPropertyAssignment(item) && astPropertyName(item.name) === name
     ));
-    const launchProperties = options.properties.filter((property) => (
-      ts.isPropertyAssignment(property) && astPropertyName(property.name) === "launchVerifiedInstaller"
-    ));
-    const shutdownProperties = options.properties.filter((property) => (
-      ts.isPropertyAssignment(property) && astPropertyName(property.name) === "finalizeInstallShutdown"
-    ));
-    const scheduleProperties = options.properties.filter((property) => (
-      ts.isPropertyAssignment(property) && astPropertyName(property.name) === "scheduleApplicationQuit"
-    ));
+    const prepareProperties = property("prepareInstall");
+    const prepareShutdownProperties = property("prepareInstallShutdown");
+    const launchProperties = property("launchVerifiedInstaller");
+    const recoveryProperties = property("recoverAfterInstallerLaunchFailure");
+    const legacyFinalizeProperties = property("finalizeInstallShutdown");
+    const scheduleProperties = property("scheduleApplicationQuit");
+    if ([
+      prepareProperties,
+      prepareShutdownProperties,
+      launchProperties,
+      recoveryProperties,
+      legacyFinalizeProperties,
+      scheduleProperties,
+    ].some((matches) => matches.length !== 1)) return false;
+    const prepareShutdownStatements = functionBodyStatements(prepareShutdownProperties[0].initializer);
+    const launchStatements = functionBodyStatements(launchProperties[0].initializer);
+    const recoveryStatements = functionBodyStatements(recoveryProperties[0].initializer);
+    const legacyFinalizeStatements = functionBodyStatements(legacyFinalizeProperties[0].initializer);
+    const scheduleStatements = functionBodyStatements(scheduleProperties[0].initializer);
     if (
-      prepareProperties.length !== 1
-      || launchProperties.length !== 1
-      || shutdownProperties.length !== 1
-      || scheduleProperties.length !== 1
+      !prepareShutdownStatements
+      || !launchStatements
+      || !recoveryStatements
+      || !legacyFinalizeStatements
+      || !scheduleStatements
     ) return false;
-    const prepareStatements = functionBodyStatements(prepareProperties[0].initializer);
-    const launchInitializer = launchProperties[0].initializer;
-    const launchStatements = functionBodyStatements(launchInitializer);
-    const shutdownStatements = functionBodyStatements(shutdownProperties[0].initializer);
-    const scheduleInitializer = scheduleProperties[0].initializer;
-    const scheduleStatements = functionBodyStatements(scheduleInitializer);
-    if (!prepareStatements || !launchStatements || !shutdownStatements || !scheduleStatements) return false;
-    if (
-      prepareStatements.length !== 1
-      || launchStatements.length !== 1
-      || shutdownStatements.length !== 3
-      || scheduleStatements.length !== 1
-    ) return false;
-    if (
-      prepareStatements.some((statement) => ts.isTryStatement(statement))
-      || launchStatements.some((statement) => ts.isTryStatement(statement))
-      || shutdownStatements.some((statement) => ts.isTryStatement(statement))
-      || scheduleStatements.some((statement) => ts.isTryStatement(statement))
-    ) return false;
-    const awaitedProtection = prepareStatements.filter((statement) => {
-      if (!ts.isExpressionStatement(statement) || !ts.isAwaitExpression(statement.expression)) return false;
-      const expression = statement.expression.expression;
-      return ts.isCallExpression(expression)
-        && astMemberPath(expression.expression) === "protectUserDataBeforeUpdate";
-    });
     const awaitedHelpers = launchStatements.filter((statement) => {
       if (!ts.isExpressionStatement(statement) || !ts.isAwaitExpression(statement.expression)) return false;
       const expression = statement.expression.expression;
@@ -722,15 +692,31 @@ export function verifyPackagedUpdaterMainStructure(mainSource) {
         ts.isCallExpression(child) && astPathMatchesImport(astMemberPath(child.expression), "shell.openPath")
       )).length === 1;
     });
-    const detachIndex = shutdownStatements.findIndex((statement) => Boolean(
-      directCall(statement, "detachCurrentServeRequest"),
+    const detachCall = prepareShutdownStatements.length === 3
+      ? directCall(prepareShutdownStatements[0], "detachCurrentServeRequest")
+      : null;
+    const markCall = prepareShutdownStatements.length === 3
+      ? directCall(prepareShutdownStatements[1], "quitIntent.markInstallUpdate")
+      : null;
+    const closeCall = prepareShutdownStatements.length === 3
+      ? directAwaitCall(prepareShutdownStatements[2], "shutdownGate.prepareForInstaller")
+      : null;
+    const protectionCallback = closeCall?.arguments.length === 1
+      ? closeCall.arguments[0]
+      : null;
+    const protectionStatements = protectionCallback
+      ? functionBodyStatements(protectionCallback)
+      : null;
+    const protectionCall = protectionStatements?.length === 1
+      ? directAwaitCall(protectionStatements[0], "protectUserDataBeforeUpdate")
+      : null;
+    const recoveryRelaunchCalls = collectAstNodes(recoveryProperties[0].initializer, (node) => (
+      ts.isCallExpression(node) && astPathMatchesImport(astMemberPath(node.expression), "app.relaunch")
     ));
-    const markIndex = shutdownStatements.findIndex((statement) => Boolean(
-      directCall(statement, "quitIntent.markInstallUpdate"),
+    const recoveryQuitCalls = collectAstNodes(recoveryProperties[0].initializer, (node) => (
+      ts.isCallExpression(node) && astPathMatchesImport(astMemberPath(node.expression), "app.quit")
     ));
-    const closeIndex = shutdownStatements.findIndex((statement) => Boolean(
-      directAwaitCall(statement, "shutdownGate.finalizeAcceptedInstaller"),
-    ));
+    const legacyThrows = collectAstNodes(legacyFinalizeProperties[0].initializer, (node) => ts.isThrowStatement(node));
     const deferredQuits = scheduleStatements.filter((statement) => {
       const immediate = directCall(statement, "setImmediate");
       if (!immediate || immediate.arguments.length !== 1) return false;
@@ -742,15 +728,21 @@ export function verifyPackagedUpdaterMainStructure(mainSource) {
       return callbackStatements?.length === 1
         && Boolean(directCall(callbackStatements[0], "app.quit"));
     });
-    return awaitedProtection.length === 1
+    // 中文注释：关闭、数据保护、launcher 与退出调度都只允许固定的可达直接语句，前置 return/throw 必须失败关闭。
+    return launchStatements.length === 1
+      && scheduleStatements.length === 1
       && awaitedHelpers.length === 1
-      && detachIndex >= 0
-      && detachIndex < markIndex
-      && markIndex < closeIndex
+      && detachCall?.arguments.length === 0
+      && markCall?.arguments.length === 0
+      && closeCall?.arguments.length === 1
+      && protectionCall?.arguments.length === 1
+      && recoveryRelaunchCalls.length === 1
+      && recoveryQuitCalls.length === 1
+      && legacyThrows.length === 1
       && deferredQuits.length === 1;
   });
   if (validMainWirings.length !== 1) {
-    failUpdaterStructure("主进程必须唯一装配可失败预检、shell.openPath、受理后关闭与 setImmediate app.quit");
+    failUpdaterStructure("主进程必须唯一装配统一关闭、数据保护、shell.openPath、失败恢复与 setImmediate app.quit");
   }
 
   return {

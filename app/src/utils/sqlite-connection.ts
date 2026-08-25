@@ -36,10 +36,11 @@ const SQLITE_STARTUP_RETRY_DELAYS_MS = [50, 150] as const;
 const RETRYABLE_SQLITE_STARTUP_CODES = new Set([
   "SQLITE_BUSY",
   "SQLITE_LOCKED",
+  "SQLITE_IOERR",
   "SQLITE_IOERR_TRUNCATE",
 ]);
 
-/** 只识别明确允许的 SQLite 瞬时错误，禁止把损坏、权限或普通 IOERR 自动重试掉。 */
+/** 只识别明确允许的 SQLite 瞬时错误；普通 IOERR 也只执行固定两次重试，不做自动修复。 */
 export function isRetryableSQLiteStartupError(error: unknown): boolean {
   let current = error;
   for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {

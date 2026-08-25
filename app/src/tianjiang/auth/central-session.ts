@@ -18,6 +18,8 @@ const CENTRAL_AUTH_PATHS = {
   captcha: "/api/tianjiang/v1/auth/captcha",
   register: "/api/tianjiang/v1/auth/register",
   login: "/api/tianjiang/v1/auth/login",
+  profile: "/api/tianjiang/v1/profile",
+  password: "/api/tianjiang/v1/profile/password",
 } as const;
 
 export interface CentralPublicUser {
@@ -121,6 +123,22 @@ export interface CentralRegisterInput extends CentralLoginInput {
   nickname: string;
 }
 
+export interface CentralProfileUpdateInput {
+  username: string;
+  nickname: string;
+}
+
+export interface CentralPasswordChangeInput {
+  oldPassword: string;
+  newPassword: string;
+}
+
+export interface CentralProfileMutationResult {
+  user: CentralPublicUser;
+  /** 仅在本地凭据原子提交成功后，路由才可把该暂存会话替换进内存。 */
+  session: CentralSession;
+}
+
 export interface ServerUrlPolicy {
   readonly mode: "test-only-loopback-http";
   readonly serverUrl?: string;
@@ -178,6 +196,12 @@ const SAFE_CENTRAL_REQUEST_ERRORS = [
   { pathname: CENTRAL_AUTH_PATHS.register, status: 409, code: "USERNAME_TAKEN", message: "用户名重复" },
   { pathname: CENTRAL_AUTH_PATHS.register, status: 422, code: "PASSWORD_POLICY", message: "密码不符合安全规则" },
   { pathname: CENTRAL_AUTH_PATHS.login, status: 400, code: "CAPTCHA_INVALID", message: "验证码错误" },
+  { pathname: CENTRAL_AUTH_PATHS.profile, status: 400, code: 7, message: "请求参数无效" },
+  { pathname: CENTRAL_AUTH_PATHS.profile, status: 400, code: 7, message: "用户名或昵称格式无效" },
+  { pathname: CENTRAL_AUTH_PATHS.profile, status: 409, code: 7, message: "用户名已存在" },
+  { pathname: CENTRAL_AUTH_PATHS.password, status: 400, code: 7, message: "请求参数无效" },
+  { pathname: CENTRAL_AUTH_PATHS.password, status: 400, code: 7, message: "新密码不符合安全规则" },
+  { pathname: CENTRAL_AUTH_PATHS.password, status: 401, code: 7, message: "原密码错误" },
 ] as const;
 
 function safeCentralRequestError(
@@ -206,6 +230,12 @@ function safeCentralRequestError(
       code: 401,
       message: GENERIC_LOGIN_MESSAGE,
     };
+  }
+  if (pathname === CENTRAL_AUTH_PATHS.profile) {
+    return { status: 400, code: 400, message: "个人资料修改失败" };
+  }
+  if (pathname === CENTRAL_AUTH_PATHS.password) {
+    return { status: 400, code: 400, message: "密码修改失败" };
   }
   return {
     status: 400,
@@ -254,6 +284,10 @@ interface BusinessLoginData {
     username: string;
     nickname: string;
   };
+}
+
+interface BusinessProfileData {
+  user: CentralPublicUser;
 }
 
 export class CentralAuthGateway {
@@ -311,6 +345,42 @@ export class CentralAuthGateway {
       },
       publicUser,
     };
+  }
+
+  async updateProfile(
+    session: CentralSession,
+    input: CentralProfileUpdateInput,
+  ): Promise<CentralProfileMutationResult> {
+    const stagedSession: CentralSession = { ...session, user: { ...session.user } };
+    const data = await this.request<BusinessProfileData>(CENTRAL_AUTH_PATHS.profile, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-token": session.token,
+      },
+      body: JSON.stringify(input),
+    }, stagedSession);
+    const user = parseCentralPublicUser(data.user);
+    stagedSession.user = user;
+    return { user, session: stagedSession };
+  }
+
+  async changePassword(
+    session: CentralSession,
+    input: CentralPasswordChangeInput,
+  ): Promise<CentralProfileMutationResult> {
+    const stagedSession: CentralSession = { ...session, user: { ...session.user } };
+    const data = await this.request<BusinessProfileData>(CENTRAL_AUTH_PATHS.password, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-token": session.token,
+      },
+      body: JSON.stringify(input),
+    }, stagedSession);
+    const user = parseCentralPublicUser(data.user);
+    stagedSession.user = user;
+    return { user, session: stagedSession };
   }
 
   async validate(session: CentralSession): Promise<CentralSession> {
@@ -434,6 +504,17 @@ export class CentralAuthGateway {
     }
     return CENTRAL_API_URL;
   }
+}
+
+function parseCentralPublicUser(value: CentralPublicUser): CentralPublicUser {
+  if (!value || !Number.isSafeInteger(value.id) || value.id <= 0 || typeof value.username !== "string") {
+    throw new Error("中央个人资料响应无效");
+  }
+  return {
+    id: value.id,
+    username: value.username,
+    nickname: typeof value.nickname === "string" ? value.nickname : "",
+  };
 }
 
 export function normalizeServerUrl(raw: string, policy?: ServerUrlPolicy): string {
