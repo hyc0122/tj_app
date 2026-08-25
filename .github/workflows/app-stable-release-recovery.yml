@@ -1,0 +1,145 @@
+name: 天将漫创 Windows x64 Stable Release Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 原 Stable 工作流 Run ID
+        required: true
+        type: string
+      version:
+        description: 恢复的正式版本号
+        required: true
+        type: string
+
+env:
+  NODE_VERSION: "24.13.1"
+  YARN_VERSION: "1.22.22"
+
+defaults:
+  run:
+    working-directory: app
+
+# 恢复流程与正常发布共享单写者队列，避免两个渠道的可变指针交叉推进。
+concurrency:
+  group: tianjiang-desktop-release
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: 恢复 OSS 与 GitHub Stable Release
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: 检出公开客户端 main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: 下载历史 Stable publication root
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: stable-release-publication
+          path: app/.local/stable-release-publication
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 激活并验证 Yarn 1.22.22
+        run: |
+          corepack enable
+          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+          yarn --version
+
+      - name: 冻结安装依赖
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: 校验恢复版本、Tag、Commit 与来源 Run
+        env:
+          RECOVERY_VERSION: ${{ inputs.version }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RECOVERY_VERSION}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "恢复版本必须为正式版 X.Y.Z" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/tags/v${RECOVERY_VERSION}:refs/tags/v${RECOVERY_VERSION}"
+          TAG_COMMIT="$(git rev-list -n 1 "v${RECOVERY_VERSION}")"
+          export TAG_COMMIT
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+          import { validateStableSourcePlatformReleaseManifest } from "./scripts/build-release-manifest.mjs";
+
+          const version = process.env.RECOVERY_VERSION;
+          const manifestPath = path.join(
+            ".local",
+            "stable-release-publication",
+            "desktop",
+            "stable",
+            "windows",
+            "x64",
+            "catalog",
+            "releases",
+            version,
+            "release-manifest.json",
+          );
+          const manifest = validateStableSourcePlatformReleaseManifest(
+            JSON.parse(fs.readFileSync(manifestPath, "utf8")),
+            "stable",
+          );
+          const expected = {
+            version,
+            tag: `v${version}`,
+            commitSha: process.env.TAG_COMMIT,
+            repository: process.env.EXPECTED_REPOSITORY,
+            workflow: ".github/workflows/app-stable-release.yml",
+            runId: process.env.SOURCE_RUN_ID,
+          };
+          for (const [field, value] of Object.entries(expected)) {
+            if (manifest[field] !== value) {
+              throw new Error(`恢复来源校验失败：${field}`);
+            }
+          }
+          NODE
+
+      - name: 恢复 OSS Stable 与 Beta Windows 兼容事务
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_REGION: oss-cn-qingdao
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_ENDPOINT: https://oss-cn-qingdao.aliyuncs.com
+          TIANJIANG_RELEASE_PUBLIC_BASE_URL: https://api.j11.com.cn/
+          TIANJIANG_RELEASE_SINGLE_WRITER: github-actions:${{ github.repository }}:${{ inputs.source_run_id }}:stable:windows-x64
+        run: >-
+          node scripts/publish-platform-release-cli.mjs .local/stable-release-publication "${{ inputs.version }}"
+
+      - name: 创建或更新 GitHub Stable Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: v${{ inputs.version }}
+          name: 天将漫创 v${{ inputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            ## 天将漫创 Windows x64 Stable
+
+            本 Release 仅包含 Windows x64 正式版。产品二进制仍为未签名产物；Sigstore 只证明 ReleaseManifest 的 GitHub Actions 来源，不是 Authenticode 产品代码签名。
+          files: |
+            app/.local/stable-release-publication/desktop/stable/windows/x64/*.exe
+            app/.local/stable-release-publication/desktop/stable/windows/x64/*.blockmap
+            app/.local/stable-release-publication/desktop/stable/windows/x64/catalog/releases/*/release-manifest.json
+            app/.local/stable-release-publication/desktop/stable/windows/x64/catalog/releases/*/release-manifest.json.sigstore.json
+            app/.local/stable-release-publication/desktop/stable/windows/x64/catalog/releases/*/SHA256SUMS

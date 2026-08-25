@@ -32,6 +32,7 @@ class RecordingRemote {
   mutateOnReadKey?: string;
   mutateOnReadNumber = 0;
   mutateOnReadBytes?: Buffer;
+  throwEpipeOnExistingImmutablePut = false;
   private readonly reads = new Map<string, number>();
 
   constructor({ stableVersion, betaVersion }: { stableVersion?: string; betaVersion?: string }) {
@@ -73,7 +74,14 @@ class RecordingRemote {
   async putImmutable(key: string, bytes: Buffer): Promise<PutResult> {
     this.keys.push(key);
     this.events.push(`immutable-put:${key}`);
-    if (this.objects.has(key)) return "exists";
+    if (this.objects.has(key)) {
+      if (this.throwEpipeOnExistingImmutablePut) {
+        const error = new Error("write EPIPE") as Error & { code: string };
+        error.code = "EPIPE";
+        throw error;
+      }
+      return "exists";
+    }
     this.objects.set(key, Buffer.from(bytes));
     this.writes.push(`immutable:${key}`);
     return "created";
@@ -501,6 +509,23 @@ test("Stable 已推进而 Beta 指针中断后重跑保持幂等并补齐 Beta",
     assert.deepEqual(remote.objects.get(betaLatestKey), fixture.bytesByKey.get(betaLatestKey));
     assert.equal(remote.writes.filter((item) => item.startsWith("immutable:")).length, immutableWriteCount);
     assert.deepEqual(remote.deleted, []);
+  } finally {
+    removeTree(fixture.root);
+  }
+});
+
+test("手工补齐不可变对象后恢复发布不得再次 PUT，避免 OSS 提前拒绝触发 EPIPE", async () => {
+  const fixture = createPublicationFixture("manual-upload-recovery");
+  const remote = new RecordingRemote({ stableVersion: "1.1.10", betaVersion: "1.1.10-beta.1" });
+  seedChannelImmutableObjects(remote, fixture, "stable");
+  seedChannelImmutableObjects(remote, fixture, "beta");
+  remote.throwEpipeOnExistingImmutablePut = true;
+  try {
+    const result = await publishFixture(fixture, remote);
+    assert.deepEqual(result.channels, ["stable", "beta"]);
+    assert.equal(remote.events.some((event) => event.startsWith("immutable-put:")), false);
+    assert.deepEqual(remote.objects.get(stableLatestKey), fixture.bytesByKey.get(stableLatestKey));
+    assert.deepEqual(remote.objects.get(betaLatestKey), fixture.bytesByKey.get(betaLatestKey));
   } finally {
     removeTree(fixture.root);
   }

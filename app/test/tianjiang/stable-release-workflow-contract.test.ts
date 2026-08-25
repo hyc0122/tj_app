@@ -21,6 +21,7 @@ const { minimatch } = require("minimatch") as {
 const appRoot = path.resolve(__dirname, "../..");
 const repositoryRoot = path.resolve(appRoot, "..");
 const workflowPath = path.join(repositoryRoot, ".github", "workflows", "app-stable-release.yml");
+const recoveryWorkflowPath = path.join(repositoryRoot, ".github", "workflows", "app-stable-release-recovery.yml");
 const fixtureParent = path.resolve(process.cwd(), "..", ".tmp", "stable-workflow-contract");
 
 test("正式发布版本、安装器校验与 Tag 命令只使用 package.json 版本源", () => {
@@ -162,6 +163,52 @@ test("Stable 发布入口只运行 Task 2 平台 CLI，成功后紧邻创建 non
   assert.equal(steps[releaseIndex].with.prerelease, false);
   assert.equal(steps[releaseIndex].with.draft, false);
   assert.doesNotMatch(JSON.stringify(workflow), /desktop\/beta\/catalog\/latest\.json/);
+});
+
+test("Stable 恢复工作流校验历史来源后复用同一发布事务并显式绑定原 Tag", () => {
+  const workflow = parseYaml(fs.readFileSync(recoveryWorkflowPath, "utf8"));
+  assert.deepEqual(workflow.on, {
+    workflow_dispatch: {
+      inputs: {
+        source_run_id: { description: "原 Stable 工作流 Run ID", required: true, type: "string" },
+        version: { description: "恢复的正式版本号", required: true, type: "string" },
+      },
+    },
+  });
+  assert.deepEqual(workflow.concurrency, {
+    group: "tianjiang-desktop-release",
+    "cancel-in-progress": false,
+  });
+  assert.deepEqual(Object.keys(workflow.jobs), ["recover"]);
+  const recover = workflow.jobs.recover;
+  assert.equal(recover.if, "${{ github.repository == 'hyc0122/tj_app' }}");
+  assert.equal(recover.permissions.actions, "read");
+  assert.equal(recover.permissions.contents, "write");
+  const steps = recover.steps;
+  const download = steps.find((step: any) => step.name === "下载历史 Stable publication root");
+  assert.equal(download.with.name, "stable-release-publication");
+  assert.equal(download.with["run-id"], "${{ inputs.source_run_id }}");
+  assert.equal(download.with["github-token"], "${{ github.token }}");
+
+  const validate = steps.find((step: any) => step.name === "校验恢复版本、Tag、Commit 与来源 Run");
+  assert.match(validate.run, /release-manifest\.json/);
+  assert.match(validate.run, /commitSha/);
+  assert.match(validate.run, /source_run_id|SOURCE_RUN_ID/);
+  assert.match(validate.run, /refs\/tags\/v/);
+
+  const publishIndex = steps.findIndex((step: any) => step.name === "恢复 OSS Stable 与 Beta Windows 兼容事务");
+  const releaseIndex = steps.findIndex((step: any) => step.name === "创建或更新 GitHub Stable Release");
+  assert.equal(releaseIndex, publishIndex + 1);
+  assert.equal(
+    steps[publishIndex].env.TIANJIANG_RELEASE_SINGLE_WRITER,
+    "github-actions:${{ github.repository }}:${{ inputs.source_run_id }}:stable:windows-x64",
+  );
+  assert.equal(steps[releaseIndex].with.tag_name, "v${{ inputs.version }}");
+  assert.equal(steps[releaseIndex].with.prerelease, false);
+  assert.equal(steps[releaseIndex].with.draft, false);
+  for (const step of steps.filter((entry: any) => entry.uses)) {
+    assert.match(step.uses, /^[^@]+@[0-9a-f]{40}$/);
+  }
 });
 
 test("离线无真实 signer 时 prepare 失败关闭，publish CLI 对空受控 fixture 不触碰远端", async () => {

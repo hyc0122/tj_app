@@ -343,6 +343,12 @@ async function putAtomicAfterFrozenReadback(remote, key, bytes, metadata, frozen
 
 async function uploadImmutable(remote, objects) {
   for (const object of objects) {
+    // 恢复发布时先验证手工补齐或上次成功写入的对象，避免再次发送大文件 PUT 触发 EPIPE。
+    const existingBeforePut = await remoteBytes(remote, object.key);
+    if (existingBeforePut) {
+      if (!Buffer.from(existingBeforePut).equals(object.bytes)) fail(`不可变对象内容冲突：${object.key}`);
+      continue;
+    }
     const result = await remote.putImmutable(object.key, object.bytes, object.metadata);
     if (result !== "created" && result !== "exists") fail(`不可变写入结果无效：${object.key}`);
     if (result === "exists") {
