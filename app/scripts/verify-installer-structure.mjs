@@ -22,6 +22,9 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const projectRoot = path.resolve(appRoot, "..");
 const projectTemporaryRoot = path.join(projectRoot, ".tmp");
 const formalUnpackedRoot = path.join(appRoot, "dist", "win-unpacked");
+const packageVersion = JSON.parse(
+  readFileSync(path.join(appRoot, "package.json"), "utf8"),
+).version;
 
 const requiredEntries = [
   "天将漫创.exe",
@@ -33,6 +36,20 @@ const requiredEntries = [
   "resources/prerequisites/vc_redist.x64.exe",
 ];
 const extractionRetryWaitMilliseconds = [250, 500];
+
+/**
+ * 标准安装器校验不接收版本参数，文件名只由 package.json.version 构造。
+ */
+export function resolveDefaultInstallerVerificationInputs() {
+  return {
+    setupPath: path.join(
+      appRoot,
+      "dist",
+      `天将漫创-${packageVersion}-win-x64-setup.exe`,
+    ),
+    unpackedRoot: formalUnpackedRoot,
+  };
+}
 
 function isStrictDescendant(root, target) {
   const relative = path.relative(root, target);
@@ -350,14 +367,16 @@ export function verifyInstallerArchiveStructure(setupPath, unpackedRoot) {
 
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : "";
 if (import.meta.url === invokedPath) {
-  const [setupPath, unpackedRoot] = process.argv.slice(2);
-  if (!setupPath || !unpackedRoot) {
+  const cliArguments = process.argv.slice(2);
+  if (cliArguments.length !== 0 && cliArguments.length !== 2) {
     process.stderr.write(
-      "用法：node scripts/verify-installer-structure.mjs <setup.exe> <win-unpacked>\n",
+      "用法：node scripts/verify-installer-structure.mjs [<setup.exe> <win-unpacked>]\n",
     );
     process.exitCode = 2;
   } else {
     try {
+      const defaults = resolveDefaultInstallerVerificationInputs();
+      const [setupPath = defaults.setupPath, unpackedRoot = defaults.unpackedRoot] = cliArguments;
       const evidence = verifyInstallerArchiveStructure(setupPath, unpackedRoot);
       process.stdout.write(`${JSON.stringify(evidence)}\n`);
     } catch (error) {

@@ -69,11 +69,14 @@ function ConvertTo-WindowsVersion([string]$SemVer) {
   if ($SemVer -notmatch $semVerPattern) {
     throw "ExpectedVersion 不是有效 SemVer"
   }
-  # Windows 数值版本资源仅取主版本三段；完整 SemVer 由 NSIS ProductVersion 单独保留。
-  return "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
+  $major = $Matches[1]
+  $minor = $Matches[2]
+  $patch = $Matches[3]
+  # 主程序 ProductVersion 遵循 electron-builder 的 Windows 四段格式，仍只从 package.json.version 推导。
+  return "$major.$minor.$patch.0"
 }
 
-$expectedWindowsVersion = ConvertTo-WindowsVersion $ExpectedVersion
+$expectedWindowsProductVersion = ConvertTo-WindowsVersion $ExpectedVersion
 
 function Assert-Version([string]$Value, [string]$Expected, [string]$Label) {
   if ($Value -cne $Expected) {
@@ -108,11 +111,11 @@ foreach ($property in $expectedMainStrings.Keys) {
 if (-not [string]::IsNullOrEmpty([string]$mainInfo.OriginalFilename)) {
   throw "Windows 主程序 OriginalFilename 未遵循 electron-builder 原生资源合同"
 }
-Assert-Version $mainInfo.FileVersion $expectedWindowsVersion "Windows 主程序 FileVersion"
-Assert-Version $mainInfo.ProductVersion $expectedWindowsVersion "Windows 主程序 ProductVersion"
+Assert-Version $mainInfo.FileVersion $ExpectedVersion "Windows 主程序 FileVersion"
+Assert-Version $mainInfo.ProductVersion $expectedWindowsProductVersion "Windows 主程序 ProductVersion"
 
 $installerInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($InstallerExecutable)
-Assert-Version $installerInfo.FileVersion $expectedWindowsVersion "NSIS 安装器 FileVersion"
+Assert-Version $installerInfo.FileVersion $ExpectedVersion "NSIS 安装器 FileVersion"
 Assert-Version $installerInfo.ProductVersion $ExpectedVersion "NSIS 安装器 ProductVersion"
 if ((Split-Path -Leaf $InstallerExecutable) -ne "天将漫创-$ExpectedVersion-win-x64-setup.exe") {
   throw "NSIS 安装器文件名不符合发布契约"
@@ -134,7 +137,7 @@ $uninstallerEvidence = [ordered]@{
 }
 if (-not [string]::IsNullOrWhiteSpace($UninstallerExecutable)) {
   $uninstallerInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($UninstallerExecutable)
-  Assert-Version $uninstallerInfo.FileVersion $expectedWindowsVersion "NSIS 卸载器 FileVersion"
+  Assert-Version $uninstallerInfo.FileVersion $ExpectedVersion "NSIS 卸载器 FileVersion"
   Assert-Version $uninstallerInfo.ProductVersion $ExpectedVersion "NSIS 卸载器 ProductVersion"
   $uninstallerSignature = (
     Get-AuthenticodeSignature -LiteralPath $UninstallerExecutable

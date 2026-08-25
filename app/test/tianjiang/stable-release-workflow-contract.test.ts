@@ -23,10 +23,17 @@ const repositoryRoot = path.resolve(appRoot, "..");
 const workflowPath = path.join(repositoryRoot, ".github", "workflows", "app-stable-release.yml");
 const fixtureParent = path.resolve(process.cwd(), "..", ".tmp", "stable-workflow-contract");
 
-test("当前正式发布版本与 Windows 安装器校验路径统一为 1.1.12", () => {
+test("正式发布版本、安装器校验与 Tag 命令只使用 package.json 版本源", () => {
   const packageDocument = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
-  assert.equal(packageDocument.version, "1.1.12");
-  assert.match(packageDocument.scripts["installer:verify"], /天将漫创-1\.1\.12-win-x64-setup\.exe/);
+  assert.match(packageDocument.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  assert.equal(
+    packageDocument.scripts["installer:verify"],
+    "node scripts/verify-installer-structure.mjs",
+  );
+  assert.equal(
+    packageDocument.scripts["release:tag:stable"],
+    "node scripts/publish-stable-release-tag.mjs",
+  );
 });
 
 function readWorkflow() {

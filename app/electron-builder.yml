@@ -1,8 +1,7 @@
 appId: com.tianjiang.manchuang
 productName: 天将漫创
 copyright: Copyright © 2026
-# rcedit 的 FileVersion 必须由构建端直接收到 Windows 四段版本。
-buildVersion: 1.1.11.0
+# 版本号只读取 package.json.version，禁止在 builder 配置维护第二份版本。
 # Beta 通道已由 feed 目录隔离；关闭版本后缀推导以固定 latest* metadata 文件名。
 detectUpdateChannel: false
 
