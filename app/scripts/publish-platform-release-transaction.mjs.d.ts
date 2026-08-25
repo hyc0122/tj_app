@@ -20,6 +20,7 @@ export interface PlatformPublicRangeSummary {
   status: number;
   contentRange: string | null;
   bytes: Buffer;
+  fullBodyVerified?: boolean;
 }
 
 /** Stable Windows 发布事务所需的最小远端能力合同。 */
@@ -38,7 +39,13 @@ export interface PlatformPublicationRemote {
     expectedSize: number,
     expectedSha256: string,
   ): Promise<PlatformPublicObjectSummary | null>;
-  readPublicRange(key: string, start: number, end: number): Promise<PlatformPublicRangeSummary>;
+  readPublicRange(
+    key: string,
+    start: number,
+    end: number,
+    expectedFullSize: number,
+    expectedFullSha256: string,
+  ): Promise<PlatformPublicRangeSummary>;
 }
 
 export interface PublishStableWindowsTransactionOptions {

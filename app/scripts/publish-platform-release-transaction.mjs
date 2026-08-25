@@ -375,10 +375,14 @@ async function verifyPublicObjects(remote, objects) {
   }
   for (const object of objects) {
     const end = Math.min(1023, object.bytes.length - 1);
-    const range = await remote.readPublicRange(object.key, 0, end);
+    const range = await remote.readPublicRange(object.key, 0, end, object.bytes.length, object.sha256);
+    const exactPartialResponse = range?.status === 206
+      && range.contentRange === `bytes 0-${end}/${object.bytes.length}`;
+    const verifiedCompressedFallback = range?.status === 200
+      && range.contentRange === null
+      && range.fullBodyVerified === true;
     if (
-      range?.status !== 206
-      || range.contentRange !== `bytes 0-${end}/${object.bytes.length}`
+      (!exactPartialResponse && !verifiedCompressedFallback)
       || !Buffer.from(range.bytes ?? []).equals(object.bytes.subarray(0, end + 1))
     ) {
       fail(`公开对象 206 Content-Range 验证失败：${object.key}`);
@@ -459,10 +463,25 @@ export async function publishStableWindowsTransaction(options) {
   return { version, channels };
 }
 
-async function readBoundedHttpBody(response, expectedSize, { expectedSha256 = null, collect = false } = {}) {
+async function readBoundedHttpBody(
+  response,
+  expectedSize,
+  { expectedSha256 = null, collect = false, allowEncodedContentLength = false } = {},
+) {
   if (!Number.isSafeInteger(expectedSize) || expectedSize < 1) fail("公开响应预期大小无效");
   const declared = response.headers?.get?.("content-length");
-  if (typeof declared !== "string" || !/^\d+$/.test(declared) || Number(declared) !== expectedSize) {
+  const contentEncoding = response.headers?.get?.("content-encoding")?.trim().toLowerCase() ?? "";
+  const encodedLengthAllowed = allowEncodedContentLength
+    && ["br", "deflate", "gzip"].includes(contentEncoding)
+    && typeof declared === "string"
+    && /^\d+$/.test(declared)
+    && Number.isSafeInteger(Number(declared))
+    && Number(declared) > 0;
+  if (!encodedLengthAllowed && (
+    typeof declared !== "string"
+    || !/^\d+$/.test(declared)
+    || Number(declared) !== expectedSize
+  )) {
     fail("OSS 公开对象 Content-Length 与本地对象不一致");
   }
   if (!response.body || typeof response.body[Symbol.asyncIterator] !== "function") {
@@ -611,7 +630,7 @@ export async function createPlatformOssRemoteFromEnvironment(environment = proce
       if (response.status !== 200) fail(`OSS 公开对象回读失败，HTTP ${response.status}`);
       return readBoundedHttpBody(response, expectedSize, { expectedSha256 });
     },
-    async readPublicRange(key, start, end) {
+    async readPublicRange(key, start, end, expectedFullSize, expectedFullSha256) {
       let response;
       try {
         response = await fetchImplementation(publicUrl(key), {
@@ -624,6 +643,32 @@ export async function createPlatformOssRemoteFromEnvironment(environment = proce
       const expectedSize = end - start + 1;
       if (!Number.isSafeInteger(expectedSize) || expectedSize < 1 || expectedSize > 1024) {
         fail("OSS Range 校验长度必须在 1..1024 字节内");
+      }
+      if (response.status === 200) {
+        // CDN 对 JSON 自动压缩时会忽略 Range。此时只有完整解压字节的大小与摘要都匹配才允许回退。
+        const contentEncoding = response.headers.get("content-encoding")?.trim().toLowerCase() ?? "";
+        if (!["br", "deflate", "gzip"].includes(contentEncoding)) {
+          fail("OSS Range 非 206 且没有受支持的 CDN 压缩回退");
+        }
+        if (
+          !Number.isSafeInteger(expectedFullSize)
+          || expectedFullSize < expectedSize
+          || typeof expectedFullSha256 !== "string"
+          || !/^[a-f0-9]{64}$/.test(expectedFullSha256)
+        ) {
+          fail("OSS CDN 压缩回退缺少完整对象校验参数");
+        }
+        const fullBody = await readBoundedHttpBody(response, expectedFullSize, {
+          expectedSha256: expectedFullSha256,
+          collect: true,
+          allowEncodedContentLength: true,
+        });
+        return {
+          status: 200,
+          contentRange: null,
+          bytes: fullBody.bytes.subarray(start, end + 1),
+          fullBodyVerified: true,
+        };
       }
       const body = await readBoundedHttpBody(response, expectedSize, { collect: true });
       return {

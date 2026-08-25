@@ -354,9 +354,53 @@ test("OSS 公开 200 与 206 使用有界流式读取且不调用 arrayBuffer", 
     "desktop/stable/windows/x64/fixture.exe",
     0,
     rangeBytes.length - 1,
+    payload.length,
+    sha256(payload),
   );
   assert.equal(range.status, 206);
   assert.deepEqual(range.bytes, rangeBytes);
+});
+
+test("CDN 压缩导致 Range 回退 200 时必须完整校验后再接受首段", async () => {
+  const payload = Buffer.alloc(4096, 0x6b);
+  const expectedRange = payload.subarray(0, 1024);
+  const fetchMock = async (_input: string | URL | Request, init?: RequestInit) => {
+    assert.equal(new Headers(init?.headers).get("Range"), "bytes=0-1023");
+    return {
+      status: 200,
+      headers: new Headers({
+        "content-length": String(payload.length),
+        "content-encoding": "gzip",
+      }),
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(payload.subarray(0, 2048));
+          controller.enqueue(payload.subarray(2048));
+          controller.close();
+        },
+      }),
+      arrayBuffer() {
+        throw new Error("测试禁止整包 arrayBuffer");
+      },
+    };
+  };
+  class FakeOssClient {}
+  const remote = await createPlatformOssRemoteFromEnvironment(fakeEnvironment(), {
+    loadOss: async () => ({ default: FakeOssClient }),
+    fetch: fetchMock,
+  });
+
+  const range = await remote.readPublicRange(
+    "desktop/stable/windows/x64/catalog/releases/1.1.11/release-manifest.json",
+    0,
+    expectedRange.length - 1,
+    payload.length,
+    sha256(payload),
+  );
+  assert.equal(range.status, 200);
+  assert.equal(range.fullBodyVerified, true);
+  assert.equal(range.contentRange, null);
+  assert.deepEqual(range.bytes, expectedRange);
 });
 
 test("OSS 可变对象使用普通 PutObject 且不发送任何条件头", async () => {
