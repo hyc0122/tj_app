@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: 检出公开 main
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -20,6 +22,7 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: 从唯一版本源创建不可移动 Tag
+        id: release
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
@@ -34,12 +37,23 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$tag" HEAD -m "Beta release $tag: Tianjiang desktop client"
           git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   release-pipeline:
-    if: ${{ github.repository == 'hyc0122/tj_app' && github.event_name == 'push' }}
+    needs: [create-tag]
+    # Tag 由 GITHUB_TOKEN 创建时不会递归触发 push Run，因此手动发布必须在同一 Run 内继续构建。
+    if: >-
+      ${{
+        always() &&
+        github.repository == 'hyc0122/tj_app' &&
+        (
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && needs.create-tag.result == 'success')
+        )
+      }}
     uses: ./.github/workflows/app-cloud-release.yml
     with:
-      tag: ${{ github.ref_name }}
+      tag: ${{ github.event_name == 'push' && github.ref_name || needs.create-tag.outputs.tag }}
       channel: beta
       prerelease: true
     secrets: inherit
