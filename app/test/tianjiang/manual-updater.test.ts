@@ -85,6 +85,44 @@ function memoryUpdateDeps(stableVersion = "1.2.0", betaVersion = "1.2.0-beta.1")
   };
 }
 
+const enabledClientConfigFetcher = (async () => new Response(JSON.stringify({
+  code: 0,
+  data: {
+    configVersion: 2,
+    updatedAt: "2026-08-26T12:00:00+08:00",
+    onboarding: {
+      guideRevision: 1,
+      supportQrCodeUrl: "https://cdn.j11.com.cn/tianjiang/guide-qr.png",
+    },
+    featureFlags: {
+      uiSettings: true,
+      languageSettings: true,
+      modelServices: true,
+      modelMapping: true,
+      agentConfig: true,
+      promptManagement: true,
+      skillsManagement: true,
+      agentMemory: true,
+      databaseOperations: true,
+      fileManagement: true,
+      otherConfiguration: true,
+      developerOptions: false,
+      checkUpdates: true,
+      logout: true,
+    },
+    updatePolicy: { enabled: true, channel: "stable", manualDownloadOnly: true },
+  },
+}), {
+  status: 200,
+  headers: { "content-type": "application/json" },
+})) as typeof fetch;
+
+function createUpdaterFactoryDataRoot(): string {
+  const parent = path.join(process.cwd(), ".tmp");
+  fs.mkdirSync(parent, { recursive: true });
+  return fs.mkdtempSync(path.join(parent, "desktop-updater-install-lifecycle-"));
+}
+
 const CURRENT_FEED_TARGETS = {
   "win32:x64": "windows/x64",
   "darwin:x64": "macos/x64",
@@ -154,6 +192,97 @@ test("桌面 updater 装配从固定 client-config 客户端读取严格策略",
   await service.runAction({ action: "check" });
   assert.deepEqual(requested, ["https://api.j11.com.cn/api/tianjiang/v1/public/client-config"]);
   assert.deepEqual(feeds, []);
+});
+
+test("桌面 updater 工厂必须透传统一退出门，安装时不得回退旧关闭分支", async (t) => {
+  const dataRoot = createUpdaterFactoryDataRoot();
+  t.after(() => fs.rmSync(dataRoot, { recursive: true, force: true }));
+  const events: string[] = [];
+  const autoUpdater = {
+    autoDownload: true,
+    autoInstallOnAppQuit: true,
+    disableDifferentialDownload: false,
+    setFeedURL() {},
+    async checkForUpdates() {
+      return { updateInfo: { version: "1.2.0", files: [{ size: 18 }] } };
+    },
+    async downloadUpdate() {
+      return ["C:\\fake-downloads\\candidate.exe"];
+    },
+    on() {},
+  };
+  const service = createDesktopManualUpdater({
+    autoUpdater,
+    currentVersion: "1.1.9",
+    dataRoot,
+    platform: "win32",
+    arch: "x64",
+    fetcher: enabledClientConfigFetcher,
+    ...memoryUpdateDeps("1.2.0", "1.1.9-beta.1"),
+    prepareInstall: async () => { events.push("legacy-prepare"); },
+    prepareInstallShutdown: async () => { events.push("unified-shutdown"); },
+    launchVerifiedInstaller: async () => { events.push("launch"); },
+    finalizeInstallShutdown: async () => {
+      events.push("legacy-finalize");
+      throw new Error("安装关闭流程未使用统一退出门");
+    },
+    scheduleApplicationQuit: () => { events.push("quit"); },
+  });
+
+  await service.runAction({ action: "check" });
+  await service.runAction({ action: "download-full", channel: "stable" });
+  const installed = await service.runAction({ action: "install" });
+
+  assert.equal(installed.state, "installing");
+  assert.deepEqual(events, ["unified-shutdown", "launch", "quit"]);
+});
+
+test("桌面 updater 工厂必须透传安装器启动失败恢复回调", async (t) => {
+  const dataRoot = createUpdaterFactoryDataRoot();
+  t.after(() => fs.rmSync(dataRoot, { recursive: true, force: true }));
+  const events: string[] = [];
+  const launchFailure = new Error("安装器启动失败");
+  const autoUpdater = {
+    autoDownload: true,
+    autoInstallOnAppQuit: true,
+    disableDifferentialDownload: false,
+    setFeedURL() {},
+    async checkForUpdates() {
+      return { updateInfo: { version: "1.2.0", files: [{ size: 18 }] } };
+    },
+    async downloadUpdate() {
+      return ["C:\\fake-downloads\\candidate.exe"];
+    },
+    on() {},
+  };
+  const service = createDesktopManualUpdater({
+    autoUpdater,
+    currentVersion: "1.1.9",
+    dataRoot,
+    platform: "win32",
+    arch: "x64",
+    fetcher: enabledClientConfigFetcher,
+    ...memoryUpdateDeps("1.2.0", "1.1.9-beta.1"),
+    prepareInstall: async () => { events.push("legacy-prepare"); },
+    prepareInstallShutdown: async () => { events.push("unified-shutdown"); },
+    launchVerifiedInstaller: async () => {
+      events.push("launch");
+      throw launchFailure;
+    },
+    recoverAfterInstallerLaunchFailure: async (error) => {
+      assert.equal(error, launchFailure);
+      events.push("recover-application");
+    },
+    finalizeInstallShutdown: async () => { events.push("legacy-finalize"); },
+    scheduleApplicationQuit: () => { events.push("quit"); },
+  });
+
+  await service.runAction({ action: "check" });
+  await service.runAction({ action: "download-full", channel: "stable" });
+  await assert.rejects(() => service.runAction({ action: "install" }), /安装器启动失败/);
+
+  assert.deepEqual(events, ["unified-shutdown", "launch", "recover-application"]);
+  assert.equal(service.getSnapshot().state, "error");
 });
 
 test("主进程 updatePolicy 禁用时阻止 check/download/install 且 channel 只走内部映射", async () => {

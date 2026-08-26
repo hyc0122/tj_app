@@ -81,7 +81,10 @@ export function createDesktopManualUpdater(
     autoUpdater: options.autoUpdater,
     currentVersion: options.currentVersion,
     prepareInstall: options.prepareInstall,
+    // 中文注释：工厂必须完整透传统一退出门及安装器启动失败恢复回调。
+    prepareInstallShutdown: options.prepareInstallShutdown,
     launchVerifiedInstaller: options.launchVerifiedInstaller,
+    recoverAfterInstallerLaunchFailure: options.recoverAfterInstallerLaunchFailure,
     finalizeInstallShutdown: options.finalizeInstallShutdown,
     scheduleApplicationQuit: options.scheduleApplicationQuit,
     showDownloadedFile: options.showDownloadedFile,
