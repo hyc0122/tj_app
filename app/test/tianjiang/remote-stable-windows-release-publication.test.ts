@@ -491,6 +491,54 @@ test("OSS 发布客户端必须为低速网络下的 Windows 大安装包配置�
   assert.equal(clientOptions?.timeout, 60 * 60 * 1000);
 });
 
+test("超过十六 MiB 的不可变安装包必须分片上传且不得把整包 MD5 误用于分片", async () => {
+  const calls: Array<{
+    key: string;
+    bytes: Buffer;
+    options: {
+      headers: Record<string, string>;
+      partSize?: number;
+      parallel?: number;
+    };
+  }> = [];
+  class FakeOssClient {
+    async put() {
+      throw new Error("大安装包禁止退回单次 PutObject");
+    }
+
+    async multipartUpload(key: string, bytes: Buffer, options: {
+      headers: Record<string, string>;
+      partSize?: number;
+      parallel?: number;
+    }) {
+      calls.push({ key, bytes, options });
+      return { name: key };
+    }
+  }
+  const remote = await createPlatformOssRemoteFromEnvironment(fakeEnvironment(), {
+    loadOss: async () => ({ default: FakeOssClient }),
+    fetch: async () => { throw new Error("本测试不得访问公开 HTTP"); },
+  });
+  // 刚超过分片阈值即可锁定路由，不需要在测试中构造真实 276 MiB 安装包。
+  const installer = Buffer.alloc(16 * 1024 * 1024 + 1, 0x61);
+
+  await remote.putImmutable(
+    "desktop/stable/windows/x64/fixture.exe",
+    installer,
+    { contentType: "application/octet-stream", cacheControl: "public,max-age=31536000,immutable" },
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].key, "desktop/stable/windows/x64/fixture.exe");
+  assert.equal(calls[0].bytes, installer);
+  assert.equal(calls[0].options.partSize, 8 * 1024 * 1024);
+  assert.equal(calls[0].options.parallel, 4);
+  assert.equal(calls[0].options.headers["x-oss-forbid-overwrite"], "true");
+  assert.equal(calls[0].options.headers["Content-Type"], "application/octet-stream");
+  assert.equal(calls[0].options.headers["Cache-Control"], "public,max-age=31536000,immutable");
+  assert.equal(calls[0].options.headers["Content-MD5"], undefined);
+});
+
 test("单写者证明缺失或错误时不读取也不写入远端", async () => {
   for (const [name, singleWriterProof] of [
     ["missing", undefined],

@@ -13,6 +13,9 @@ import {
 const CHANNELS = ["stable", "beta"];
 // Windows 安装包接近 300 MiB，跨境 Runner 到青岛 OSS 的单次上传可能超过 15 分钟，显式给足一小时。
 const OSS_RELEASE_REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
+const OSS_MULTIPART_THRESHOLD_BYTES = 16 * 1024 * 1024;
+const OSS_MULTIPART_PART_SIZE_BYTES = 8 * 1024 * 1024;
+const OSS_MULTIPART_PARALLEL = 4;
 
 function fail(reason) {
   throw new Error(`Stable Windows 远端发布失败：${reason}`);
@@ -553,6 +556,12 @@ export async function createPlatformOssRemoteFromEnvironment(environment = proce
     "Cache-Control": metadata.cacheControl,
     ...(immutable ? { "x-oss-forbid-overwrite": "true" } : {}),
   });
+  const multipartHeadersFor = (metadata) => ({
+    // ali-oss 的分片上传不支持整包 MD5；完成后仍由公开 SHA-256 回读保证完整性。
+    "Content-Type": metadata.contentType,
+    "Cache-Control": metadata.cacheControl,
+    "x-oss-forbid-overwrite": "true",
+  });
   const publicUrl = (key) => {
     assertPlatformKey(key);
     return new URL(key.split("/").map(encodeURIComponent).join("/"), publicBase).href;
@@ -604,7 +613,15 @@ export async function createPlatformOssRemoteFromEnvironment(environment = proce
     async putImmutable(key, bytes, metadata) {
       assertPlatformKey(key);
       try {
-        await client.put(key, bytes, { headers: headersFor(bytes, metadata, true) });
+        if (bytes.length > OSS_MULTIPART_THRESHOLD_BYTES) {
+          await client.multipartUpload(key, bytes, {
+            headers: multipartHeadersFor(metadata),
+            partSize: OSS_MULTIPART_PART_SIZE_BYTES,
+            parallel: OSS_MULTIPART_PARALLEL,
+          });
+        } else {
+          await client.put(key, bytes, { headers: headersFor(bytes, metadata, true) });
+        }
         return "created";
       } catch (error) {
         if (error?.status === 409 || error?.code === "FileAlreadyExists") return "exists";
