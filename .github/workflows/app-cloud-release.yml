@@ -1,0 +1,406 @@
+name: 天将漫创三平台云端构建与 GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 已存在且不得移动的发布 Tag
+        required: true
+        type: string
+      channel:
+        description: 发布渠道
+        required: true
+        type: string
+      prerelease:
+        description: 是否创建 GitHub Prerelease
+        required: true
+        type: boolean
+
+env:
+  NODE_VERSION: "24.13.1"
+  YARN_VERSION: "1.22.22"
+  RELEASE_TAG: ${{ inputs.tag }}
+  RELEASE_CHANNEL: ${{ inputs.channel }}
+
+concurrency:
+  group: tianjiang-desktop-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: required tests、lint、type-check 与 build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 检出发布 Tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: 激活 Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+      - name: 冻结安装 App 依赖
+        working-directory: app
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 冻结安装 Web 依赖
+        working-directory: web
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 验证根版本、Tag 与应用镜像
+        working-directory: app
+        shell: bash
+        run: |
+          version="$(node -p "require('../package.json').version")"
+          test "$(node -p "require('./package.json').version")" = "$version"
+          test "v${version}" = "$RELEASE_TAG"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+      - name: 重建并验证 Node 原生模块
+        working-directory: app
+        run: yarn native:node && yarn native:verify:node
+      - name: App required tests、lint 与 build
+        working-directory: app
+        timeout-minutes: 45
+        run: yarn test:tianjiang && yarn lint && yarn build
+      - name: Web 测试、类型检查与 build
+        working-directory: web
+        run: yarn test:tianjiang-ui && yarn type-check && yarn build
+
+  build-windows:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: Windows x64 正式构建
+    needs: [quality]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      target_id: windows-x64
+      signing_status: ${{ steps.signature.outputs.status }}
+      source_sha: ${{ steps.context.outputs.source_sha }}
+      version: ${{ steps.context.outputs.version }}
+    steps:
+      - name: 检出发布 Tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: 激活 Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+      - name: 冻结安装 App 依赖
+        working-directory: app
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 冻结安装 Web 依赖
+        working-directory: web
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 解析发布上下文
+        id: context
+        working-directory: app
+        shell: bash
+        run: |
+          version="$(node -p "require('../package.json').version")"
+          node scripts/resolve-release-context.mjs tag "$RELEASE_TAG" "$version"
+          test "$(node -p "require('./package.json').version")" = "$version"
+          source_sha="$(git rev-parse HEAD)"
+          test "$source_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - name: 重建并验证 Node 原生模块
+        working-directory: app
+        run: yarn native:node && yarn native:verify:node
+      - name: 构建 Windows x64
+        working-directory: app
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/${{ inputs.channel }}/windows/x64
+          TIANJIANG_SIGNING_MODE: ${{ secrets.WINDOWS_CSC_LINK != '' && secrets.WINDOWS_CSC_KEY_PASSWORD != '' && 'signed' || 'unsigned' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.WINDOWS_CSC_LINK != '' && 'true' || 'false' }}
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: yarn dist:win:x64
+      - name: 验证 Windows 签名状态
+        id: signature
+        working-directory: app
+        shell: pwsh
+        env:
+          EXPECT_SIGNED: ${{ secrets.WINDOWS_CSC_LINK != '' && secrets.WINDOWS_CSC_KEY_PASSWORD != '' && 'true' || 'false' }}
+        run: |
+          $setup = Get-ChildItem -LiteralPath dist -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'Windows 安装包缺失' }
+          if ($env:EXPECT_SIGNED -eq 'true') {
+            $signature = Get-AuthenticodeSignature -LiteralPath $setup.FullName
+            if ($signature.Status -ne 'Valid') { throw "Windows Authenticode 无效：$($signature.Status)" }
+            'status=signed' >> $env:GITHUB_OUTPUT
+          } else {
+            'status=unsigned' >> $env:GITHUB_OUTPUT
+          }
+      - name: 归一化 Windows 目标
+        working-directory: app
+        run: >-
+          node --input-type=module -e "import { prepareReleaseTarget } from './scripts/prepare-release-target.mjs'; prepareReleaseTarget({ sourceRoot: 'dist', destinationRoot: '.local/release-target/windows-x64', targetId: 'windows-x64', version: '${{ steps.context.outputs.version }}' });"
+      - name: 上传 Windows Actions Artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-target-windows-x64
+          path: app/.local/release-target/windows-x64
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  build-linux:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: Linux x64 正式构建
+    needs: [quality]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      target_id: linux-x64
+      signing_status: unsigned
+      source_sha: ${{ steps.context.outputs.source_sha }}
+      version: ${{ steps.context.outputs.version }}
+    steps:
+      - name: 检出发布 Tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: 激活 Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+      - name: 冻结安装 App 依赖
+        working-directory: app
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 冻结安装 Web 依赖
+        working-directory: web
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 解析发布上下文
+        id: context
+        working-directory: app
+        shell: bash
+        run: |
+          version="$(node -p "require('../package.json').version")"
+          node scripts/resolve-release-context.mjs tag "$RELEASE_TAG" "$version"
+          test "$(node -p "require('./package.json').version")" = "$version"
+          source_sha="$(git rev-parse HEAD)"
+          test "$source_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - name: 重建并验证 Node 原生模块
+        working-directory: app
+        run: yarn native:node && yarn native:verify:node
+      - name: 构建 Linux x64
+        working-directory: app
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/${{ inputs.channel }}/linux/x64
+          TIANJIANG_SIGNING_MODE: unsigned
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: yarn dist:linux:x64
+      - name: 归一化 Linux 目标
+        working-directory: app
+        run: >-
+          node --input-type=module -e "import { prepareReleaseTarget } from './scripts/prepare-release-target.mjs'; prepareReleaseTarget({ sourceRoot: 'dist', destinationRoot: '.local/release-target/linux-x64', targetId: 'linux-x64', version: '${{ steps.context.outputs.version }}' });"
+      - name: 上传 Linux Actions Artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-target-linux-x64
+          path: app/.local/release-target/linux-x64
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  build-macos:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: macOS 原生架构正式构建
+    needs: [quality]
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    outputs:
+      target_id: ${{ steps.platform.outputs.target_id }}
+      signing_status: ${{ steps.signature.outputs.status }}
+      source_sha: ${{ steps.context.outputs.source_sha }}
+      version: ${{ steps.context.outputs.version }}
+    steps:
+      - name: 检出发布 Tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: 激活 Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+      - name: 冻结安装 App 依赖
+        working-directory: app
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 冻结安装 Web 依赖
+        working-directory: web
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 解析 macOS Runner 架构
+        id: platform
+        shell: bash
+        run: |
+          arch="$(node -p 'process.arch')"
+          case "$arch" in
+            x64|arm64) ;;
+            *) echo "不支持的 macOS Runner 架构：$arch" >&2; exit 1 ;;
+          esac
+          echo "arch=$arch" >> "$GITHUB_OUTPUT"
+          echo "target_id=macos-$arch" >> "$GITHUB_OUTPUT"
+      - name: 解析发布上下文
+        id: context
+        working-directory: app
+        shell: bash
+        run: |
+          version="$(node -p "require('../package.json').version")"
+          node scripts/resolve-release-context.mjs tag "$RELEASE_TAG" "$version"
+          test "$(node -p "require('./package.json').version")" = "$version"
+          source_sha="$(git rev-parse HEAD)"
+          test "$source_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - name: 重建并验证 Node 原生模块
+        working-directory: app
+        run: yarn native:node && yarn native:verify:node
+      - name: 构建 macOS 原生架构
+        working-directory: app
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/${{ inputs.channel }}/macos/${{ steps.platform.outputs.arch }}
+          TIANJIANG_SIGNING_MODE: ${{ secrets.MACOS_CSC_LINK != '' && secrets.MACOS_CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'signed' || 'unsigned' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MACOS_CSC_LINK != '' && 'true' || 'false' }}
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: yarn dist:mac:${{ steps.platform.outputs.arch }}
+      - name: 验证 macOS 签名与公证状态
+        id: signature
+        working-directory: app
+        shell: bash
+        env:
+          EXPECT_SIGNED: ${{ secrets.MACOS_CSC_LINK != '' && secrets.MACOS_CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'true' || 'false' }}
+        run: |
+          if [[ "$EXPECT_SIGNED" == "true" ]]; then
+            app_path="$(find dist -maxdepth 3 -type d -name '*.app' | head -n 1)"
+            dmg_path="$(find dist -maxdepth 2 -type f -name '*.dmg' | head -n 1)"
+            test -n "$app_path" && test -n "$dmg_path"
+            codesign --verify --deep --strict "$app_path"
+            xcrun stapler validate "$dmg_path"
+            echo "status=notarized" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=unsigned" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 归一化 macOS 目标
+        working-directory: app
+        run: >-
+          node --input-type=module -e "import { prepareReleaseTarget } from './scripts/prepare-release-target.mjs'; prepareReleaseTarget({ sourceRoot: 'dist', destinationRoot: '.local/release-target/${{ steps.platform.outputs.target_id }}', targetId: '${{ steps.platform.outputs.target_id }}', version: '${{ steps.context.outputs.version }}' });"
+      - name: 上传 macOS Actions Artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-target-${{ steps.platform.outputs.target_id }}
+          path: app/.local/release-target/${{ steps.platform.outputs.target_id }}
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  provenance:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: 聚合三平台产物与 Sigstore 来源证明
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      version: ${{ needs.build-windows.outputs.version }}
+      source_sha: ${{ needs.build-windows.outputs.source_sha }}
+    steps:
+      - name: 检出发布 Tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+      - name: 下载三个 Actions Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: release-target-*
+          path: app/.local/release-targets
+      - name: 配置 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: 激活 Yarn
+        run: corepack prepare yarn@${{ env.YARN_VERSION }} --activate
+      - name: 冻结安装 App 依赖
+        working-directory: app
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: 准备 GitHub Release 资产
+        working-directory: app
+        env:
+          SOURCE_SHA: ${{ needs.build-windows.outputs.source_sha }}
+          RELEASE_VERSION: ${{ needs.build-windows.outputs.version }}
+          WINDOWS_SIGNING: ${{ needs.build-windows.outputs.signing_status }}
+          LINUX_SIGNING: ${{ needs.build-linux.outputs.signing_status }}
+          MACOS_SIGNING: ${{ needs.build-macos.outputs.signing_status }}
+        run: >-
+          node --input-type=module -e "import { prepareCloudReleaseAssets } from './scripts/prepare-cloud-release-assets.mjs'; prepareCloudReleaseAssets({ targetsRoot: '.local/release-targets', destinationRoot: '.local/cloud-release', context: { repository: process.env.GITHUB_REPOSITORY, workflow: process.env.RELEASE_CHANNEL === 'stable' ? '.github/workflows/app-stable-release.yml' : '.github/workflows/app-release.yml', runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, version: process.env.RELEASE_VERSION, tag: process.env.RELEASE_TAG, channel: process.env.RELEASE_CHANNEL, commitSha: process.env.SOURCE_SHA, generatedAt: new Date().toISOString() }, signing: { windows: process.env.WINDOWS_SIGNING, linux: process.env.LINUX_SIGNING, macos: process.env.MACOS_SIGNING } });"
+      - name: 安装 Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+      - name: 签署并验证 ReleaseManifest 来源
+        working-directory: app
+        shell: bash
+        run: |
+          cosign sign-blob --yes --bundle .local/cloud-release/assets/release-manifest.json.sigstore.json .local/cloud-release/assets/release-manifest.json
+          cosign verify-blob --bundle .local/cloud-release/assets/release-manifest.json.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity "https://github.com/${GITHUB_WORKFLOW_REF}" .local/cloud-release/assets/release-manifest.json
+      - name: 上传完整 GitHub Release 与 Relay Artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ inputs.channel }}-release-publication
+          path: app/.local/cloud-release/assets
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  release:
+    if: ${{ github.repository == 'hyc0122/tj_app' }}
+    name: 创建公开 GitHub Release
+    needs: [provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载完整 Release Assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ inputs.channel }}-release-publication
+          path: release-assets
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: 天将漫创 ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: false
+          body: |
+            三平台 ${{ inputs.channel }} 正式产物由 GitHub Actions 官方 Runner 构建。
+            产品签名状态请以 release-manifest.json 的 signing 字段为准。
+            OSS 发布由本地 release:relay:oss 在 Run 成功后独立完成。
+          files: release-assets/*
+          fail_on_unmatched_files: true

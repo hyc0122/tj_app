@@ -319,10 +319,17 @@ export function resolveNativePackageLayout(targetId, electronOutput) {
  * Linux 必须显式固定公开架构名；builder 默认会把 x64 展开为 x86_64，
  * 与发布 metadata、blockmap 和下载合同使用的 x64 名称不一致。
  */
-export function resolveElectronBuilderArguments({ targetId, outputDirectory } = {}) {
+export function resolveElectronBuilderArguments({
+  targetId,
+  outputDirectory,
+  signingMode = "unsigned",
+} = {}) {
   const target = resolveReleaseTarget(targetId);
   if (typeof outputDirectory !== "string" || !path.isAbsolute(outputDirectory)) {
     throw new Error("Electron builder 输出目录必须是绝对路径");
+  }
+  if (signingMode !== "signed" && signingMode !== "unsigned") {
+    throw new Error("Electron builder 签名模式只允许 signed 或 unsigned");
   }
   const argumentsList = [
     "electron-builder",
@@ -337,7 +344,33 @@ export function resolveElectronBuilderArguments({ targetId, outputDirectory } = 
       `\${productName}-\${version}-linux-${target.arch}.\${ext}`,
     );
   }
+  if (target.platform === "macos" && signingMode === "signed") {
+    // 凭据只存在环境变量；命令行仅启用签名与公证能力，绝不携带证书或口令内容。
+    argumentsList.push(
+      "--config.mac.identity=Developer ID Application",
+      "--config.mac.hardenedRuntime=true",
+      "--config.mac.notarize=true",
+    );
+  }
   return argumentsList;
+}
+
+export function resolveSigningMode(environment = process.env, targetId) {
+  const target = resolveReleaseTarget(targetId);
+  const signingMode = String(environment.TIANJIANG_SIGNING_MODE ?? "unsigned").trim().toLowerCase();
+  if (signingMode !== "signed" && signingMode !== "unsigned") {
+    throw new Error("Electron builder 签名模式只允许 signed 或 unsigned");
+  }
+  if (signingMode === "signed") {
+    const required = target.platform === "windows"
+      ? ["CSC_LINK", "CSC_KEY_PASSWORD"]
+      : target.platform === "macos"
+        ? ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]
+        : [];
+    const missing = required.filter((name) => !String(environment[name] ?? "").trim());
+    if (missing.length > 0) throw new Error(`签名凭据缺失：${missing.join(", ")}`);
+  }
+  return signingMode;
 }
 
 /**
@@ -402,12 +435,17 @@ export async function packageElectron({ targetId, installer = true } = {}) {
   const webSource = resolveWebDist(electronOutput);
   // 全链路只解析一次，确保每个 Yarn 子命令遵循同一平台规则。
   const yarnCommand = resolveYarnCommand();
+  const signingMode = resolveSigningMode(process.env, target.id);
   try {
     removeElectronOutput(electronOutput);
-    const unsignedContract = assertUnsignedBuilderContract({ targetId: target.id });
-    process.stdout.write(
-      `[Electron 打包链] 三平台产品未签名合同通过：${JSON.stringify(unsignedContract)}\n`,
-    );
+    if (signingMode === "unsigned") {
+      const unsignedContract = assertUnsignedBuilderContract({ targetId: target.id });
+      process.stdout.write(
+        `[Electron 打包链] 产品未签名合同通过：${JSON.stringify(unsignedContract)}\n`,
+      );
+    } else {
+      process.stdout.write(`[Electron 打包链] ${target.platform} 已启用云端签名模式\n`);
+    }
     if (webSource.testOverride) {
       // 负向夹具先完成真实 Web 门禁，失败时绝不运行或改写正式业务前端构建。
       validateWebRoot(webSource.path);
@@ -447,6 +485,7 @@ export async function packageElectron({ targetId, installer = true } = {}) {
       resolveElectronBuilderArguments({
         targetId: target.id,
         outputDirectory: electronOutput,
+        signingMode,
       }),
     );
     if (target.platform === "linux") {

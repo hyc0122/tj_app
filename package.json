@@ -1,0 +1,13 @@
+{
+  "name": "tianjiang-desktop-release-root",
+  "version": "1.1.17",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": "24.13.1",
+    "yarn": "1.22.22"
+  },
+  "scripts": {
+    "release:relay:oss": "node app/scripts/release-relay-cli.mjs"
+  }
+}

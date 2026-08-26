@@ -4,282 +4,42 @@ on:
   push:
     tags:
       - "v*.*.*-beta.*"
-
-env:
-  NODE_VERSION: "24.13.1"
-  YARN_VERSION: "1.22.22"
-
-defaults:
-  run:
-    working-directory: app
-
-# Stable/Beta 共享平台指针；所有桌面发布必须排队且不得取消在途事务。
-concurrency:
-  group: tianjiang-desktop-release
-  cancel-in-progress: false
+  workflow_dispatch:
 
 jobs:
-  build:
-    if: ${{ github.repository == 'hyc0122/tj_app' }}
-    name: 构建 ${{ matrix.id }}
-    permissions:
-      contents: read
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: windows-x64
-            platform: windows
-            processPlatform: win32
-            builderPlatform: win
-            arch: x64
-            runner: windows-2025
-            metadataFile: latest.yml
-            releaseMetadataFile: latest-windows-x64.yml
-            binaryExtensions: [".exe"]
-            feedUrl: https://api.j11.com.cn/desktop/beta/windows/x64
-          - id: macos-x64
-            platform: macos
-            processPlatform: darwin
-            builderPlatform: mac
-            arch: x64
-            runner: macos-15-intel
-            metadataFile: latest-mac.yml
-            releaseMetadataFile: latest-mac-x64.yml
-            binaryExtensions: [".dmg", ".zip"]
-            feedUrl: https://api.j11.com.cn/desktop/beta/macos/x64
-          - id: macos-arm64
-            platform: macos
-            processPlatform: darwin
-            builderPlatform: mac
-            arch: arm64
-            runner: macos-15
-            metadataFile: latest-mac.yml
-            releaseMetadataFile: latest-mac-arm64.yml
-            binaryExtensions: [".dmg", ".zip"]
-            feedUrl: https://api.j11.com.cn/desktop/beta/macos/arm64
-          - id: linux-x64
-            platform: linux
-            processPlatform: linux
-            builderPlatform: linux
-            arch: x64
-            runner: ubuntu-24.04
-            metadataFile: latest-linux.yml
-            releaseMetadataFile: latest-linux-x64.yml
-            binaryExtensions: [".AppImage"]
-            feedUrl: https://api.j11.com.cn/desktop/beta/linux/x64
-          - id: linux-arm64
-            platform: linux
-            processPlatform: linux
-            builderPlatform: linux
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            metadataFile: latest-linux.yml
-            releaseMetadataFile: latest-linux-arm64.yml
-            binaryExtensions: [".AppImage"]
-            feedUrl: https://api.j11.com.cn/desktop/beta/linux/arm64
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: 配置 Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 激活并验证 Yarn 1.22.22
-        run: |
-          corepack enable
-          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-          yarn --version
-
-      - name: 冻结安装依赖
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 冻结安装 Web 依赖
-        # package-electron 会进入 ../web 运行测试与构建，必须先安装该锁文件的完整依赖。
-        working-directory: web
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 解析 Beta 发布上下文
-        id: release-context
-        shell: bash
-        run: |
-          node scripts/resolve-release-context.mjs \
-            "${{ github.ref_type }}" \
-            "${{ github.ref_name }}" \
-            "$(node -p "require('./package.json').version")"
-
-      # dist 会先运行 Web 到 App 的 Node 联合测试；Electron ABI 由打包脚本稍后切换。
-      - name: 重建并验证 Node 原生模块
-        run: yarn native:node && yarn native:verify:node
-
-      - name: 构建未签名矩阵目标
-        # 对全部目标关闭身份自动发现，macOS 因而无法意外使用 Developer ID。
-        # 每个原生打包进程只读取当前 matrix 行对应的公开 Beta feed。
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          # 五目标 Vite transform 均超过 Node 24 Runner 默认约 2 GiB；只为打包链提供有界堆。
-          NODE_OPTIONS: "--max-old-space-size=4096"
-          TIANJIANG_UPDATE_FEED_URL: ${{ matrix.feedUrl }}
-        run: yarn dist:${{ matrix.builderPlatform }}:${{ matrix.arch }}
-
-      - name: 归一化唯一目标目录
-        run: >-
-          node --input-type=module -e "import { prepareReleaseTarget } from './scripts/prepare-release-target.mjs'; prepareReleaseTarget({ sourceRoot: 'dist', destinationRoot: '.local/release-target/${{ matrix.id }}', targetId: '${{ matrix.id }}', version: '${{ steps.release-context.outputs.version }}' });"
-
-      - name: 上传唯一目标目录
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: ${{ matrix.id }}
-          path: app/.local/release-target/${{ matrix.id }}
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 7
-
-  provenance:
-    if: ${{ github.repository == 'hyc0122/tj_app' }}
-    name: 生成 Sigstore 来源证明
-    needs: [build]
-    outputs:
-      version: ${{ steps.release-context.outputs.version }}
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: 下载五目标目录
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          pattern: "*-*"
-          path: app/.local/release-targets
-
-      - name: 配置 Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 激活并验证 Yarn 1.22.22
-        run: |
-          corepack enable
-          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-          yarn --version
-
-      - name: 冻结安装依赖
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 解析 Beta 发布上下文
-        id: release-context
-        shell: bash
-        run: |
-          node scripts/resolve-release-context.mjs \
-            "${{ github.ref_type }}" \
-            "${{ github.ref_name }}" \
-            "$(node -p "require('./package.json').version")"
-
-      - name: 聚合五目标 ReleaseManifest
-        run: >-
-          node --input-type=module -e "import { buildReleaseManifest } from './scripts/build-release-manifest.mjs'; buildReleaseManifest({ targetsRoot: '.local/release-targets', outputRoot: '.local/release-manifest', context: { version: '${{ steps.release-context.outputs.version }}', tag: '${{ steps.release-context.outputs.tag }}', channel: 'beta', commitSha: '${{ github.sha }}', repository: '${{ github.repository }}', workflow: '.github/workflows/app-release.yml', runId: '${{ github.run_id }}', runAttempt: '${{ github.run_attempt }}', generatedAt: new Date().toISOString() } });"
-
-      - name: 安装 Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
-
-      - name: 签署 ReleaseManifest 来源证明
-        # 公共 Sigstore keyless 证明只绑定 Manifest 来源，不是产品代码签名。
-        run: |
-          cosign sign-blob --yes \
-            --bundle .local/release-manifest/release-manifest.json.sigstore.json \
-            .local/release-manifest/release-manifest.json
-
-      - name: 验证 ReleaseManifest 来源证明
-        run: |
-          cosign verify-blob \
-            --bundle .local/release-manifest/release-manifest.json.sigstore.json \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/app-release.yml@refs/tags/${GITHUB_REF_NAME}" \
-            .local/release-manifest/release-manifest.json
-
-      - name: 准备完整 publication root
-        run: >-
-          node --input-type=module -e "import { prepareReleasePublication } from './scripts/prepare-release-publication.mjs'; prepareReleasePublication({ targetsRoot: '.local/release-targets', manifestPath: '.local/release-manifest/release-manifest.json', sha256SumsPath: '.local/release-manifest/SHA256SUMS', sigstoreBundlePath: '.local/release-manifest/release-manifest.json.sigstore.json', destinationRoot: '.local/release-publication' });"
-
-      - name: 上传完整 publication root
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: release-publication
-          path: app/.local/release-publication
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 7
-
-  publish:
-    if: ${{ github.repository == 'hyc0122/tj_app' }}
-    name: 发布 OSS 与 GitHub Prerelease
-    needs: [provenance]
+  create-tag:
+    if: ${{ github.repository == 'hyc0122/tj_app' && github.event_name == 'workflow_dispatch' }}
+    name: 从根 package.json 自动创建 Beta Tag
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: ubuntu-24.04
-
     steps:
-      - name: 检出代码
+      - name: 检出公开 main
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: 下载完整 publication root
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: release-publication
-          path: app/.local/release-publication
-
-      - name: 配置 Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 激活并验证 Yarn 1.22.22
+          ref: main
+          fetch-depth: 0
+      - name: 从唯一版本源创建不可移动 Tag
+        shell: bash
         run: |
-          corepack enable
-          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-          yarn --version
+          version="$(node -p "require('./package.json').version")"
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.(0|[1-9][0-9]*)$ ]]
+          test "$(node -p "require('./app/package.json').version")" = "$version"
+          tag="v${version}"
+          git fetch origin main --tags
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test -z "$(git tag --list "$tag")"
+          test -z "$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" HEAD -m "Beta release $tag: Tianjiang desktop client"
+          git push origin "$tag"
 
-      - name: 冻结安装依赖
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 发布 OSS Beta 事务
-        # OSS 凭据与 Bucket 变量只进入唯一事务步骤，不传给构建、来源证明或 Release Action。
-        env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_REGION: oss-cn-qingdao
-          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
-          OSS_ENDPOINT: https://oss-cn-qingdao.aliyuncs.com
-          TIANJIANG_RELEASE_PUBLIC_BASE_URL: https://api.j11.com.cn/
-          TIANJIANG_RELEASE_SINGLE_WRITER: github-actions:${{ github.repository }}:${{ github.run_id }}:beta
-        run: >-
-          node scripts/publish-release-transaction.mjs .local/release-publication "${{ needs.provenance.outputs.version }}"
-
-      - name: 创建 GitHub Beta Prerelease
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
-        with:
-          name: 天将漫创 ${{ github.ref_name }}
-          draft: false
-          prerelease: true
-          generate_release_notes: false
-          body: |
-            ## 天将漫创三平台 Beta
-
-            - Windows x64
-            - macOS x64
-            - macOS arm64
-            - Linux x64
-            - Linux arm64
-
-            所有产品二进制均为未签名 Beta 产物，未使用 Authenticode、Developer ID 或 Apple 公证。
-            macOS 用户首次打开时可能遇到 Gatekeeper 提示，请仅在确认下载来源与 SHA256SUMS 后继续。
-            Sigstore 仅证明 release-manifest.json 的 GitHub Actions 来源，不是 Authenticode、Developer ID 或 Apple 公证，也不是产品代码签名。
-          files: app/.local/release-publication/github-release/*
+  release-pipeline:
+    if: ${{ github.repository == 'hyc0122/tj_app' && github.event_name == 'push' }}
+    uses: ./.github/workflows/app-cloud-release.yml
+    with:
+      tag: ${{ github.ref_name }}
+      channel: beta
+      prerelease: true
+    secrets: inherit

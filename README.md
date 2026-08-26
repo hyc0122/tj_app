@@ -31,18 +31,26 @@ yarn.cmd lint
 yarn.cmd build
 ```
 
-Windows x64 正式打包入口：
-
-```powershell
-cd app
-$env:TIANJIANG_UPDATE_FEED_URL = "https://api.j11.com.cn/desktop/stable/windows/x64"
-yarn.cmd dist:win:x64
-```
-
-打包脚本会先执行 Web/App 的 Node 门禁，然后切换并验证 Electron 原生 ABI。请勿在打包入口前手工把 `better-sqlite3` 切换为 Electron ABI。
-
 ## 发布与签名说明
 
-GitHub Actions 从 Tag 重新构建客户端并发布 OSS 更新源和 GitHub Release。当前正式产物可能未使用 Authenticode 或 Apple Developer ID 签名；Sigstore 证明只覆盖发布清单来源，不能替代产品代码签名。
+根目录 `package.json.version` 是唯一版本源；`app/package.json.version` 只是 Electron Builder 必须保持一致的镜像。手工运行 Stable 或 Beta Release 工作流时，GitHub Actions 会从根版本自动生成不可移动的 `v${version}` Tag；Tag 推送后由官方 Runner 完成 required checks、Windows/Linux/macOS 构建、具备凭据时的产品签名、公证、GitHub Release 和 Actions Artifact。
 
-任何真实密钥必须配置为 GitHub Actions Secret，禁止写入源码、日志或 Issue。
+正式发布禁止在本地重新构建、签名、压缩或打包。GitHub Actions 成功后，本地 Windows 只执行：
+
+```powershell
+$env:GH_TOKEN = "可选的 GitHub Token；公开仓库低频下载可不设置"
+$env:OSS_ACCESS_KEY_ID = "本地 OSS AccessKey ID"
+$env:OSS_ACCESS_KEY_SECRET = "本地 OSS AccessKey Secret"
+$env:OSS_BUCKET = "OSS Bucket"
+$env:OSS_ENDPOINT = "https://oss-cn-qingdao.aliyuncs.com"
+$env:OSS_REGION = "oss-cn-qingdao"
+
+yarn.cmd release:relay:oss --run-id <成功的 GitHub Actions Run ID> --channel stable
+# Beta 使用：--channel beta
+```
+
+中转命令只从 `hyc0122/tj_app` 的指定成功 Run 对应 Release 下载原始资产，校验 Run、Tag、Commit、根版本、Sigstore、文件集合、大小和 SHA-256；`200 MiB` 以上对象使用 `8 MiB` 分片、并发 `4`、每片最多 `3` 次指数退避并保存 checkpoint。全部不可变对象完成 OSS 回读后，才更新 `latest.yml`、`latest.json` 等渠道指针。
+
+OSS AccessKey 只能放在执行中转的本地环境变量或加密凭据存储中，不得配置到 GitHub Actions、源码、日志或 Issue。Windows/macOS 产品签名凭据仍只放在 GitHub Actions Secrets。当前正式产物在缺少签名凭据时会明确标记为 `unsigned`；Sigstore 证明覆盖发布清单来源，不能冒充产品代码签名。
+
+客户端 GitHub Release 只允许发布到 `https://github.com/hyc0122/tj_app`；私有主仓库 `tianjiang-manchuang` 不创建客户端 Tag 或 Release。

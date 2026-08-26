@@ -25,7 +25,6 @@
     "pack": "node scripts/package-electron.mjs --installer",
     "pack:verify": "node scripts/package-web-assets.mjs verify-package dist/win-unpacked ../web/dist",
     "installer:verify": "node scripts/verify-installer-structure.mjs",
-    "release:tag:stable": "node scripts/publish-stable-release-tag.mjs",
     "dist": "node scripts/package-electron.mjs --installer",
     "dist:win": "node scripts/package-electron.mjs --installer",
     "dist:win:x64": "node scripts/package-electron.mjs --installer --target windows-x64",
@@ -108,6 +107,7 @@
     "js-yaml": "4.1.1",
     "license-checker": "25.0.1",
     "nodemon": "3.1.14",
+    "sigstore": "4.1.1",
     "socket.io-client": "4.8.3",
     "tsx": "4.21.0",
     "typescript": "5.9.3"

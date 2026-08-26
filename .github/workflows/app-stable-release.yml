@@ -1,231 +1,46 @@
-name: 天将漫创 Windows x64 Stable Release
+name: 天将漫创三平台 Stable Release
 
 on:
   push:
     tags:
       - "v*.*.*"
       - "!v*-*"
-
-env:
-  NODE_VERSION: "24.13.1"
-  YARN_VERSION: "1.22.22"
-
-defaults:
-  run:
-    working-directory: app
-
-# Stable 与 Beta 会共同写 Beta Windows 兼容平台指针，必须进入同一全局单写者队列。
-concurrency:
-  group: tianjiang-desktop-release
-  cancel-in-progress: false
+  workflow_dispatch:
 
 jobs:
-  build:
-    if: ${{ github.repository == 'hyc0122/tj_app' }}
-    name: 构建 windows-x64
-    permissions:
-      contents: read
-    runs-on: windows-2025
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: 配置 Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 激活并验证 Yarn 1.22.22
-        run: |
-          corepack enable
-          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-          yarn --version
-
-      - name: 冻结安装依赖
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 冻结安装 Web 依赖
-        working-directory: web
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 解析 Stable 发布上下文
-        id: release-context
-        shell: bash
-        run: |
-          node scripts/resolve-release-context.mjs \
-            "${{ github.ref_type }}" \
-            "${{ github.ref_name }}" \
-            "$(node -p "require('./package.json').version")"
-
-      # dist:win:x64 会先运行 Web 到 App 的 Node 联合测试；Electron ABI 由打包脚本稍后切换。
-      - name: 重建并验证 Node 原生模块
-        run: yarn native:node && yarn native:verify:node
-
-      - name: 构建未签名 Windows x64
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          NODE_OPTIONS: "--max-old-space-size=4096"
-          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/stable/windows/x64
-        run: yarn dist:win:x64
-
-      - name: 归一化 Windows x64 目标目录
-        run: >-
-          node --input-type=module -e "import { prepareReleaseTarget } from './scripts/prepare-release-target.mjs'; prepareReleaseTarget({ sourceRoot: 'dist', destinationRoot: '.local/release-target/windows-x64', targetId: 'windows-x64', version: '${{ steps.release-context.outputs.version }}' });"
-
-      - name: 上传 Windows x64 目标目录
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: stable-windows-x64
-          path: app/.local/release-target/windows-x64
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 7
-
-  provenance:
-    if: ${{ github.repository == 'hyc0122/tj_app' }}
-    name: 生成 Stable 与 Beta 兼容 Sigstore 来源证明
-    needs: [build]
-    outputs:
-      version: ${{ steps.release-context.outputs.version }}
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: 下载 Windows x64 目标目录
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: stable-windows-x64
-          path: app/.local/release-target/windows-x64
-
-      - name: 配置 Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 激活并验证 Yarn 1.22.22
-        run: |
-          corepack enable
-          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-          yarn --version
-
-      - name: 冻结安装依赖
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 解析 Stable 发布上下文
-        id: release-context
-        shell: bash
-        run: |
-          node scripts/resolve-release-context.mjs \
-            "${{ github.ref_type }}" \
-            "${{ github.ref_name }}" \
-            "$(node -p "require('./package.json').version")"
-
-      - name: 构建 Stable ReleaseManifest
-        run: >-
-          node --input-type=module -e "import { buildReleaseManifest } from './scripts/build-release-manifest.mjs'; buildReleaseManifest({ targetsRoot: '.local/release-target/windows-x64', outputRoot: '.local/stable-release-manifest', context: { version: '${{ steps.release-context.outputs.version }}', tag: '${{ steps.release-context.outputs.tag }}', channel: 'stable', sourceChannel: 'stable', platform: 'windows', arch: 'x64', commitSha: '${{ github.sha }}', repository: '${{ github.repository }}', workflow: '.github/workflows/app-stable-release.yml', runId: '${{ github.run_id }}', runAttempt: '${{ github.run_attempt }}', generatedAt: new Date().toISOString() } });"
-
-      - name: 安装 Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
-
-      - name: 签署 Stable ReleaseManifest 来源证明
-        run: |
-          cosign sign-blob --yes \
-            --bundle .local/stable-release-manifest/release-manifest.json.sigstore.json \
-            .local/stable-release-manifest/release-manifest.json
-
-      - name: 验证 Stable ReleaseManifest 来源证明
-        run: |
-          cosign verify-blob \
-            --bundle .local/stable-release-manifest/release-manifest.json.sigstore.json \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/app-stable-release.yml@refs/tags/${GITHUB_REF_NAME}" \
-            .local/stable-release-manifest/release-manifest.json
-
-      - name: 准备 Stable 与 Beta 兼容 publication root
-        run: >-
-          node --input-type=module -e "import { createCosignKeylessSigner, preparePlatformReleasePublication } from './scripts/prepare-platform-release-publication.mjs'; preparePlatformReleasePublication({ targetRoot: '.local/release-target/windows-x64', manifestPath: '.local/stable-release-manifest/release-manifest.json', sha256SumsPath: '.local/stable-release-manifest/SHA256SUMS', sigstoreBundlePath: '.local/stable-release-manifest/release-manifest.json.sigstore.json', destinationRoot: '.local/stable-release-publication', channel: 'stable', sourceChannel: 'stable', version: '${{ steps.release-context.outputs.version }}', signer: createCosignKeylessSigner() });"
-
-      - name: 验证 Beta 兼容 ReleaseManifest 来源证明
-        run: |
-          cosign verify-blob \
-            --bundle .local/stable-release-publication/desktop/beta/windows/x64/catalog/releases/${{ steps.release-context.outputs.version }}/release-manifest.json.sigstore.json \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/app-stable-release.yml@refs/tags/${GITHUB_REF_NAME}" \
-            .local/stable-release-publication/desktop/beta/windows/x64/catalog/releases/${{ steps.release-context.outputs.version }}/release-manifest.json
-
-      - name: 上传 Stable publication root
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: stable-release-publication
-          path: app/.local/stable-release-publication
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 7
-
-  publish:
-    if: ${{ github.repository == 'hyc0122/tj_app' }}
-    name: 发布 OSS 与 GitHub Stable Release
-    needs: [provenance]
+  create-tag:
+    if: ${{ github.repository == 'hyc0122/tj_app' && github.event_name == 'workflow_dispatch' }}
+    name: 从根 package.json 自动创建 Stable Tag
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: ubuntu-24.04
-
     steps:
-      - name: 检出代码
+      - name: 检出公开 main
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-
-      - name: 下载 Stable publication root
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: stable-release-publication
-          path: app/.local/stable-release-publication
-
-      - name: 配置 Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 激活并验证 Yarn 1.22.22
+          ref: main
+          fetch-depth: 0
+      - name: 从唯一版本源创建不可移动 Tag
+        shell: bash
         run: |
-          corepack enable
-          corepack prepare yarn@${{ env.YARN_VERSION }} --activate
-          yarn --version
+          version="$(node -p "require('./package.json').version")"
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$(node -p "require('./app/package.json').version")" = "$version"
+          tag="v${version}"
+          git fetch origin main --tags
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test -z "$(git tag --list "$tag")"
+          test -z "$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" HEAD -m "Stable release $tag: Tianjiang desktop client"
+          git push origin "$tag"
 
-      - name: 冻结安装依赖
-        run: yarn install --frozen-lockfile --non-interactive
-
-      - name: 发布 OSS Stable 与 Beta Windows 兼容事务
-        env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_REGION: oss-cn-qingdao
-          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
-          OSS_ENDPOINT: https://oss-cn-qingdao.aliyuncs.com
-          TIANJIANG_RELEASE_PUBLIC_BASE_URL: https://api.j11.com.cn/
-          TIANJIANG_RELEASE_SINGLE_WRITER: github-actions:${{ github.repository }}:${{ github.run_id }}:stable:windows-x64
-        run: >-
-          node scripts/publish-platform-release-cli.mjs .local/stable-release-publication "${{ needs.provenance.outputs.version }}"
-
-      - name: 创建 GitHub Stable Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
-        with:
-          name: 天将漫创 ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: false
-          body: |
-            ## 天将漫创 Windows x64 Stable
-
-            本 Release 仅包含 Windows x64 正式版。产品二进制仍为未签名产物；Sigstore 只证明 ReleaseManifest 的 GitHub Actions 来源，不是 Authenticode 产品代码签名。
-          files: |
-            app/.local/stable-release-publication/desktop/stable/windows/x64/*.exe
-            app/.local/stable-release-publication/desktop/stable/windows/x64/*.blockmap
-            app/.local/stable-release-publication/desktop/stable/windows/x64/catalog/releases/*/release-manifest.json
-            app/.local/stable-release-publication/desktop/stable/windows/x64/catalog/releases/*/release-manifest.json.sigstore.json
-            app/.local/stable-release-publication/desktop/stable/windows/x64/catalog/releases/*/SHA256SUMS
+  release-pipeline:
+    if: ${{ github.repository == 'hyc0122/tj_app' && github.event_name == 'push' }}
+    uses: ./.github/workflows/app-cloud-release.yml
+    with:
+      tag: ${{ github.ref_name }}
+      channel: stable
+      prerelease: false
+    secrets: inherit
