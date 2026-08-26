@@ -11,8 +11,8 @@ import {
 } from "./platform-release-contract.mjs";
 
 const CHANNELS = ["stable", "beta"];
-// Windows 安装包接近 300 MiB，显式覆盖 ali-oss 默认 60 秒请求超时。
-const OSS_RELEASE_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
+// Windows 安装包接近 300 MiB，跨境 Runner 到青岛 OSS 的单次上传可能超过 15 分钟，显式给足一小时。
+const OSS_RELEASE_REQUEST_TIMEOUT_MS = 60 * 60 * 1000;
 
 function fail(reason) {
   throw new Error(`Stable Windows 远端发布失败：${reason}`);
