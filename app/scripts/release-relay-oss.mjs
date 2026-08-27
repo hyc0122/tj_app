@@ -366,8 +366,11 @@ function requiredEnvironment(environment, name) {
 }
 
 /** OSS 凭据只从当前本地进程环境读取，调用方不得记录返回对象。 */
-export async function createAliOssClientFromEnvironment(environment = process.env) {
-  const { default: OSS } = await import("ali-oss");
+export async function createAliOssClientFromEnvironment(environment = process.env, dependencies = {}) {
+  // 测试通过依赖注入捕获客户端配置；正式运行仍只动态加载仓库锁定的 ali-oss。
+  const loadOss = dependencies.loadOss ?? (() => import("ali-oss"));
+  const imported = await loadOss();
+  const OSS = imported.default ?? imported;
   return new OSS({
     accessKeyId: requiredEnvironment(environment, "OSS_ACCESS_KEY_ID"),
     accessKeySecret: requiredEnvironment(environment, "OSS_ACCESS_KEY_SECRET"),
@@ -375,6 +378,8 @@ export async function createAliOssClientFromEnvironment(environment = process.en
     endpoint: requiredEnvironment(environment, "OSS_ENDPOINT"),
     region: String(environment.OSS_REGION ?? "").trim() || undefined,
     stsToken: String(environment.OSS_STS_TOKEN ?? "").trim() || undefined,
+    // 目标 Bucket 已禁用 V1，发布 relay 必须显式使用阿里云 OSS V4 签名。
+    authorizationV4: true,
     secure: true,
     timeout: "10m",
     retryMax: 0,
