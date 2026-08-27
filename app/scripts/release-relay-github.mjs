@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   PUBLIC_REPOSITORY,
@@ -9,6 +12,9 @@ import {
 } from "./release-relay-contract.mjs";
 
 const API_ROOT = "https://api.github.com";
+const DOWNLOAD_ATTEMPTS = 3;
+
+class RecoverableDownloadError extends Error {}
 
 function fail(message) {
   throw new Error(`GitHub Release 下载失败：${message}`);
@@ -41,6 +47,63 @@ async function requestBytes(fetchImpl, url, token) {
   const response = await fetchImpl(url, { headers: headers(token, "application/octet-stream") });
   if (!response.ok) fail(`Release Asset HTTP ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
+}
+
+async function downloadReleaseAsset({ fetchImpl, asset, assetName, destination, token }) {
+  const finalPath = path.join(destination, assetName);
+  const partialPath = `${finalPath}.partial`;
+  if (fs.existsSync(finalPath)) {
+    if (fs.statSync(finalPath).size !== asset.size) {
+      fail(`已下载 Release Asset 大小不一致：${assetName}`);
+    }
+    return;
+  }
+
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    const partialExists = fs.existsSync(partialPath);
+    const offset = partialExists ? fs.statSync(partialPath).size : 0;
+    if (offset > asset.size) fail(`Release Asset partial 超过预期大小：${assetName}`);
+    if (offset === asset.size) {
+      fs.renameSync(partialPath, finalPath);
+      return;
+    }
+
+    const requestHeaders = headers(token, "application/octet-stream");
+    if (offset > 0) requestHeaders.Range = `bytes=${offset}-`;
+    try {
+      const response = await fetchImpl(asset.browser_download_url, { headers: requestHeaders });
+      if (offset > 0) {
+        const expectedRange = `bytes ${offset}-${asset.size - 1}/${asset.size}`;
+        if (response.status !== 206 || response.headers.get("content-range") !== expectedRange) {
+          fail(`Release Asset 断点响应无效：${assetName}`);
+        }
+      } else if (!response.ok) {
+        if (response.status >= 500) throw new Error(`Release Asset HTTP ${response.status}`);
+        fail(`Release Asset HTTP ${response.status}：${assetName}`);
+      }
+      if (!response.body) throw new Error("Release Asset 响应正文缺失");
+
+      // 大文件直接流入 partial，避免把数百 MB 安装包一次性装入内存。
+      await pipeline(
+        Readable.fromWeb(response.body),
+        fs.createWriteStream(partialPath, { flags: partialExists ? "a" : "wx" }),
+      );
+      const downloadedSize = fs.statSync(partialPath).size;
+      if (downloadedSize > asset.size) fail(`Release Asset 下载超过预期大小：${assetName}`);
+      if (downloadedSize < asset.size) throw new Error("Release Asset 下载提前结束");
+      fs.renameSync(partialPath, finalPath);
+      return;
+    } catch (error) {
+      if (String(error?.message ?? "").startsWith("GitHub Release 下载失败：")) throw error;
+      if (attempt === DOWNLOAD_ATTEMPTS) {
+        throw new RecoverableDownloadError(
+          `Release Asset 下载中断，可从 partial 续传：${assetName}`,
+          { cause: error },
+        );
+      }
+      await delay(250 * (2 ** (attempt - 1)));
+    }
+  }
 }
 
 function decodePackageVersion(contentResponse) {
@@ -194,18 +257,21 @@ export async function downloadGithubReleaseForRun({
     path.resolve(destinationRoot),
     `run-${normalizedRunId}-${channel}-${manifest.version}`,
   );
-  const created = createOrReuseDirectory(destination);
+  createOrReuseDirectory(destination);
   try {
-    if (created) {
-      for (const assetName of expectedNames) {
-        const asset = release.assets.find(
-          (entry) => canonicalReleaseAssetName(entry) === assetName,
-        );
-        const bytes = assetName === "release-manifest.json"
-          ? manifestBytes
-          : await requestBytes(fetchImpl, asset.browser_download_url, token);
-        if (bytes.length !== asset.size) fail(`Release Asset 下载大小不一致：${assetName}`);
-        fs.writeFileSync(path.join(destination, assetName), bytes, { flag: "wx" });
+    for (const assetName of expectedNames) {
+      const asset = release.assets.find(
+        (entry) => canonicalReleaseAssetName(entry) === assetName,
+      );
+      if (assetName === "release-manifest.json") {
+        const manifestPath = path.join(destination, assetName);
+        if (!fs.existsSync(manifestPath)) {
+          fs.writeFileSync(manifestPath, manifestBytes, { flag: "wx" });
+        } else if (fs.statSync(manifestPath).size !== manifestBytes.length) {
+          fail("缓存的 release-manifest.json 大小不一致");
+        }
+      } else {
+        await downloadReleaseAsset({ fetchImpl, asset, assetName, destination, token });
       }
     }
     // 重试只复用经过完整再校验的只读缓存，不能凭目录存在就信任本地字节。
@@ -221,7 +287,7 @@ export async function downloadGithubReleaseForRun({
     };
   } catch (error) {
     // 下载失败目录可能用于诊断，但不得被后续中转误用；显式标记失败而不自动删除证据。
-    if (created) {
+    if (!(error instanceof RecoverableDownloadError)) {
       fs.writeFileSync(path.join(destination, ".relay-download-failed"), `${error.message}\n`, { flag: "w" });
     }
     throw error;
