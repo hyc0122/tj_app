@@ -133,6 +133,8 @@ export function createCloudReleaseManifest({ context, targets, signing = {} }) {
     artifacts.push({
       releaseAsset: pointerAsset,
       ossKey: `desktop/${context.channel}/${target.platform}/${target.arch}/catalog/latest.json`,
+      // Catalog latest.json 也是可变渠道指针，必须显式声明不存在兼容副本路径。
+      compatibilityOssKey: null,
       targetId: target.id,
       platform: target.platform,
       arch: target.arch,
