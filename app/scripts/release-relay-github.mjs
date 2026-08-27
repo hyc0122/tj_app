@@ -24,6 +24,13 @@ function headers(token, accept = "application/vnd.github+json") {
   return value;
 }
 
+function canonicalReleaseAssetName(asset) {
+  // GitHub 可能截短包含中文的 name；非空 label 保留云端构建时的完整原始文件名。
+  return typeof asset?.label === "string" && asset.label.length > 0
+    ? asset.label
+    : asset?.name;
+}
+
 async function requestJson(fetchImpl, endpoint, token) {
   const response = await fetchImpl(`${API_ROOT}${endpoint}`, { headers: headers(token) });
   if (!response.ok) fail(`GitHub API HTTP ${response.status}：${endpoint}`);
@@ -79,12 +86,15 @@ async function resolveTagCommit({ fetchImpl, token, tag }) {
 function assertAssetList(release, manifest) {
   if (!Array.isArray(release.assets)) fail("GitHub Release assets 缺失");
   const expected = exactExpectedNames(manifest);
-  const actual = release.assets.map((asset) => asset.name).sort((left, right) => left.localeCompare(right, "en"));
+  const actual = release.assets
+    .map(canonicalReleaseAssetName)
+    .sort((left, right) => left.localeCompare(right, "en"));
   if (new Set(actual).size !== actual.length || JSON.stringify(actual) !== JSON.stringify(expected)) {
     fail(`GitHub Release Asset 集合存在缺失、多余或重名：${actual.join(",")}`);
   }
   const expectedSize = new Map(manifest.artifacts.map((artifact) => [artifact.releaseAsset, artifact.size]));
   for (const asset of release.assets) {
+    const canonicalName = canonicalReleaseAssetName(asset);
     let downloadUrl;
     try {
       downloadUrl = new URL(asset.browser_download_url);
@@ -95,7 +105,8 @@ function assertAssetList(release, manifest) {
       downloadUrl.origin !== "https://github.com"
       || !downloadUrl.pathname.startsWith(`/${PUBLIC_REPOSITORY}/releases/download/${manifest.tag}/`)
       || path.basename(asset.name) !== asset.name
-      || (expectedSize.has(asset.name) && expectedSize.get(asset.name) !== asset.size)
+      || path.basename(canonicalName) !== canonicalName
+      || (expectedSize.has(canonicalName) && expectedSize.get(canonicalName) !== asset.size)
     ) {
       fail(`GitHub Release Asset 字段或大小无效：${asset.name}`);
     }
@@ -156,7 +167,9 @@ export async function downloadGithubReleaseForRun({
     `/repos/${PUBLIC_REPOSITORY}/releases/tags/${encodeURIComponent(tag)}`,
     token,
   );
-  const manifestAsset = release.assets?.find((asset) => asset.name === "release-manifest.json");
+  const manifestAsset = release.assets?.find(
+    (asset) => canonicalReleaseAssetName(asset) === "release-manifest.json",
+  );
   if (!manifestAsset) fail("GitHub Release 缺少 release-manifest.json");
   const manifestBytes = await requestBytes(fetchImpl, manifestAsset.browser_download_url, token);
   if (manifestBytes.length !== manifestAsset.size) fail("release-manifest.json 下载大小不一致");
@@ -185,7 +198,9 @@ export async function downloadGithubReleaseForRun({
   try {
     if (created) {
       for (const assetName of expectedNames) {
-        const asset = release.assets.find((entry) => entry.name === assetName);
+        const asset = release.assets.find(
+          (entry) => canonicalReleaseAssetName(entry) === assetName,
+        );
         const bytes = assetName === "release-manifest.json"
           ? manifestBytes
           : await requestBytes(fetchImpl, asset.browser_download_url, token);

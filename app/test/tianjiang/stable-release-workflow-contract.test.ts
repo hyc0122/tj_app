@@ -51,7 +51,7 @@ test("根 package.json 是版本唯一来源且 App 镜像版本必须一致", (
   );
   assert.equal(
     rootPackage.scripts["release:relay:oss"],
-    "node app/scripts/release-relay-cli.mjs",
+    "node --use-env-proxy app/scripts/release-relay-cli.mjs",
   );
   assert.equal(appPackage.scripts["installer:verify"], "node scripts/verify-installer-structure.mjs");
 });
