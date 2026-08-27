@@ -152,6 +152,15 @@ test("Actions 只创建 GitHub Release，OSS 发布明确留给本地 relay", ()
   assert.match(releaseText, /OSS 发布由本地 release:relay:oss/);
 });
 
+test("Sigstore 只信任实际执行签名的复用工作流身份", () => {
+  const provenanceText = stepText(cloudPipeline.workflow.jobs.provenance);
+  assert.match(
+    provenanceText,
+    /https:\/\/github\.com\/\$\{GITHUB_REPOSITORY\}\/\.github\/workflows\/app-cloud-release\.yml@\$\{GITHUB_REF\}/,
+  );
+  assert.doesNotMatch(provenanceText, /https:\/\/github\.com\/\$\{GITHUB_WORKFLOW_REF\}/);
+});
+
 test("微软 VC++ 运行库仍保留 Authenticode 校验门", () => {
   const runtimePreparation = fs.readFileSync(
     path.join(appRoot, "scripts", "prepare-vc-runtime.mjs"),

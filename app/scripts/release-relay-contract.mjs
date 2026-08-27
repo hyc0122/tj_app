@@ -34,9 +34,9 @@ function expectedWorkflow(channel) {
 
 function expectedSigstoreIdentity(manifest) {
   const escapedTag = manifest.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const escapedWorkflow = manifest.workflow.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // GitHub OIDC 的标准 workflow_ref 描述调用方；job_workflow_ref 才描述可复用工作流。
-  return `^https://github\\.com/${PUBLIC_REPOSITORY}/${escapedWorkflow}@refs/tags/${escapedTag}$`;
+  const reusableWorkflow = "\\.github/workflows/app-cloud-release\\.yml";
+  // Fulcio 证书采用 job_workflow_ref：只接受公开主分支或本次精确 Tag 上的复用工作流。
+  return `^https://github\\.com/${PUBLIC_REPOSITORY}/${reusableWorkflow}@refs/(?:heads/main|tags/${escapedTag})$`;
 }
 
 function assertManifestShape(manifest) {

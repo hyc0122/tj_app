@@ -368,8 +368,10 @@ jobs:
         working-directory: app
         shell: bash
         run: |
+          # Keyless 证书标识的是实际运行签名 Job 的复用工作流，而不是外层调用工作流。
+          provenance_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/app-cloud-release.yml@${GITHUB_REF}"
           cosign sign-blob --yes --bundle .local/cloud-release/assets/release-manifest.json.sigstore.json .local/cloud-release/assets/release-manifest.json
-          cosign verify-blob --bundle .local/cloud-release/assets/release-manifest.json.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity "https://github.com/${GITHUB_WORKFLOW_REF}" .local/cloud-release/assets/release-manifest.json
+          cosign verify-blob --bundle .local/cloud-release/assets/release-manifest.json.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity "${provenance_identity}" .local/cloud-release/assets/release-manifest.json
       - name: 上传完整 GitHub Release 与 Relay Artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
