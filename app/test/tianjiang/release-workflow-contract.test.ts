@@ -74,7 +74,8 @@ test("统一云端工作流只包含质量门、三平台构建、来源证明�
     ["build-linux", "build-macos", "build-windows", "provenance", "quality", "release"],
   );
 
-  assert.equal(jobs.quality["runs-on"], "ubuntu-latest");
+  // App 全量包含 Windows 路径、Junction 与 cmd.exe 验收，质量门必须运行在官方 Windows Runner。
+  assert.equal(jobs.quality["runs-on"], "windows-latest");
   assert.equal(jobs["build-windows"]["runs-on"], "windows-latest");
   assert.equal(jobs["build-linux"]["runs-on"], "ubuntu-latest");
   assert.equal(jobs["build-macos"]["runs-on"], "macos-latest");
@@ -94,7 +95,8 @@ test("质量门使用冻结依赖和项目标准测试、检查与构建命令",
   const qualityText = stepText(cloudPipeline.workflow.jobs.quality);
   assert.match(qualityText, /yarn install --frozen-lockfile --non-interactive/);
   assert.match(qualityText, /yarn native:node && yarn native:verify:node/);
-  assert.match(qualityText, /yarn test:tianjiang && yarn lint && yarn build/);
+  // 干净 Runner 没有被 Git 忽略的 build/main.js，必须先用标准 build 生成再运行全量测试。
+  assert.match(qualityText, /yarn build && yarn test:tianjiang && yarn lint/);
   assert.match(qualityText, /yarn test:tianjiang-ui && yarn type-check && yarn build/);
   assert.match(qualityText, /require\('\.\.\/package\.json'\)\.version/);
   assert.match(qualityText, /git rev-list -n 1/);

@@ -30,7 +30,8 @@ jobs:
   quality:
     if: ${{ github.repository == 'hyc0122/tj_app' }}
     name: required tests、lint、type-check 与 build
-    runs-on: ubuntu-latest
+    # App 全量包含 Windows 路径、Junction 与 cmd.exe 验收，必须在官方 Windows Runner 执行。
+    runs-on: windows-latest
     permissions:
       contents: read
     steps:
@@ -62,10 +63,11 @@ jobs:
       - name: 重建并验证 Node 原生模块
         working-directory: app
         run: yarn native:node && yarn native:verify:node
-      - name: App required tests、lint 与 build
+      - name: App build、required tests 与 lint
         working-directory: app
         timeout-minutes: 45
-        run: yarn test:tianjiang && yarn lint && yarn build
+        # 干净 Runner 不存在被 Git 忽略的 build/main.js，先执行项目标准 build 再验收。
+        run: yarn build && yarn test:tianjiang && yarn lint
       - name: Web 测试、类型检查与 build
         working-directory: web
         run: yarn test:tianjiang-ui && yarn type-check && yarn build
