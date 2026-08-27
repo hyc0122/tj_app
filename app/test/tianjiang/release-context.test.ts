@@ -125,8 +125,13 @@ test("标签版本必须与 package.json 完全一致", () => {
 
 test("工作流调用的 CLI 分别输出合法 Stable 与 beta.N 上下文", () => {
   const script = path.resolve("scripts", "resolve-release-context.mjs");
+  const cliEnv = { ...process.env };
+  // 中文注释：GitHub Actions 会为测试进程注入 GITHUB_OUTPUT；本用例验证的是 CLI stdout 分支，
+  // 必须显式移除该环境变量，避免子进程把 JSON 写入工作流输出文件后留下空 stdout。
+  delete cliEnv.GITHUB_OUTPUT;
   const beta = spawnSync(process.execPath, [script, "tag", "v1.1.10-beta.1", "1.1.10-beta.1"], {
     encoding: "utf8",
+    env: cliEnv,
   });
   assert.equal(beta.status, 0, beta.stderr);
   assert.deepEqual(JSON.parse(beta.stdout), {
@@ -139,7 +144,7 @@ test("工作流调用的 CLI 分别输出合法 Stable 与 beta.N 上下文", ()
   const stable = spawnSync(
     process.execPath,
     [script, "tag", "v1.1.10", "1.1.10"],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: cliEnv },
   );
   assert.equal(stable.status, 0, stable.stderr);
   assert.deepEqual(JSON.parse(stable.stdout), {

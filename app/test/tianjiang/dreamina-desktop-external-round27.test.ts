@@ -2,6 +2,7 @@
  * Round27 RED：桌面协议必须使用小写主机，并等待受信任外链真正交给默认浏览器。
  */
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -36,9 +37,44 @@ interface ProtocolProbeEvent {
 function runMainProtocolProbe(scenario: string): ProtocolProbeEvent[] {
   const evidenceRoot = path.join(repositoryRoot, ".tmp", "dreamina-protocol-round27");
   fs.mkdirSync(evidenceRoot, { recursive: true });
+  const probeId = `${process.pid}-${probeSequence += 1}-${scenario}`;
   const eventFile = path.join(
     evidenceRoot,
-    `${process.pid}-${probeSequence += 1}-${scenario}.jsonl`,
+    `${probeId}.jsonl`,
+  );
+  const resourcesPath = path.join(evidenceRoot, `${probeId}-resources`);
+  const userDataPath = path.join(evidenceRoot, `${probeId}-user-data`);
+  const webRoot = path.join(resourcesPath, "data", "web");
+  const serveRoot = path.join(resourcesPath, "data", "serve");
+  fs.mkdirSync(webRoot, { recursive: true });
+  fs.mkdirSync(serveRoot, { recursive: true });
+  fs.mkdirSync(userDataPath, { recursive: true });
+
+  // 中文注释：协议探针会故意等待浏览器拒绝，期间主启动流程也会继续执行。
+  // 因此夹具必须自带最小、可校验的打包资源，不能依赖本地被忽略的 app/data 构建产物。
+  const indexBytes = Buffer.from("<!doctype html><title>协议探针</title>", "utf8");
+  fs.writeFileSync(path.join(webRoot, "index.html"), indexBytes);
+  fs.writeFileSync(
+    path.join(webRoot, ".tianjiang-web-package.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      sourceFiles: [{
+        path: "index.html",
+        size: indexBytes.length,
+        sha256: crypto.createHash("sha256").update(indexBytes).digest("hex"),
+      }],
+    }),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(serveRoot, "app.js"),
+    [
+      "module.exports = {",
+      "  default: async () => 18181,",
+      "  closeServe: async () => undefined,",
+      "};",
+    ].join("\n"),
+    "utf8",
   );
   fs.rmSync(eventFile, { force: true });
   const result = spawnSync(
@@ -58,7 +94,9 @@ function runMainProtocolProbe(scenario: string): ProtocolProbeEvent[] {
         ...process.env,
         NODE_ENV: "prod",
         TIANJIANG_PROTOCOL_PROBE_EVENT_FILE: eventFile,
+        TIANJIANG_PROTOCOL_PROBE_RESOURCES_PATH: resourcesPath,
         TIANJIANG_PROTOCOL_PROBE_SCENARIO: scenario,
+        TIANJIANG_PROTOCOL_PROBE_USER_DATA_PATH: userDataPath,
       },
     },
   );

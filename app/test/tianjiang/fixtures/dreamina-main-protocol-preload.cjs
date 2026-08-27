@@ -14,14 +14,17 @@ function record(name, details = {}) {
 
 Object.defineProperty(process, "resourcesPath", {
   configurable: true,
-  value: process.cwd(),
+  value: process.env.TIANJIANG_PROTOCOL_PROBE_RESOURCES_PATH,
 });
 
 const app = {
   isPackaged: true,
   commandLine: { appendSwitch() {} },
   setName() {},
-  getPath() { return process.cwd(); },
+  getPath(key) {
+    if (key === "userData") return process.env.TIANJIANG_PROTOCOL_PROBE_USER_DATA_PATH;
+    return process.cwd();
+  },
   setPath() {},
   whenReady() { return Promise.resolve(); },
   getVersion() { return "1.1.10"; },
@@ -37,6 +40,27 @@ const app = {
 };
 
 class BrowserWindow {
+  constructor() {
+    // 中文注释：主启动流程与协议探针并发；伪窗口需覆盖真实入口会调用的最小 Electron 契约。
+    this.webContents = {
+      getUserAgent: () => "FakeElectron",
+      setUserAgent() {},
+      openDevTools() {},
+    };
+  }
+  setMenuBarVisibility() {}
+  removeMenu() {}
+  on() {}
+  once(name, listener) {
+    if (name === "ready-to-show") setImmediate(listener);
+  }
+  show() {}
+  loadFile() { return Promise.resolve(); }
+  loadURL() { return Promise.resolve(); }
+  minimize() {}
+  maximize() {}
+  unmaximize() {}
+  isMaximized() { return false; }
   static getAllWindows() { return []; }
 }
 
@@ -111,12 +135,17 @@ const fakeElectron = {
   app,
   BrowserWindow,
   dialog: { showMessageBox: async () => ({ response: 0 }) },
-  Menu: {},
-  nativeImage: {},
+  Menu: { buildFromTemplate: () => ({}) },
+  nativeImage: { createFromPath: () => ({ isEmpty: () => true }) },
   protocol,
   shell,
   systemPreferences: { getUserDefault: () => "zh-CN" },
-  Tray: class Tray {},
+  Tray: class Tray {
+    setToolTip() {}
+    setContextMenu() {}
+    on() {}
+    destroy() {}
+  },
 };
 
 const originalLoad = Module._load;

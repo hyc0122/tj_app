@@ -522,7 +522,8 @@ test("P1-2 项目视频模型混合参考必须入队后按后台阶段收敛失
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
 
     const volc = "volcengine";
-    const realVolc = path.resolve(__dirname, "../../data/vendor/volcengine.ts");
+    // 中文注释：使用受版本控制的供应商模板，避免干净 Runner 依赖被 gitignore 的构建生成文件。
+    const realVolc = path.resolve(__dirname, "../../src/provider-templates/volcengine.ts.template");
     u.vendor.writeCode(volc, fs.readFileSync(realVolc, "utf8"));
     const volcModels = JSON.stringify([
       { modelName: "doubao-seedance-2-0-260128", name: "Seedance-2.0", type: "video" },
