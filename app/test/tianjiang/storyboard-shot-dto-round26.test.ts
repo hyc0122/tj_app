@@ -46,7 +46,7 @@ test("分镜保存与重新列表必须回传景别、运镜、构图和画幅",
         cameraMovement: "缓慢推进",
         composition: "三分法",
         aspectRatio: "9:16",
-        durationMs: 6500,
+        durationMs: 6000,
       });
 
       assert.deepEqual(
@@ -62,7 +62,7 @@ test("分镜保存与重新列表必须回传景别、运镜、构图和画幅",
           cameraMovement: "缓慢推进",
           composition: "三分法",
           aspectRatio: "9:16",
-          durationMs: 6500,
+          durationMs: 6000,
         },
       );
 

@@ -12,11 +12,42 @@ import {
   verifyPackagedSharedModels,
 } from "../../scripts/package-web-assets.mjs";
 
-const fixtureRoot = path.resolve("..", ".tmp", "packaged-runtime-payload-fixture");
+const fixtureRunId = `${process.pid}-${Date.now()}`;
+let fixtureSequence = 0;
+let fixtureRoot = path.resolve(
+  "..",
+  ".tmp",
+  `packaged-runtime-payload-fixture-${fixtureRunId}-${fixtureSequence}`,
+);
 const require = createRequire(path.join(process.cwd(), "package.json"));
 const { createPackage } = require("@electron/asar") as {
   createPackage: (source: string, destination: string) => Promise<void>;
 };
+
+function removeFixtureRoot(): void {
+  const removingRoot = fixtureRoot;
+  fixtureSequence += 1;
+  fixtureRoot = path.resolve(
+    "..",
+    ".tmp",
+    `packaged-runtime-payload-fixture-${fixtureRunId}-${fixtureSequence}`,
+  );
+  try {
+    // Windows 上 ASAR/杀毒扫描可能短暂持有文件句柄；每轮目录已隔离，有限重试后仅保留诊断告警。
+    fs.rmSync(removingRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 50,
+    });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (process.platform !== "win32" || !["EBUSY", "ENOTEMPTY", "EPERM"].includes(code ?? "")) {
+      throw error;
+    }
+    console.warn(`测试夹具暂时无法清理，已隔离保留：${removingRoot} (${code})`);
+  }
+}
 
 const VALID_UPDATER_MAIN_SOURCE = `
 "electron-updater";
@@ -89,7 +120,7 @@ void service;
 `;
 
 test("实包内置 Skills 必须按非空清单逐文件反向校验 SHA-256", () => {
-  fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  removeFixtureRoot();
   const skillRoot = path.join(
     fixtureRoot,
     "resources",
@@ -122,7 +153,7 @@ test("实包内置 Skills 必须按非空清单逐文件反向校验 SHA-256", (
       /SHA-256 不一致/,
     );
   } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    removeFixtureRoot();
   }
 });
 
@@ -172,7 +203,11 @@ async function createPackageLayoutFixture(
   const resourcesRoot = path.join(packageRoot, ...resourcesRelativePath.split("/"));
   const executable = path.join(packageRoot, ...executableRelativePath.split("/"));
   fs.mkdirSync(webSource, { recursive: true });
-  fs.writeFileSync(path.join(webSource, "index.html"), "<main>天将漫创</main>", "utf8");
+  const webIndexPath = path.join(webSource, "index.html");
+  fs.writeFileSync(webIndexPath, "<main>天将漫创</main>", "utf8");
+  // 固定夹具源文件早于同步清单，避免 Windows 文件时间戳精度造成伪“旧产物”。
+  const synchronizedFixtureTime = new Date(Date.now() - 1_000);
+  fs.utimesSync(webIndexPath, synchronizedFixtureTime, synchronizedFixtureTime);
   fs.mkdirSync(resourcesRoot, { recursive: true });
   syncWeb(webSource, path.join(resourcesRoot, "data", "web"));
 
@@ -246,7 +281,7 @@ async function createPackageLayoutFixture(
 }
 
 test("实包共享模型六件套门禁", () => {
-  fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  removeFixtureRoot();
   const packageRoot = path.join(fixtureRoot, "models-only");
   const modelsRoot = path.join(packageRoot, "resources", "data", "models");
   const required = [
@@ -268,12 +303,12 @@ test("实包共享模型六件套门禁", () => {
     fs.rmSync(path.join(modelsRoot, "all-MiniLM-L6-v2", "onnx", "model_fp16.onnx"), { force: true });
     assert.throws(() => verifyPackagedSharedModels(packageRoot), /共享模型|不存在/);
   } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    removeFixtureRoot();
   }
 });
 
 test("包内容门支持 Windows、macOS 与 Linux 的受控资源布局", async () => {
-  fs.rmSync(fixtureRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  removeFixtureRoot();
   const layouts = [
     { name: "windows", resources: "resources", executable: "天将漫创.exe" },
     { name: "macos", resources: "Resources", executable: "MacOS/天将漫创" },
@@ -296,7 +331,7 @@ test("包内容门支持 Windows、macOS 与 Linux 的受控资源布局", async
       );
     }
   } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    removeFixtureRoot();
   }
 });
 
@@ -408,7 +443,7 @@ test("实包更新结构门拒绝关键词伪装和不安全调用关系", async
     ["parse-failure", "class ManualUpdaterService {"],
   ] as const;
 
-  fs.rmSync(fixtureRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  removeFixtureRoot();
   try {
     for (const [name, mainSource] of invalidFixtures) {
       await t.test(name, async () => {
@@ -425,12 +460,12 @@ test("实包更新结构门拒绝关键词伪装和不安全调用关系", async
       });
     }
   } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    removeFixtureRoot();
   }
 });
 
 test("macOS framework 包内安全内链允许但逃逸链接失败关闭", async () => {
-  fs.rmSync(fixtureRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  removeFixtureRoot();
   try {
     const safeFixture = await createPackageLayoutFixture(
       "mac-framework-safe",
@@ -478,12 +513,12 @@ test("macOS framework 包内安全内链允许但逃逸链接失败关闭", asyn
       /PKG_PATH_SYMLINK_ESCAPE/,
     );
   } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    removeFixtureRoot();
   }
 });
 
 test("包内容门拒绝绝对路径、父目录穿越和符号链接可执行文件", async () => {
-  fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  removeFixtureRoot();
   fs.mkdirSync(fixtureRoot, { recursive: true });
   try {
     await assert.rejects(
@@ -506,6 +541,6 @@ test("包内容门拒绝绝对路径、父目录穿越和符号链接可执行�
       /符号链接/,
     );
   } finally {
-    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    removeFixtureRoot();
   }
 });

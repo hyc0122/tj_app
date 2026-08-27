@@ -102,6 +102,21 @@ async function countRows(table: string): Promise<number> {
   });
 }
 
+async function waitForTaskState(
+  clientOperationId: string,
+  expected: string,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const row = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask")
+      .where({ clientOperationId })
+      .first("status", "errorCode", "errorSummary"));
+    if (String(row?.status ?? "") === expected) return row as Record<string, unknown>;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`任务 ${clientOperationId} 未在期限内进入 ${expected}`);
+}
+
 function leakFree(serialized: string): void {
   assert.equal(/[A-Za-z]:\\/.test(serialized), false);
   assert.equal(serialized.includes("sk-"), false);
@@ -375,14 +390,14 @@ test("明确支持 URL 的供应商必须走 stub 暂存并保留全部引用", 
   }
 });
 
-test("不支持参考素材的供应商必须返回 VENDOR_REFERENCE_UNSUPPORTED 且零写入", async () => {
+test("不支持参考素材的供应商必须先耐久受理，再由后台任务收敛失败", async () => {
   await withRuntime("r21-vendor-unsupported", async ({ boundShot, generateUrl, previewUrl }) => {
     const vendorId = "r21nosupport";
     u.vendor.writeCode(vendorId, vendorSource(vendorId, ""));
     await accountDatabase()("o_vendorConfig").insert({
       id: vendorId,
       inputValues: "{}",
-      models: "[]",
+      models: JSON.stringify([{ modelName: "video", name: "无引用能力视频模型", type: "video" }]),
       enable: 1,
     });
     const body = {
@@ -395,18 +410,27 @@ test("不支持参考素材的供应商必须返回 VENDOR_REFERENCE_UNSUPPORTED
     };
     const preview = await postJson(previewUrl, body);
     assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    const clientOperationId = crypto.randomUUID();
     const generated = await postJson(generateUrl, {
       ...body,
       expectedPreviewDigest: preview.body?.data?.previewDigest,
-      clientOperationId: crypto.randomUUID(),
+      clientOperationId,
     });
     leakFree(JSON.stringify(generated.body));
-    assert.equal(generated.status, 400);
-    assert.equal(generated.body?.code, "VENDOR_REFERENCE_UNSUPPORTED");
-    assert.equal(generated.body?.message, "当前视频模型不支持参考素材输入");
+    assert.equal(generated.status, 202, JSON.stringify(generated.body));
+    assert.equal(generated.body?.code, 0);
+    assert.equal(generated.body?.data?.clientOperationId, clientOperationId);
+    assert.equal(generated.body?.data?.tasks?.[0]?.status, "queued");
+    const failedTask = await waitForTaskState(clientOperationId, "failed_fatal");
+    // 中文注释：HTTP 边界不执行供应商适配；旧的同步引用错误在后台统一收敛为安全运行态错误。
+    assert.deepEqual(failedTask, {
+      status: "failed_fatal",
+      errorCode: "VENDOR_GENERATION_FAILED",
+      errorSummary: "普通供应商生成失败，请检查模型配置或稍后重试",
+    });
     assert.equal(JSON.stringify(generated.body).includes("请检查网络"), false);
-    assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
-    assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+    assert.equal(await countRows("o_storyboardGenerationOperation"), 1);
+    assert.equal(await countRows("o_storyboardGenerationTask"), 1);
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
     assert.equal(await countRows("o_generation"), 0);
   });

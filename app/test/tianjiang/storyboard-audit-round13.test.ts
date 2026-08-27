@@ -279,7 +279,7 @@ test("preview viewer 必须 403", async () => {
   }
 });
 
-test("preview 跨项目和项目不存在必须原样失败", async () => {
+test("preview 跨项目和项目不存在必须统一权限失败且不泄漏目录关系", async () => {
   const root = path.resolve(process.cwd(), "..", ".tmp", `sb-preview-missing-${Date.now()}`);
   const originalCwd = process.cwd();
   const missingUuid = "22222222-2222-4222-a222-222222222222";
@@ -321,8 +321,10 @@ test("preview 跨项目和项目不存在必须原样失败", async () => {
             body: JSON.stringify({ mediaType: "image", providerModel: "vendor:demo" }),
           },
         );
-        assert.notEqual(missing.status, 200, `项目不存在不得伪造成功，实际 ${missing.status}`);
-        assert.match(String(missing.body?.message ?? ""), /不存在|不可见/);
+        assert.equal(missing.status, 403, `跨项目预览必须固定拒绝，实际 ${missing.status}`);
+        assert.equal(missing.body?.code, "STORYBOARD_IMPORT_FORBIDDEN");
+        assert.equal(missing.body?.message, "当前身份不能写入该项目");
+        assert.doesNotMatch(JSON.stringify(missing.body), /不存在|不可见|22222222/);
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }

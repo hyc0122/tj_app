@@ -325,14 +325,14 @@ test("旧协议兼容值必须等于动态旧标识且不同于当前协议", ()
   assert.notEqual(LEGACY_PROTOCOL_SCHEME, CURRENT_VENDOR_ID);
 });
 
-test("产品机器标识迁移独立，最新迁移安全升级默认视频提示词", () => {
+test("产品机器标识迁移独立，后续账号迁移保持追加顺序", () => {
   const migrations = buildApplicationMigrations({ role: "account", skipEmbeddingInit: true });
   const product = migrations.find((m) => m.name === "product-machine-identity-v1");
   assert.ok(product);
   assert.equal(product!.version, 30);
   const latest = migrations.at(-1);
-  assert.equal(latest?.version, 39);
-  assert.equal(latest?.name, "dreamina-dispatch-enqueue-idempotency-v1");
+  assert.equal(latest?.version, 42);
+  assert.equal(latest?.name, "dreamina-cli-poll-seconds-v1");
   assert.ok(migrations.some((item) => item.name === "video-prompt-default-zh-v1"));
   assert.ok(migrations.some((item) => item.name === "database-role-account-v1"));
 });

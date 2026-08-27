@@ -54,6 +54,22 @@ async function jsonRequest(url: string, init: RequestInit = {}): Promise<{ statu
   return { status: response.status, body: text ? JSON.parse(text) : null };
 }
 
+async function waitForInitialReadOrEarlyResponse(
+  r1Reached: Promise<void>,
+  request: Promise<{ status: number; body: any }>,
+): Promise<void> {
+  const outcome = await Promise.race([
+    r1Reached.then(() => ({ kind: "initial-read" } as const)),
+    request.then((response) => ({ kind: "early-response", response } as const)),
+  ]);
+  if (outcome.kind === "early-response") {
+    // 中文注释：请求若在测试钩子前失败，立即抛错，让外层 finally 关闭 HTTP 服务和数据库句柄。
+    assert.fail(
+      `R1 在 initial-read 测试钩子前结束: HTTP ${outcome.response.status} ${JSON.stringify(outcome.response.body)}`,
+    );
+  }
+}
+
 function samePath(left: string | null | undefined, right: string | null | undefined): boolean {
   if (!left || !right) return false;
   const normalize = (value: string) => (process.platform === "win32"
@@ -118,7 +134,12 @@ async function withUpdateServer(
     await activateUserDatabase(IDENTITY);
     await runWithUserStorage(IDENTITY, async () => {
       enterUserStorage(IDENTITY);
-      await writeDreaminaCliSettings({ enabled: true, executablePath: FAKE_CLI, pauseNewClaims: false, maxConcurrency: 1 });
+      await writeDreaminaCliSettings({
+        enabled: true,
+        executablePath: FAKE_CLI,
+        pauseReason: "none",
+        maxConcurrency: 1,
+      });
     });
     enterUserStorage(IDENTITY);
     writeDreaminaCapabilityCache({
@@ -219,7 +240,7 @@ test("R1 显式提交未变路径 A 暂停期间 R2 迁到 B，禁止 settings=A
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ executablePath: pathA }),
     });
-    await r1Reached;
+    await waitForInitialReadOrEarlyResponse(r1Reached, r1Promise);
     timeline.push("R1-paused-after-initial-read");
 
     timeline.push("start-R2-post-B");
@@ -331,6 +352,10 @@ test("R1 显式提交未变路径 A 暂停期间 R2 迁到 B，禁止 settings=A
 
 test("进入锁后 latest 已等于目标路径时仍必须保存 preferredExecutionTarget", async () => {
   await withUpdateServer("r24-fix3-same-path-pref", async ({ updateUrl, pathB, timeline }) => {
+    await runWithUserStorage(IDENTITY, async () => {
+      // 中文注释：R26 起队列暂停由专用控制面持久化 pauseReason，updateSettings 不再接收旧字段。
+      await writeDreaminaCliSettings({ pauseReason: "manual_pause" });
+    });
     const { r1Reached, releaseR1 } = installInitialReadGate();
     timeline.push("start-R1-post-B-wsl");
     const r1Promise = jsonRequest(updateUrl, {
@@ -340,10 +365,9 @@ test("进入锁后 latest 已等于目标路径时仍必须保存 preferredExecu
         executablePath: pathB,
         preferredExecutionTarget: "wsl",
         maxConcurrency: 3,
-        pauseNewClaims: true,
       }),
     });
-    await r1Reached;
+    await waitForInitialReadOrEarlyResponse(r1Reached, r1Promise);
     timeline.push("R1-paused-after-initial-read");
 
     timeline.push("start-R2-post-B");
@@ -381,7 +405,8 @@ test("进入锁后 latest 已等于目标路径时仍必须保存 preferredExecu
     }));
     assert.equal(samePath(final.settings.executablePath, pathB), true, "目标路径必须保持 B");
     assert.equal(final.settings.maxConcurrency, 3, "锁内同路径不得丢失 maxConcurrency");
-    assert.equal(final.settings.pauseNewClaims, true, "锁内同路径不得丢失 pauseNewClaims");
+    assert.equal(final.settings.pauseReason, "manual_pause", "锁内同路径不得覆盖 R26 手动暂停原因");
+    assert.equal(final.settings.pauseNewClaims, true, "兼容派生字段必须反映 R26 手动暂停状态");
     assert.equal(
       final.runtime.preferredExecutionTarget,
       "wsl",

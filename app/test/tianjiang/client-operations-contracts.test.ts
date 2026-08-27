@@ -50,6 +50,7 @@ test("手动更新动作冻结且拒绝 URL 字段", () => {
     "check-login-stable",
     "download-differential",
     "download-full",
+    "cancel-download",
     "install",
     "show-file",
   ]);
@@ -59,6 +60,7 @@ test("手动更新动作冻结且拒绝 URL 字段", () => {
     { action: "download-full", channel: "stable" },
   );
   assert.throws(() => parseManualUpdateActionBody({ action: "download-full" }));
+  assert.deepEqual(parseManualUpdateActionBody({ action: "cancel-download" }), { action: "cancel-download" });
   assert.throws(() => parseManualUpdateActionBody({ action: "check", url: "https://evil" }));
   assert.throws(() => parseManualUpdateActionBody({ action: "check", feedBaseUrl: "x" }));
   const snap = parseManualUpdateSnapshot({

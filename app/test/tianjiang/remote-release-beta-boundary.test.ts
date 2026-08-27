@@ -73,7 +73,7 @@ test("channel 非 beta、stable/catalog 越界和含双点 Key 均在远端写�
       const oldPath = path.join(fixture.root, ...artifact.path.split("/"));
       artifact.path = artifact.path.replace(artifact.fileName, `bad..${artifact.fileName}`);
       const nextPath = path.join(fixture.root, ...artifact.path.split("/"));
-      fs.renameSync(oldPath, nextPath);
+      retryFixtureIo(() => fs.renameSync(oldPath, nextPath));
       fs.writeFileSync(fixture.releasePath, jsonBytes(record));
     }, /Beta 前缀|越过/],
   ];
@@ -105,7 +105,7 @@ test("x64-evil 与 arm64-evil 前缀碰撞不能冒充固定平台架构目录",
       artifact.path = artifact.path.replace(`/${release.targets[targetIndex].arch}/`, `/${evilArch}/`);
       const nextPath = path.join(fixture.root, ...artifact.path.split("/"));
       fs.mkdirSync(path.dirname(nextPath), { recursive: true });
-      fs.renameSync(oldPath, nextPath);
+      retryFixtureIo(() => fs.renameSync(oldPath, nextPath));
       fs.writeFileSync(fixture.releasePath, jsonBytes(release));
 
       await assert.rejects(

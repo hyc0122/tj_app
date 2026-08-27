@@ -135,11 +135,12 @@ test("生产设置入口必须探测假 CLI，且不回传登录凭据", async (
         body: JSON.stringify({
           executablePath: FAKE_CLI,
           maxConcurrency: 1,
-          pauseNewClaims: false,
         }),
       });
       assert.notEqual(updated.status, 404, "updateSettings 生产路由必须存在");
-      assert.equal(updated.status, 200);
+      assert.equal(updated.status, 200, serializeBody(updated.body));
+      assert.equal(updated.body?.data?.pauseReason, "none");
+      assert.equal(updated.body?.data?.pauseNewClaims, false);
 
       const rejected = await jsonRequest(`${base}/updateSettings`, {
         method: "POST",

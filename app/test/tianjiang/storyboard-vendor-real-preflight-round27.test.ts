@@ -11,11 +11,17 @@ import Ai from "../../src/utils/ai";
 import {
   accountDatabase,
   activateUserDatabase,
+  initializeWorkspaceProject,
   resetDatabaseRuntimeForServe,
 } from "../../src/utils/db";
 import { configureModelMediaResolver } from "../../src/tianjiang/media/model-media-reference";
-import { runWithUserStorage } from "../../src/tianjiang/runtime/user-storage-context";
+import { projectDirectory } from "../../src/tianjiang/data/paths";
+import {
+  currentUserStorage,
+  runWithUserStorage,
+} from "../../src/tianjiang/runtime/user-storage-context";
 import { closeActivatedWorkspaceRuntime } from "./helpers/worktree-runtime";
+import getPath from "../../src/utils/getPath";
 
 const IDENTITY = { issuer: "https://api.j11.com.cn", userId: 9732 };
 const PROJECT_UUID = "32323232-3232-4232-a232-323232323232";
@@ -25,7 +31,7 @@ function vendorSource(id: string, topLevel = "", imageRequestBody = 'return "res
 ${topLevel}
 const vendor = {
   id: ${JSON.stringify(id)}, version: "2.0", name: "preflight", author: "test",
-  supportsMediaUrl: true, inputs: [], inputValues: {},
+  mediaCapabilities: { image: "url", audio: "none", video: "none" }, inputs: [], inputValues: {},
   models: [{ name: "model", modelName: "model", type: "image", mode: ["text", "singleImage"] }]
 };
 async function imageRequest() { ${imageRequestBody} }
@@ -57,6 +63,33 @@ test("真实 vendor 预备阶段必须阻断 VM 顶层网络并延后媒体 stag
   await activateUserDatabase(IDENTITY);
   try {
     await runWithUserStorage(IDENTITY, async () => {
+      await initializeWorkspaceProject(PROJECT_UUID, {
+        id: 9732,
+        name: "真实供应商预检",
+        projectType: "storyboard" as "novel",
+        userId: IDENTITY.userId,
+      });
+      const context = currentUserStorage();
+      assert.ok(context);
+      const projectRoot = projectDirectory(getPath(), PROJECT_UUID, context.segment);
+      const mediaIdentity = (fileName: string) => {
+        const relativePath = `files/images/${fileName}`;
+        const content = Buffer.from(`preflight:${fileName}`, "utf8");
+        const absolutePath = path.join(projectRoot, ...relativePath.split("/"));
+        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+        fs.writeFileSync(absolutePath, content);
+        return {
+          projectUuid: PROJECT_UUID,
+          relativePath,
+          md5: crypto.createHash("md5").update(content).digest("hex"),
+          size: content.length,
+        };
+      };
+      const referenceMedia = mediaIdentity("reference.png");
+      const batchMedia = new Map([
+        ["first.png", mediaIdentity("first.png")],
+        ["second.png", mediaIdentity("second.png")],
+      ]);
       const networkVendor = "preflightnetwork";
       u.vendor.writeCode(
         networkVendor,
@@ -129,12 +162,7 @@ topLevelForm.submit("http://127.0.0.1:${port}/form-data", () => {});
         prompt: "媒体预检",
         referenceList: [{
           type: "image",
-          media: {
-            projectUuid: PROJECT_UUID,
-            relativePath: "files/images/reference.png",
-            md5: "a".repeat(32),
-            size: 10,
-          },
+          media: referenceMedia,
         }],
         size: "1K",
         aspectRatio: "1:1",
@@ -198,12 +226,7 @@ topLevelForm.submit("http://127.0.0.1:${port}/form-data", () => {});
           prompt: "批次预检",
           referenceList: [{
             type: "image",
-            media: {
-              projectUuid: PROJECT_UUID,
-              relativePath: `files/images/${fileName}`,
-              md5: "b".repeat(32),
-              size: 10,
-            },
+            media: batchMedia.get(fileName)!,
           }],
           size: "1K",
           aspectRatio: "1:1",

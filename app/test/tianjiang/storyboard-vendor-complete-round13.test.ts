@@ -10,6 +10,7 @@ import test from "node:test";
 import express from "express";
 
 import {
+  accountDb,
   activateUserDatabase,
   destroyAllDatabaseHandles,
   initializeWorkspaceProject,
@@ -49,6 +50,18 @@ async function jsonRequest(url: string, init: RequestInit = {}) {
   return { status: response.status, body };
 }
 
+async function waitForOperationState(clientOperationId: string, expected: string): Promise<void> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const row = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationOperation")
+      .where({ clientOperationId })
+      .first("state"));
+    if (String(row?.state ?? "") === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`操作 ${clientOperationId} 未在期限内进入 ${expected}`);
+}
+
 test("普通供应商实际入参必须等于 preview，且结果进入候选历史", async () => {
   const root = path.resolve(process.cwd(), "..", ".tmp", `sb-vendor-complete-${Date.now()}`);
   const originalCwd = process.cwd();
@@ -65,8 +78,15 @@ test("普通供应商实际入参必须等于 preview，且结果进入候选历
   Ai.Image = ((key: `${string}:${string}`) => {
     const saveResult = {
       async save(target: string) {
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, "vendor-image");
+        // 中文注释：当前保存合同传入项目相对路径，测试夹具必须写入真实项目 files/ 目录。
+        const context = currentUserStorage();
+        assert.ok(context, "后台图片保存必须保留账号上下文");
+        const absolute = path.join(
+          projectDirectory(getPath(), PROJECT, context.segment),
+          ...target.split("/"),
+        );
+        fs.mkdirSync(path.dirname(absolute), { recursive: true });
+        fs.writeFileSync(absolute, "vendor-image");
         return this;
       },
     };
@@ -97,6 +117,12 @@ test("普通供应商实际入参必须等于 preview，且结果进入候选历
         projectType: "storyboard" as "novel",
         userId: IDENTITY.userId,
       });
+      await accountDb("o_vendorConfig").insert({
+        id: "vendor",
+        inputValues: "{}",
+        models: JSON.stringify([{ modelName: "demo", name: "本地图片模型", type: "image" }]),
+        enable: 1,
+      }).onConflict("id").merge();
       syncCoordinator.listProjects = () => [{
         projectUuid: PROJECT, name: "供应商完整请求", kind: "personal", ownerUserId: IDENTITY.userId,
         role: "owner", myRole: "owner", currentVersion: 1, syncState: "synced",
@@ -142,6 +168,16 @@ test("普通供应商实际入参必须等于 preview，且结果进入候选历
           providerModel: "vendor:demo",
           mode: "text2image",
         });
+        const clientOperationId = String(generateBody.clientOperationId);
+        const accepted = await jsonRequest(`${base}/generate`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(generateBody),
+        });
+        assert.equal(accepted.status, 202, `生成受理应为 202，实际 ${accepted.status} ${JSON.stringify(accepted.body)}`);
+        assert.equal(accepted.body?.data?.tasks?.[0]?.status, "queued", JSON.stringify(accepted.body));
+        await waitForOperationState(clientOperationId, "completed");
+        // 中文注释：完成后用同一操作 ID 重放，读取权威 completed 快照且不得重复收费。
         const generated = await jsonRequest(`${base}/generate`, {
           method: "POST",
           headers: { "content-type": "application/json" },

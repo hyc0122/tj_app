@@ -246,12 +246,12 @@ test("单条与批量路由必须继续保留模型文件选择和 useData 优�
   }
 });
 
-test("应用迁移链的最新一步必须是中文默认视频提示词迁移", async () => {
+test("应用迁移链必须保留中文默认视频提示词并追加当前账号迁移尾", async () => {
   const { buildApplicationMigrations } = await import(
     "../../src/tianjiang/data/application-migrations"
   );
   const account = buildApplicationMigrations({ role: "account", skipEmbeddingInit: true });
   assert.ok(account.some((item) => item.name === "video-prompt-default-zh-v1"));
   assert.ok(account.some((item) => item.name === "database-role-account-v1"));
-  assert.equal(account.at(-1)?.name, "dreamina-dispatch-enqueue-idempotency-v1");
+  assert.equal(account.at(-1)?.name, "dreamina-cli-poll-seconds-v1");
 });

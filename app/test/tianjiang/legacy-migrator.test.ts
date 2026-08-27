@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 
 import { ProfileCrypto } from "../../src/tianjiang/crypto/profile-crypto";
 import { LegacyMigrator } from "../../src/tianjiang/migration/legacy-migrator";
+
+function createTestRoot(label: string): string {
+  // 中文注释：SQLite/WAL 夹具固定放在工作树短路径，避免系统 TEMP、杀毒软件和长路径造成非业务失败。
+  const base = path.resolve(process.cwd(), "..", ".tmp", "legacy-migrator");
+  fs.mkdirSync(base, { recursive: true });
+  return fs.mkdtempSync(path.join(base, `${label}-`));
+}
 
 function createLegacyFixture(root: string): { databasePath: string; filesRoot: string } {
   const databasePath = path.join(root, "db2.sqlite");
@@ -32,7 +38,7 @@ function createLegacyFixture(root: string): { databasePath: string; filesRoot: s
 }
 
 test("旧库迁移覆盖每表每行每文件并保留未知内容与只读备份", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tj-migrate-"));
+  const root = createTestRoot("success");
   const source = createLegacyFixture(root);
   const target = path.join(root, "target");
   const userUUID = "018f3d6e-2d9e-7b6c-8a9b-1234567890ab";
@@ -73,7 +79,7 @@ test("旧库迁移覆盖每表每行每文件并保留未知内容与只读备�
 
 test("中断、磁盘不足和损坏数据库不覆盖旧数据且不留下正式半迁移", async () => {
   for (const mode of ["interrupt", "disk", "corrupt"] as const) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), `tj-migrate-${mode}-`));
+    const root = createTestRoot(mode);
     const source = createLegacyFixture(root);
     if (mode === "corrupt") fs.writeFileSync(source.databasePath, "not-a-sqlite-database");
     const before = fs.readFileSync(source.databasePath);

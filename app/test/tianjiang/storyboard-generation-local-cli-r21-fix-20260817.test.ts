@@ -132,6 +132,21 @@ async function countRows(table: string): Promise<number> {
   });
 }
 
+async function waitForTaskState(
+  clientOperationId: string,
+  expected: string,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const row = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask")
+      .where({ clientOperationId })
+      .first("status", "errorCode", "errorSummary"));
+    if (String(row?.status ?? "") === expected) return row as Record<string, unknown>;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`任务 ${clientOperationId} 未在期限内进入 ${expected}`);
+}
+
 function vendorSource(id: string): string {
   return `
 const vendor = {
@@ -396,7 +411,7 @@ test("关闭即梦后必须服务端 fail-closed，不得探测或入队，重�
   });
 });
 
-test("grsai/klingai/vidu/minimax 对不支持的音频或视频引用必须 VENDOR_REFERENCE_UNSUPPORTED 且零写入", async () => {
+test("grsai/klingai/vidu/minimax 对不支持的引用必须入队后收敛失败", async () => {
   await withRuntime("r21-fix-vendor-types", async ({ boundShot, generateUrl, previewUrl }) => {
     const matrix = ["grsai", "klingai", "vidu", "minimax"] as const;
     for (const id of matrix) {
@@ -407,10 +422,10 @@ test("grsai/klingai/vidu/minimax 对不支持的音频或视频引用必须 VEND
       assert.equal(audioCap.form, "none", `${id} audio`);
       assert.equal(videoCap.form, "none", `${id} video`);
       u.vendor.writeCode(id, vendorSource(id));
-      const existing = await accountDatabase()("o_vendorConfig").where({ id }).first();
-      if (!existing) {
-        await accountDatabase()("o_vendorConfig").insert({ id, inputValues: "{}", models: "[]", enable: 1 });
-      }
+      const models = JSON.stringify([{ modelName: "video", name: `${id} 测试视频模型`, type: "video" }]);
+      await accountDatabase()("o_vendorConfig").insert({
+        id, inputValues: "{}", models, enable: 1,
+      }).onConflict("id").merge({ inputValues: "{}", models, enable: 1 });
       const body = {
         shotUuid: boundShot,
         mediaType: "video",
@@ -421,16 +436,24 @@ test("grsai/klingai/vidu/minimax 对不支持的音频或视频引用必须 VEND
       };
       const preview = await postJson(previewUrl, body);
       assert.equal(preview.status, 200, `${id} ${JSON.stringify(preview.body)}`);
+      const clientOperationId = crypto.randomUUID();
       const generated = await postJson(generateUrl, {
         ...body,
         expectedPreviewDigest: preview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId,
       });
-      assert.equal(generated.status, 400, `${id} ${JSON.stringify(generated.body)}`);
-      assert.equal(generated.body?.code, "VENDOR_REFERENCE_UNSUPPORTED");
-      assert.equal(generated.body?.message, "当前视频模型不支持参考素材输入");
-      assert.equal(await countRows("o_storyboardGenerationOperation"), 0, id);
-      assert.equal(await countRows("o_storyboardGenerationTask"), 0, id);
+      assert.equal(generated.status, 202, `${id} ${JSON.stringify(generated.body)}`);
+      assert.equal(generated.body?.data?.clientOperationId, clientOperationId, id);
+      assert.equal(generated.body?.data?.tasks?.[0]?.status, "queued", id);
+      const failedTask = await waitForTaskState(clientOperationId, "failed_fatal");
+      // 中文注释：供应商引用适配属于后台阶段，HTTP 提交只确认耐久写入，不同步返回运行态错误。
+      assert.deepEqual(failedTask, {
+        status: "failed_fatal",
+        errorCode: "VENDOR_GENERATION_FAILED",
+        errorSummary: "普通供应商生成失败，请检查模型配置或稍后重试",
+      }, id);
+      assert.equal(await countRows("o_storyboardGenerationOperation"), matrix.indexOf(id) + 1, id);
+      assert.equal(await countRows("o_storyboardGenerationTask"), matrix.indexOf(id) + 1, id);
       assert.equal(await countRows("o_dreaminaCliDispatch"), 0, id);
     }
   });
@@ -478,12 +501,12 @@ test("内联 JPG/WAV 必须使用文件头 MIME；替换文件或错误摘要必
     );
 
     u.vendor.writeCode("klingai", vendorSource("klingai"));
-    const existing = await accountDatabase()("o_vendorConfig").where({ id: "klingai" }).first();
-    if (!existing) {
-      await accountDatabase()("o_vendorConfig").insert({
-        id: "klingai", inputValues: "{}", models: "[]", enable: 1,
-      });
-    }
+    const klingModels = JSON.stringify([
+      { modelName: "video", name: "Kling 测试视频模型", type: "video" },
+    ]);
+    await accountDatabase()("o_vendorConfig").insert({
+      id: "klingai", inputValues: "{}", models: klingModels, enable: 1,
+    }).onConflict("id").merge({ inputValues: "{}", models: klingModels, enable: 1 });
     await runWithProjectStorage(PROJECT, async () => {
       await activeDb("o_assetsRole2Audio").del();
     });

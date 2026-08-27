@@ -241,7 +241,7 @@ async function withRuntime(
   }
 }
 
-test("P1-1 CLI 路径存在但 version/-h 失败必须是 UNAVAILABLE 而不是未安装", async () => {
+test("P1-1 CLI 路径存在但 version/-h 失败时提交接口仍先耐久入队", async () => {
   await withRuntime("r22-fix2-install-failed", async ({ boundShot, generateUrl, previewUrl, logFile }) => {
     process.env.DREAMINA_FAKE_SCENARIO = "not_installed";
     resetDreaminaStartupStatusCheckForTests();
@@ -260,26 +260,30 @@ test("P1-1 CLI 路径存在但 version/-h 失败必须是 UNAVAILABLE 而不是�
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
+    const clientOperationId = crypto.randomUUID();
     const generated = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...body,
         expectedPreviewDigest: preview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId,
       }),
     });
     leakFree(JSON.stringify(generated.body));
-    assert.equal(generated.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE", JSON.stringify(generated.body));
-    assert.notEqual(generated.body?.code, "DREAMINA_CLI_NOT_INSTALLED");
+    assert.equal(generated.status, 200, JSON.stringify(generated.body));
+    assert.equal(generated.body?.code, 0, JSON.stringify(generated.body));
+    assert.equal(generated.body?.data?.[0]?.status, "queued", JSON.stringify(generated.body));
+    assert.equal(generated.body?.data?.[0]?.clientOperationId, clientOperationId);
     assert.equal(commandLog(logFile).includes("login"), false, JSON.stringify(commandLog(logFile)));
-    assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
-    assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+    assert.equal(await countRows("o_storyboardGenerationOperation"), 1);
+    assert.equal(await countRows("o_storyboardGenerationTask"), 1);
+    // 中文注释：此路由夹具不启动队列消费者，因此只验证提交与持久化边界。
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
   });
 });
 
-test("P1-2 失败任务 retry 携带 request 时 failed/null 缓存必须先统一检测", async () => {
+test("P1-2 失败任务 retry 携带 request 时先耐久入队，再由任务返回能力错误", async () => {
   await withRuntime("r22-fix2-retry-ready-check", async ({ boundShot, retryUrl, logFile }) => {
     writeReadyDreaminaTestCapability();
     const [parent] = await enqueueAsyncMediaTasks({
@@ -320,25 +324,26 @@ test("P1-2 失败任务 retry 携带 request 时 failed/null 缓存必须先统�
     resetDreaminaStartupStatusCheckForTests();
     process.env.DREAMINA_FAKE_SCENARIO = "not_installed";
     fs.writeFileSync(logFile, "");
+    const failedClientOperationId = crypto.randomUUID();
     const failedRetry = await jsonRequest(retryUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         taskUuid: parent.taskUuid,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: failedClientOperationId,
       }),
     });
     leakFree(JSON.stringify(failedRetry.body));
-    assert.equal(failedRetry.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE", JSON.stringify(failedRetry.body));
-    assert.notEqual(failedRetry.body?.code, "DREAMINA_CLI_NOT_INSTALLED");
+    assert.equal(failedRetry.status, 200, JSON.stringify(failedRetry.body));
+    assert.equal(failedRetry.body?.code, 200, JSON.stringify(failedRetry.body));
+    assert.equal(failedRetry.body?.data?.status, "queued", JSON.stringify(failedRetry.body));
+    assert.equal(failedRetry.body?.data?.clientOperationId, failedClientOperationId);
     const commands = commandLog(logFile);
-    assert.ok(commands.includes("version") || commands.includes("-h"), JSON.stringify(commands));
     assert.equal(commands.includes("login"), false, JSON.stringify(commands));
-    assert.equal(await countRows("o_storyboardGenerationOperation"), before.operations);
-    assert.equal(await countRows("o_storyboardGenerationTask"), before.tasks);
+    assert.equal(await countRows("o_storyboardGenerationOperation"), before.operations + 1);
+    assert.equal(await countRows("o_storyboardGenerationTask"), before.tasks + 1);
     assert.equal(Number((await accountDb("o_dreaminaCliDispatch")
-      .count<{ total: number }>("taskUuid as total").first())?.total ?? 0), before.dispatch);
-
+      .count<{ total: number }>("taskUuid as total").first())?.total ?? 0), before.dispatch + 1);
     delete process.env.DREAMINA_FAKE_SCENARIO;
     delete process.env.DREAMINA_CLI_TIMEOUT_MS;
     writeReadyDreaminaTestCapability();
@@ -361,9 +366,78 @@ test("P1-2 失败任务 retry 携带 request 时 failed/null 缓存必须先统�
   });
 });
 
-test("P1-2 未安装/未登录/不可用/模式不支持必须保持四态且零授权", async () => {
-  await withRuntime("r22-fix2-four-state", async ({ boundShot, generateUrl, previewUrl, logFile }) => {
-    const dreaminaBody = {
+test("P1-2 未安装/未登录/不可用先入队，已发布能力明确禁用模式仍同步拒绝", async () => {
+  const scenarios = [
+    {
+      name: "missing",
+      setup: async () => {
+        delete process.env.DREAMINA_TEST_EXECUTABLE;
+        await writeDreaminaCliSettings({ enabled: true, executablePath: path.join(process.cwd(), "missing-dreamina.exe") });
+      },
+    },
+    {
+      name: "logged-out",
+      setup: async () => {
+        process.env.DREAMINA_TEST_EXECUTABLE = FAKE_CLI;
+        await writeDreaminaCliSettings({ enabled: true, executablePath: FAKE_CLI });
+        process.env.DREAMINA_FAKE_SCENARIO = "not_logged_in";
+      },
+    },
+    {
+      name: "unavailable",
+      setup: async () => {
+        process.env.DREAMINA_TEST_EXECUTABLE = FAKE_CLI;
+        await writeDreaminaCliSettings({ enabled: true, executablePath: FAKE_CLI });
+        process.env.DREAMINA_FAKE_SCENARIO = "not_installed";
+      },
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    await withRuntime(`r22-fix2-four-state-${scenario.name}`, async ({ boundShot, generateUrl, previewUrl, logFile }) => {
+      await scenario.setup();
+      resetDreaminaStartupStatusCheckForTests();
+      invalidateDreaminaCapabilityCache();
+      fs.writeFileSync(logFile, "");
+      const body = {
+        shotUuid: boundShot,
+        mediaType: "video",
+        providerModel: "dreamina-cli:seedance2.0",
+        mode: "auto",
+        durationMs: 5000,
+        aspectRatio: "9:16",
+      };
+      const preview = await jsonRequest(previewUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const clientOperationId = crypto.randomUUID();
+      const accepted = await jsonRequest(generateUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...body,
+          expectedPreviewDigest: preview.body?.data?.previewDigest ?? "0".repeat(64),
+          clientOperationId,
+        }),
+      });
+      leakFree(JSON.stringify(accepted.body));
+      assert.equal(accepted.status, 200, `${scenario.name} ${JSON.stringify(accepted.body)}`);
+      assert.equal(accepted.body?.code, 0, `${scenario.name} ${JSON.stringify(accepted.body)}`);
+      assert.equal(accepted.body?.data?.[0]?.status, "queued", `${scenario.name} ${JSON.stringify(accepted.body)}`);
+      assert.equal(accepted.body?.data?.[0]?.clientOperationId, clientOperationId);
+      assert.equal(commandLog(logFile).includes("login"), false);
+      assert.equal(await countRows("o_storyboardGenerationOperation"), 1);
+      assert.equal(await countRows("o_storyboardGenerationTask"), 1);
+      assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
+    });
+  }
+
+  await withRuntime("r22-fix2-four-state-mode-unsupported", async ({ boundShot, generateUrl, previewUrl, logFile }) => {
+    writeReadyModes({ text2video: { enabled: false, fields: [] } });
+    fs.writeFileSync(logFile, "");
+    const body = {
       shotUuid: boundShot,
       mediaType: "video",
       providerModel: "dreamina-cli:seedance2.0",
@@ -371,99 +445,25 @@ test("P1-2 未安装/未登录/不可用/模式不支持必须保持四态且零
       durationMs: 5000,
       aspectRatio: "9:16",
     };
-
-    const previousExec = process.env.DREAMINA_TEST_EXECUTABLE;
-    delete process.env.DREAMINA_TEST_EXECUTABLE;
-    await writeDreaminaCliSettings({ enabled: true, executablePath: path.join(process.cwd(), "missing-dreamina.exe") });
-    resetDreaminaStartupStatusCheckForTests();
-    invalidateDreaminaCapabilityCache();
-    fs.writeFileSync(logFile, "");
-    const missingPreview = await jsonRequest(previewUrl, {
+    const preview = await jsonRequest(previewUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
-    });
-    const missing = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: missingPreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(missing.body));
-    assert.equal(missing.body?.code, "DREAMINA_CLI_NOT_INSTALLED", JSON.stringify(missing.body));
-    assert.equal(commandLog(logFile).includes("login"), false);
-
-    process.env.DREAMINA_TEST_EXECUTABLE = previousExec ?? FAKE_CLI;
-    await writeDreaminaCliSettings({ enabled: true, executablePath: FAKE_CLI });
-    process.env.DREAMINA_FAKE_SCENARIO = "not_logged_in";
-    resetDreaminaStartupStatusCheckForTests();
-    invalidateDreaminaCapabilityCache();
-    fs.writeFileSync(logFile, "");
-    const loggedOutPreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
-    });
-    const loggedOut = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: loggedOutPreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(loggedOut.body));
-    assert.equal(loggedOut.body?.code, "DREAMINA_CLI_NOT_LOGGED_IN", JSON.stringify(loggedOut.body));
-    assert.equal(commandLog(logFile).includes("login"), false);
-
-    process.env.DREAMINA_FAKE_SCENARIO = "not_installed";
-    resetDreaminaStartupStatusCheckForTests();
-    invalidateDreaminaCapabilityCache();
-    fs.writeFileSync(logFile, "");
-    const failedPreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
-    });
-    const failed = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: failedPreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(failed.body));
-    assert.equal(failed.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE", JSON.stringify(failed.body));
-    assert.notEqual(failed.body?.code, "DREAMINA_CLI_NOT_INSTALLED");
-    assert.equal(commandLog(logFile).includes("login"), false);
-
-    delete process.env.DREAMINA_FAKE_SCENARIO;
-    writeReadyModes({
-      text2video: { enabled: false, fields: [] },
-    });
-    fs.writeFileSync(logFile, "");
-    const modePreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
+      body: JSON.stringify(body),
     });
     const unsupported = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: modePreview.body?.data?.previewDigest ?? "0".repeat(64),
+        ...body,
+        expectedPreviewDigest: preview.body?.data?.previewDigest ?? "0".repeat(64),
         clientOperationId: crypto.randomUUID(),
       }),
     });
     leakFree(JSON.stringify(unsupported.body));
-    assert.equal(unsupported.body?.code, "STORYBOARD_DREAMINA_MODE_UNSUPPORTED", JSON.stringify(unsupported.body));
+    assert.equal(unsupported.status, 400, JSON.stringify(unsupported.body));
+    assert.equal(unsupported.body?.code, "400", JSON.stringify(unsupported.body));
+    assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
+    assert.equal(await countRows("o_storyboardGenerationTask"), 0);
     assert.equal(commandLog(logFile).includes("login"), false);
     assert.equal(commandLog(logFile).some((item) => String(item).endsWith("2video")), false);
   });

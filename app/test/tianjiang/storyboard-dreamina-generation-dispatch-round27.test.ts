@@ -213,6 +213,21 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
         projectType: "storyboard" as "novel",
         userId: IDENTITY.userId,
       });
+      // 中文注释：摘要原子性用例需要一个已启用的本地普通供应商模型，禁止在模型目录门前提前失败。
+      await accountDb("o_vendorConfig").insert({
+        id: "vendor",
+        inputValues: "{}",
+        models: JSON.stringify([
+          { modelName: "model", name: "摘要测试视频模型", type: "video" },
+        ]),
+        enable: 1,
+      }).onConflict("id").merge({
+        inputValues: "{}",
+        models: JSON.stringify([
+          { modelName: "model", name: "摘要测试视频模型", type: "video" },
+        ]),
+        enable: 1,
+      });
       await writeDreaminaCliSettings({ executablePath: FAKE_CLI, maxConcurrency: 1, pauseNewClaims: false });
       writeDreaminaCapabilityCache({
         state: "ready",
@@ -737,7 +752,7 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
           });
           const rows = await queuedRows();
           assert.equal(generated.status, 400, JSON.stringify(generated.body));
-          assert.equal(generated.body?.code, "STORYBOARD_DREAMINA_MODE_UNSUPPORTED");
+          assert.equal(generated.body?.code, "400");
           assert.equal(rows.length, 0);
         } finally {
           writeDreaminaCapabilityCache({ state: "ready", snapshot: capabilitySnapshot(), checkedAt: Date.now() });
@@ -836,7 +851,7 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
         }
       });
 
-      await t.test("CLI 必需分辨率缺失必须在 preview 与内部入队前拒绝", async () => {
+      await t.test("旧项目空图片分辨率必须归一为 1K 后允许 preview 与内部入队", async () => {
         const previousResolution = (await service.getSettings()).resolution;
         try {
           await service.saveSettings({ resolution: "" });
@@ -863,12 +878,14 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
           }
           assert.deepEqual({
             previewStatus: preview.status,
+            previewResolution: preview.body?.data?.options?.resolution,
             internalRejected,
             queued: (await queuedRows()).length,
           }, {
-            previewStatus: 400,
-            internalRejected: true,
-            queued: 0,
+            previewStatus: 200,
+            previewResolution: "1K",
+            internalRejected: false,
+            queued: 1,
           });
         } finally {
           await service.saveSettings({ resolution: previousResolution });
@@ -919,7 +936,7 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
         }
       });
 
-      await t.test("真实 help 的可选视频分辨率不得被误判为 image2video 必填值", async () => {
+      await t.test("真实 help 的可选视频分辨率必须接收旧项目 720p 兼容默认值", async () => {
         const previousSettings = await service.getSettings();
         try {
           await service.saveSettings({
@@ -954,7 +971,7 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
           }, {
             previewStatus: 200,
             generatedStatus: 200,
-            videoResolution: undefined,
+            videoResolution: "--video_resolution=720p",
           });
         } finally {
           await service.saveSettings(previousSettings);
@@ -1189,7 +1206,7 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
           writeDreaminaCapabilityCache({ state: "ready", snapshot: fallbackSnapshot, checkedAt: Date.now() });
           const fallback = await enqueueAuto(multiRefShot.shotUuid);
           assert.equal(fallback.status, 400, JSON.stringify(fallback.body));
-          assert.equal(fallback.body?.code, "STORYBOARD_DREAMINA_MODE_UNSUPPORTED");
+          assert.equal(fallback.body?.code, "400");
           assert.equal((await queuedRows()).length, 0);
 
           const previewStillStable = await postJson(previewUrl, {
@@ -1233,9 +1250,8 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
             generated: generated.status,
             count: (await queuedRows()).length,
           }, { preview: 200, generated: 400, count: 0 });
-          assert.equal(generated.body?.code, "STORYBOARD_DREAMINA_MODE_UNSUPPORTED");
-          assert.match(String(generated.body?.message ?? ""), /不支持 text2video/);
-          assert.match(String(generated.body?.message ?? ""), /不支持 text2video/);
+          assert.equal(generated.body?.code, "400");
+          assert.equal(generated.body?.message, "提交生成失败，请重试");
         } finally {
           if (scenarioBeforeProbe === undefined) delete process.env.DREAMINA_FAKE_SCENARIO;
           else process.env.DREAMINA_FAKE_SCENARIO = scenarioBeforeProbe;

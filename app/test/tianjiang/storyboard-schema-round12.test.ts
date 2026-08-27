@@ -78,7 +78,7 @@ test("账号角色迁移链只写账号角色标记，不得创建分镜表", ()
   assert.ok(videoPrompt);
   assert.ok(roleMarker);
   assert.equal(roleMarker!.version, videoPrompt!.version + 1);
-  assert.equal(account.at(-1)?.name, "dreamina-dispatch-enqueue-idempotency-v1");
+  assert.equal(account.at(-1)?.name, "dreamina-cli-poll-seconds-v1");
   assert.ok(!account.some((item) => item.name === "storyboard-project-schema-v1"));
 });
 

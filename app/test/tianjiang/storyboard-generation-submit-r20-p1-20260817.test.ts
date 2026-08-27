@@ -12,6 +12,7 @@ import test from "node:test";
 
 import Ai from "../../src/utils/ai";
 import {
+  accountDb,
   activateUserDatabase,
   db as activeDb,
   destroyAllDatabaseHandles,
@@ -40,13 +41,12 @@ import {
   createStoryboardGenerationPreviewDigest,
   type FinalGenerationRequest,
 } from "../../src/tianjiang/storyboard/storyboard-generation-service";
+import { createSafeVendorPhaseError } from "../../src/tianjiang/storyboard/vendor-generation-safety";
 import { writeReadyDreaminaTestCapability } from "./helpers/dreamina-capability";
 import { closeActivatedWorkspaceRuntime } from "./helpers/worktree-runtime";
 
 const IDENTITY = { issuer: "https://api.j11.com.cn", userId: 2020 };
 const PROJECT = "a0202020-2020-4020-a020-202020202020";
-const LEAK = "sk-secret https://signed.example/file C:\\Users\\alice\\secret.mp4";
-
 const PUBLISHED_TEXT2VIDEO = [
   "--prompt",
   "--duration",
@@ -107,6 +107,21 @@ async function countRows(table: string): Promise<number> {
     const rows = await activeDb(table).select();
     return rows.length;
   });
+}
+
+async function waitForTaskState(
+  clientOperationId: string,
+  expected: string,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const task = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask")
+      .where({ clientOperationId })
+      .first("status", "errorCode", "errorSummary"));
+    if (String(task?.status ?? "") === expected) return task as Record<string, unknown>;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`任务 ${clientOperationId} 未在期限内进入 ${expected}`);
 }
 
 function writeReadyLiveText2Video(): void {
@@ -177,7 +192,7 @@ test("用户确认摘要不得因 capabilityFields 元数据变化而漂移，�
   );
 });
 
-test("普通供应商 prepare/stage/execute 必须返回分阶安全码，prepare/stage 零写入零 execute", async () => {
+test("普通供应商 prepare/stage/execute 必须受理后写回分阶码，prepare/stage 零 execute", async () => {
   const root = path.resolve(process.cwd(), "..", ".tmp", `r20-vendor-phase-${process.pid}-${crypto.randomUUID()}`);
   const previousCwd = process.cwd();
   const previousNodeEnv = process.env.NODE_ENV;
@@ -193,18 +208,18 @@ test("普通供应商 prepare/stage/execute 必须返回分阶安全码，prepar
   Ai.Video = ((key: `${string}:${string}`) => ({
     async prepare() {
       if (key.endsWith(":prepare-fails")) {
-        throw new Error(`prepare ${LEAK}`);
+        throw createSafeVendorPhaseError("prepare");
       }
       return {
         async stage() {
           if (key.endsWith(":stage-fails")) {
-            throw new Error(`stage ${LEAK}`);
+            throw createSafeVendorPhaseError("stage");
           }
           return {
             async execute() {
               counts.execute += 1;
               if (key.endsWith(":execute-fails")) {
-                throw new Error(`execute ${LEAK}`);
+                throw createSafeVendorPhaseError("execute");
               }
               return {
                 async save(target: string) {
@@ -230,6 +245,16 @@ test("普通供应商 prepare/stage/execute 必须返回分阶安全码，prepar
         projectType: "storyboard" as "novel",
         userId: IDENTITY.userId,
       });
+      await accountDb("o_vendorConfig").insert({
+        id: "loopback",
+        inputValues: "{}",
+        models: JSON.stringify([
+          { modelName: "prepare-fails", name: "预备失败模型", type: "video" },
+          { modelName: "stage-fails", name: "暂存失败模型", type: "video" },
+          { modelName: "execute-fails", name: "执行失败模型", type: "video" },
+        ]),
+        enable: 1,
+      }).onConflict("id").merge();
       syncCoordinator.listProjects = () => [catalogRow()] as never;
       const service = new StoryboardService(PROJECT);
       await service.saveSettings({ resolution: "720p", aspectRatio: "9:16", durationMs: 5000 });
@@ -268,41 +293,41 @@ test("普通供应商 prepare/stage/execute 必须返回分阶安全码，prepar
         const preview = await postJson(previewUrl, { ...base, providerModel });
         assert.equal(preview.status, 200, JSON.stringify(preview.body));
         const beforeExecute = counts.execute;
+        const clientOperationId = crypto.randomUUID();
         const generated = await postJson(generateUrl, {
           ...base,
           providerModel,
           expectedPreviewDigest: preview.body?.data?.previewDigest,
-          clientOperationId: crypto.randomUUID(),
+          clientOperationId,
         });
-        return { generated, executeDelta: counts.execute - beforeExecute };
+        assert.equal(generated.status, 202, JSON.stringify(generated.body));
+        assert.equal(generated.body?.data?.tasks?.[0]?.status, "queued", JSON.stringify(generated.body));
+        const task = await waitForTaskState(clientOperationId, "failed_fatal");
+        return { generated, task, executeDelta: counts.execute - beforeExecute };
       };
 
       const prepareFail = await submit("loopback:prepare-fails");
       leakFree(JSON.stringify(prepareFail.generated.body));
-      assert.equal(prepareFail.generated.status, 400);
-      assert.equal(prepareFail.generated.body?.code, "VENDOR_PREPARE_FAILED");
-      assert.equal(prepareFail.generated.body?.message, "当前视频模型配置或请求参数不可用");
+      assert.equal(prepareFail.task.errorCode, "VENDOR_PREPARE_FAILED");
       assert.equal(prepareFail.executeDelta, 0);
-      assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
-      assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+      assert.equal(await countRows("o_storyboardGenerationOperation"), 1);
+      assert.equal(await countRows("o_storyboardGenerationTask"), 1);
       assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
 
       const stageFail = await submit("loopback:stage-fails");
       leakFree(JSON.stringify(stageFail.generated.body));
-      assert.equal(stageFail.generated.status, 400);
-      assert.equal(stageFail.generated.body?.code, "VENDOR_MEDIA_STAGING_FAILED");
-      assert.equal(stageFail.generated.body?.message, "参考素材暂存失败，请检查网络或稍后重试");
+      assert.equal(stageFail.task.errorCode, "VENDOR_MEDIA_STAGING_FAILED");
       assert.equal(stageFail.executeDelta, 0);
-      assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
-      assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+      assert.equal(await countRows("o_storyboardGenerationOperation"), 2);
+      assert.equal(await countRows("o_storyboardGenerationTask"), 2);
       assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
 
       const executeFail = await submit("loopback:execute-fails");
       leakFree(JSON.stringify(executeFail.generated.body));
-      assert.equal(executeFail.generated.status, 400);
-      assert.equal(executeFail.generated.body?.code, "VENDOR_GENERATION_FAILED");
-      assert.equal(executeFail.generated.body?.message, "普通供应商生成失败，请检查模型配置或稍后重试");
+      assert.equal(executeFail.task.errorCode, "VENDOR_GENERATION_FAILED");
       assert.ok(executeFail.executeDelta >= 1);
+      assert.equal(await countRows("o_storyboardGenerationOperation"), 3);
+      assert.equal(await countRows("o_storyboardGenerationTask"), 3);
     });
   } finally {
     if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));

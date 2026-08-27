@@ -137,8 +137,15 @@ async function withRoutingRuntime(
         paidInvocations.push(key);
         return {
           async save(target: string) {
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.writeFileSync(target, "r14-vendor-video");
+            // 中文注释：当前保存合同接收项目相对路径；旧夹具写到进程 cwd 且伪造文本视频，会被真实 MP4 门禁拒绝。
+            const context = currentUserStorage();
+            assert.ok(context, "后台视频保存必须保留账号上下文");
+            const absolute = path.join(
+              projectDirectory(getPath(), PROJECT, context.segment),
+              ...target.split("/"),
+            );
+            fs.mkdirSync(path.dirname(absolute), { recursive: true });
+            fs.copyFileSync(path.resolve(__dirname, "fixtures/minimal-adoptable.mp4"), absolute);
             return this;
           },
         };
@@ -158,6 +165,20 @@ async function withRoutingRuntime(
       await initializeWorkspaceProject(PROJECT, {
         id: 1414, name: "R14 路由", projectType: "storyboard" as "novel", userId: IDENTITY.userId,
       });
+      await accountDb("o_vendorConfig").insert([
+        {
+          id: "vendor-alpha",
+          inputValues: "{}",
+          models: JSON.stringify([{ modelName: "kling-v1", name: "Alpha 视频模型", type: "video" }]),
+          enable: 1,
+        },
+        {
+          id: "vendor-beta",
+          inputValues: "{}",
+          models: JSON.stringify([{ modelName: "gen3-turbo", name: "Beta 视频模型", type: "video" }]),
+          enable: 1,
+        },
+      ]).onConflict("id").merge();
       syncCoordinator.listProjects = () => [catalogRow()] as any;
       stopDreaminaSchedulerLoop();
       await accountDb("o_dreaminaCliSettings").where({ id: 1 }).update({
@@ -303,8 +324,24 @@ test("普通供应商正式提交只走 fake Ai.Video，并保留 previewDigest 
         clientOperationId,
       }),
     });
-    assert.ok(generate.status === 200 || generate.status === 202, JSON.stringify(generate.body));
-    assert.equal(generate.body?.data?.[0]?.clientOperationId, clientOperationId);
+    assert.equal(generate.status, 202, JSON.stringify(generate.body));
+    assert.equal(generate.body?.data?.clientOperationId, clientOperationId);
+    assert.equal(generate.body?.data?.tasks?.[0]?.clientOperationId, clientOperationId);
+    const deadline = Date.now() + 3_000;
+    let operationState = "";
+    let taskState: Record<string, unknown> | undefined;
+    while (Date.now() < deadline) {
+      const operation = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationOperation")
+        .where({ clientOperationId })
+        .first("state"));
+      operationState = String(operation?.state ?? "");
+      taskState = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask")
+        .where({ clientOperationId })
+        .first("status", "errorCode", "errorSummary"));
+      if (operationState === "completed" || operationState === "failed_fatal") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(operationState, "completed", `普通供应商后台任务必须完成：${JSON.stringify(taskState)}`);
     const writes = await countWrites(cliLog);
     assert.equal(writes.dispatches, 0, "普通供应商不得创建 Dreamina dispatch");
     assert.equal(writes.cli, 0, "普通供应商不得启动 dreamina CLI");

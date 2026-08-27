@@ -144,6 +144,21 @@ async function countRows(table: string): Promise<number> {
   });
 }
 
+async function waitForTaskState(
+  clientOperationId: string,
+  expected: string,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const row = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask")
+      .where({ clientOperationId })
+      .first("status", "errorCode", "errorSummary"));
+    if (String(row?.status ?? "") === expected) return row as Record<string, unknown>;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`任务 ${clientOperationId} 未在期限内进入 ${expected}`);
+}
+
 function vendorStub(id: string, extra = ""): string {
   return `
 const vendor = {
@@ -322,7 +337,7 @@ async function withRuntime(
   }
 }
 
-test("P1-1 getStatus logged_in 后生成必须读同一用户能力缓存，不得 CLI_UNAVAILABLE", async () => {
+test("P1-1 getStatus 与耐久提交解耦，提交不得等待当前 CLI 能力探测", async () => {
   await withRuntime("r22-p1-dreamina-cache", async ({ boundShot, generateUrl, previewUrl, statusUrl, logFile }) => {
     let vendorStageCalls = 0;
     configureModelMediaResolver({
@@ -377,23 +392,26 @@ test("P1-1 getStatus logged_in 后生成必须读同一用户能力缓存，不�
     assert.equal(await countRows("o_storyboardGenerationTask"), 0);
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
 
+    const generatedOperationId = crypto.randomUUID();
     const generated = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...dreaminaBody,
         expectedPreviewDigest: preview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: generatedOperationId,
       }),
     });
     leakFree(JSON.stringify(generated.body));
     assert.notEqual(generated.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE", JSON.stringify(generated.body));
-    assert.notEqual(generated.status, 400, JSON.stringify(generated.body));
+    assert.equal(generated.status, 200, JSON.stringify(generated.body));
+    assert.equal(generated.body?.data?.[0]?.status, "queued", JSON.stringify(generated.body));
+    assert.equal(generated.body?.data?.[0]?.clientOperationId, generatedOperationId, JSON.stringify(generated.body));
     // 中文注释：即梦引用由本地 CLI 消费，普通供应商 resolver 即使被配置也必须保持零调用。
     assert.equal(vendorStageCalls, 0);
     const cachedAfter = readDreaminaCapabilityCache();
-    assert.equal(cachedAfter.state, "ready", JSON.stringify(cachedAfter));
-    assert.equal(cachedAfter.snapshot?.loggedIn, true);
+    // 中文注释：HTTP 提交只使用已发布能力合同，不得为了响应而刷新当前 CLI 能力缓存。
+    assert.equal(cachedAfter.state, "not_checked", JSON.stringify(cachedAfter));
     const commands = commandLog(logFile);
     const rawLines = fs.existsSync(logFile)
       ? fs.readFileSync(logFile, "utf8").trim().split(/\n/).filter(Boolean).map((line) =>
@@ -429,30 +447,35 @@ test("P1-1 getStatus logged_in 后生成必须读同一用户能力缓存，不�
     invalidateDreaminaCapabilityCache();
     process.env.DREAMINA_FAKE_SCENARIO = "not_logged_in";
     fs.writeFileSync(logFile, "");
+    const loggedOutOperationId = crypto.randomUUID();
     const loggedOut = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...dreaminaBody,
         expectedPreviewDigest: preview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: loggedOutOperationId,
       }),
     });
-    assert.equal(loggedOut.body?.code, "DREAMINA_CLI_NOT_LOGGED_IN", JSON.stringify(loggedOut.body));
+    assert.equal(loggedOut.status, 200, JSON.stringify(loggedOut.body));
+    assert.equal(loggedOut.body?.code, 0, JSON.stringify(loggedOut.body));
+    assert.equal(loggedOut.body?.data?.[0]?.status, "queued", JSON.stringify(loggedOut.body));
+    assert.equal(loggedOut.body?.data?.[0]?.clientOperationId, loggedOutOperationId, JSON.stringify(loggedOut.body));
     assert.notEqual(loggedOut.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE");
     assert.equal(commandLog(logFile).includes("login"), false);
   });
 });
 
-test("P1-2 项目视频模型混合参考必须先按合同分类，暂存失败带稳定子码且零写入", async () => {
+test("P1-2 项目视频模型混合参考必须入队后按后台阶段收敛失败", async () => {
   await withRuntime("r22-p1-vendor-stage", async ({ boundShot, generateUrl, previewUrl }) => {
     const unsupported = "grsai";
     u.vendor.writeCode(unsupported, vendorStub(unsupported));
-    if (!await accountDatabase()("o_vendorConfig").where({ id: unsupported }).first()) {
-      await accountDatabase()("o_vendorConfig").insert({
-        id: unsupported, inputValues: "{}", models: "[]", enable: 1,
-      });
-    }
+    const unsupportedModels = JSON.stringify([
+      { modelName: "video", name: "不支持引用的视频模型", type: "video" },
+    ]);
+    await accountDatabase()("o_vendorConfig").insert({
+      id: unsupported, inputValues: "{}", models: unsupportedModels, enable: 1,
+    }).onConflict("id").merge({ inputValues: "{}", models: unsupportedModels, enable: 1 });
     let staged = 0;
     configureModelMediaResolver({
       signObject: async () => {
@@ -478,30 +501,35 @@ test("P1-2 项目视频模型混合参考必须先按合同分类，暂存失败
       body: JSON.stringify(unsupportedBody),
     });
     assert.equal(unsupportedPreview.status, 200, JSON.stringify(unsupportedPreview.body));
+    const unsupportedOperationId = crypto.randomUUID();
     const unsupportedGen = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...unsupportedBody,
         expectedPreviewDigest: unsupportedPreview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: unsupportedOperationId,
       }),
     });
     leakFree(JSON.stringify(unsupportedGen.body));
-    assert.equal(unsupportedGen.body?.code, "VENDOR_REFERENCE_UNSUPPORTED");
+    assert.equal(unsupportedGen.status, 202, JSON.stringify(unsupportedGen.body));
+    assert.equal(unsupportedGen.body?.data?.tasks?.[0]?.status, "queued");
+    const unsupportedTask = await waitForTaskState(unsupportedOperationId, "failed_fatal");
+    assert.equal(unsupportedTask.errorCode, "VENDOR_GENERATION_FAILED");
     assert.equal(staged, 0, "不支持的参考不得进入暂存");
-    assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
-    assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+    assert.equal(await countRows("o_storyboardGenerationOperation"), 1);
+    assert.equal(await countRows("o_storyboardGenerationTask"), 1);
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
 
     const volc = "volcengine";
     const realVolc = path.resolve(__dirname, "../../data/vendor/volcengine.ts");
     u.vendor.writeCode(volc, fs.readFileSync(realVolc, "utf8"));
-    if (!await accountDatabase()("o_vendorConfig").where({ id: volc }).first()) {
-      await accountDatabase()("o_vendorConfig").insert({
-        id: volc, inputValues: "{}", models: "[]", enable: 1,
-      });
-    }
+    const volcModels = JSON.stringify([
+      { modelName: "doubao-seedance-2-0-260128", name: "Seedance-2.0", type: "video" },
+    ]);
+    await accountDatabase()("o_vendorConfig").insert({
+      id: volc, inputValues: "{}", models: volcModels, enable: 1,
+    }).onConflict("id").merge({ inputValues: "{}", models: volcModels, enable: 1 });
     staged = 0;
     configureModelMediaResolver({
       stageLocalPath: async () => {
@@ -525,23 +553,24 @@ test("P1-2 项目视频模型混合参考必须先按合同分类，暂存失败
       body: JSON.stringify(urlBody),
     });
     assert.equal(urlPreview.status, 200, JSON.stringify(urlPreview.body));
+    const urlOperationId = crypto.randomUUID();
     const urlGen = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...urlBody,
         expectedPreviewDigest: urlPreview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: urlOperationId,
       }),
     });
     leakFree(JSON.stringify(urlGen.body));
-    assert.equal(urlGen.body?.code, "VENDOR_MEDIA_STAGING_FAILED", JSON.stringify(urlGen.body));
-    assert.equal(urlGen.body?.message, "参考素材暂存失败，请检查网络或稍后重试");
-    assert.equal(urlGen.body?.stagingStep, "upload_session", JSON.stringify(urlGen.body));
-    assert.equal(urlGen.body?.message.includes("E:"), false);
+    assert.equal(urlGen.status, 202, JSON.stringify(urlGen.body));
+    assert.equal(urlGen.body?.data?.tasks?.[0]?.status, "queued");
+    const urlTask = await waitForTaskState(urlOperationId, "failed_fatal");
+    assert.equal(urlTask.errorCode, "VENDOR_MEDIA_STAGING_FAILED", JSON.stringify(urlTask));
     assert.ok(staged >= 1);
-    assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
-    assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+    assert.equal(await countRows("o_storyboardGenerationOperation"), 2);
+    assert.equal(await countRows("o_storyboardGenerationTask"), 2);
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
   });
 });
@@ -549,11 +578,12 @@ test("P1-2 项目视频模型混合参考必须先按合同分类，暂存失败
 test("P1-4 Seedream 4.5 图片生成必须按阶段失败并落生成失败", async () => {
   await withRuntime("r22-p1-seedream", async ({ generateAssetsUrl }) => {
     u.vendor.writeCode("volcengine", vendorStub("volcengine"));
-    if (!await accountDatabase()("o_vendorConfig").where({ id: "volcengine" }).first()) {
-      await accountDatabase()("o_vendorConfig").insert({
-        id: "volcengine", inputValues: "{}", models: "[]", enable: 1,
-      });
-    }
+    const seedreamModels = JSON.stringify([
+      { modelName: "doubao-seedream-4-5-251128", name: "Seedream-4.5", type: "image" },
+    ]);
+    await accountDatabase()("o_vendorConfig").insert({
+      id: "volcengine", inputValues: "{}", models: seedreamModels, enable: 1,
+    }).onConflict("id").merge({ inputValues: "{}", models: seedreamModels, enable: 1 });
     const captured: string[] = [];
     const originalImage = u.Ai.Image;
     u.Ai.Image = ((key: `${string}:${string}`) => {

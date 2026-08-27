@@ -1,7 +1,6 @@
 /**
- * R24-fix7 RED：ensureDreaminaExecuteReady 未原子预留探测身份，
- * 正式 generate / retry 会沿用旧 A 的 startup/capability inFlight，
- * 甚至把 A 的能力快照写回已经迁到 B 的当前缓存。
+ * R24-fix7：直接探测必须按 A/B 身份隔离；正式 generate / retry 自 R32 起改为
+ * HTTP 立即耐久入队，因此这里只验证异步入队在路径迁移后不丢任务、不重复写入且不提前执行。
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -186,6 +185,33 @@ function installFirstHitGate(setHook: (hook: (() => Promise<void> | void) | null
   return { firstReached, releaseFirst };
 }
 
+async function waitForFirstHitOrEarlyResult<T>(
+  firstReached: Promise<void>,
+  operation: Promise<T>,
+  operationName: string,
+): Promise<void> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const outcome = await Promise.race([
+      firstReached.then(() => ({ kind: "first-hit" } as const)),
+      operation.then((result) => ({ kind: "early-result", result } as const)),
+      new Promise<{ kind: "timeout" }>((resolve) => {
+        // 中文注释：内部边界超时负责自然失败并进入 finally 清理，外层 90 秒看门狗只作最后兜底。
+        timeout = setTimeout(() => resolve({ kind: "timeout" }), 4_000);
+      }),
+    ]);
+    if (outcome.kind === "early-result") {
+      // 中文注释：操作若在探测钩子前结束，立即失败并进入 harness 的服务、数据库清理路径。
+      assert.fail(`${operationName} 在探测测试钩子前结束: ${JSON.stringify(outcome.result)}`);
+    }
+    if (outcome.kind === "timeout") {
+      assert.fail(`${operationName} 等待探测测试钩子超时`);
+    }
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function waitFor(label: string, check: () => boolean | Promise<boolean>, timeoutMs = 4000): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -247,7 +273,8 @@ async function withHarness(
       await writeDreaminaCliSettings({
         enabled: true,
         executablePath: FAKE_CLI,
-        pauseNewClaims: true,
+        // 中文注释：R26 后以 pauseReason 为唯一写入合同；手动暂停可稳定隔离 HTTP 入队与后台领取。
+        pauseReason: "manual_pause",
         maxConcurrency: 1,
       });
       await writeDreaminaRuntimeState({
@@ -405,7 +432,7 @@ test("ensureDreaminaExecuteReady 在 A 启动检测中暂停，R2 迁到 B 后�
       (value) => ({ ok: true as const, value }),
       (error) => ({ ok: false as const, error }),
     );
-    await firstReached;
+    await waitForFirstHitOrEarlyResult(firstReached, r1Promise, "executeReady R1");
     harness.timeline.push("R1-paused-in-A-startup");
     const before = await runWithUserStorage(IDENTITY, async () => ({
       settings: await readDreaminaCliSettings(),
@@ -443,7 +470,7 @@ test("ensureDreaminaExecuteReady 在 A 启动检测中暂停，R2 迁到 B 后�
   });
 });
 
-test("正式 generate 走同一竞态：旧 A 恢复后不得创建 operation/task/dispatch", async () => {
+test("正式 generate 立即耐久入队：A→B 迁移后唯一 operation/task/dispatch 必须保留且不得提前执行", async () => {
   await withHarness("r24-fix7-generate", { withProject: true }, async (harness) => {
     const body = {
       shotUuid: harness.shotUuid,
@@ -461,34 +488,52 @@ test("正式 generate 走同一竞态：旧 A 恢复后不得创建 operation/ta
     assert.equal(preview.status, 200, JSON.stringify(preview.body));
     const digest = String(preview.body?.data?.previewDigest ?? "");
     assert.match(digest, /^[a-f0-9]{64}$/);
-    const { firstReached, releaseFirst } = installFirstHitGate(setDreaminaStartupCheckBeforeProbeHookForTests);
-    harness.timeline.push("start-R1-generate");
-    const r1Promise = jsonRequest(harness.generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...body,
-        expectedPreviewDigest: digest,
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    await firstReached;
-    harness.timeline.push("R1-paused-in-A-startup");
-    const migrated = await migrateAToBAndRelease(harness);
     const beforeCounts = {
       operations: await countProjectRows("o_storyboardGenerationOperation"),
       tasks: await countProjectRows("o_storyboardGenerationTask"),
       dispatch: await countDispatch(),
     };
-    harness.timeline.push("release-R1");
-    releaseFirst();
-    const r1 = await r1Promise;
-    harness.timeline.push("R1-finished");
-    leakFree(JSON.stringify(r1.body ?? {}));
-    assert.notEqual(r1.status, 200, `旧 A 不得成功入队: ${JSON.stringify(r1)}`);
-    assert.equal(await countProjectRows("o_storyboardGenerationOperation"), beforeCounts.operations);
-    assert.equal(await countProjectRows("o_storyboardGenerationTask"), beforeCounts.tasks);
-    assert.equal(await countDispatch(), beforeCounts.dispatch);
+    let startupProbeHits = 0;
+    setDreaminaStartupCheckBeforeProbeHookForTests(() => {
+      startupProbeHits += 1;
+    });
+    const clientOperationId = crypto.randomUUID();
+    const queued = await jsonRequest(harness.generateUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...body,
+        expectedPreviewDigest: digest,
+        clientOperationId,
+      }),
+    });
+    leakFree(JSON.stringify(queued.body ?? {}));
+    assert.equal(queued.status, 200, JSON.stringify(queued.body));
+    assert.equal(startupProbeHits, 0, "HTTP 入队不得等待实时 startup 探测");
+    const queuedTask = Array.isArray(queued.body?.data) ? queued.body.data[0] : queued.body?.data;
+    const taskUuid = String(queuedTask?.taskUuid ?? "");
+    assert.match(taskUuid, /^[0-9a-f-]{36}$/i, JSON.stringify(queued.body));
+    assert.equal(String(queuedTask?.status ?? ""), "queued");
+    assert.equal(String(queuedTask?.clientOperationId ?? "").toLowerCase(), clientOperationId.toLowerCase());
+    assert.equal(await countProjectRows("o_storyboardGenerationOperation"), beforeCounts.operations + 1);
+    assert.equal(await countProjectRows("o_storyboardGenerationTask"), beforeCounts.tasks + 1);
+    assert.equal(await countDispatch(), beforeCounts.dispatch + 1);
+    assert.equal(commandNames(harness.logFile).some(isGenerateCommand), false, "HTTP 入队阶段不得调用生成命令");
+
+    setDreaminaStartupCheckBeforeProbeHookForTests(null);
+    const migrated = await migrateAToBAndRelease(harness);
+    const [projectTask, dispatch] = await Promise.all([
+      runWithProjectStorage(PROJECT, () =>
+        activeDb("o_storyboardGenerationTask").where({ taskUuid }).first()),
+      accountDb("o_dreaminaCliDispatch").where({ taskUuid }).first(),
+    ]);
+    assert.equal(String(projectTask?.status ?? ""), "queued", "路径迁移不得删除已接受的项目任务");
+    assert.equal(String(dispatch?.queueState ?? ""), "queued", "路径迁移不得删除账号队列投影");
+    assert.equal(String(dispatch?.providerState ?? ""), "not_sent");
+    assert.equal(Number(dispatch?.slotHeld ?? -1), 0);
+    assert.equal(await countProjectRows("o_storyboardGenerationOperation"), beforeCounts.operations + 1);
+    assert.equal(await countProjectRows("o_storyboardGenerationTask"), beforeCounts.tasks + 1);
+    assert.equal(await countDispatch(), beforeCounts.dispatch + 1);
     const cache = readDreaminaCapabilityCache();
     assert.notEqual(cache.snapshot?.version, "1.4.4", "不得把 A 能力缓存当成 B 的有效缓存");
     assert.equal(commandNames(harness.logFile).some(isGenerateCommand), false, JSON.stringify(commandNames(harness.logFile)));
@@ -497,7 +542,7 @@ test("正式 generate 走同一竞态：旧 A 恢复后不得创建 operation/ta
   });
 });
 
-test("失败 retry 走同一竞态：过期 readiness 零新增，B ready 缓存可入队且零多余探测", async () => {
+test("失败 retry 立即耐久入队：A→B 迁移后只新增一个子任务且不得提前执行", async () => {
   await withHarness("r24-fix7-retry", { withProject: true }, async (harness) => {
     writeReadyDreaminaTestCapability();
     resetDreaminaStartupStatusCheckForTests();
@@ -535,49 +580,50 @@ test("失败 retry 走同一竞态：过期 readiness 零新增，B ready 缓存
       tasks: await countProjectRows("o_storyboardGenerationTask"),
       dispatch: await countDispatch(),
     };
-    const { firstReached, releaseFirst } = installFirstHitGate(setDreaminaStartupCheckBeforeProbeHookForTests);
-    harness.timeline.push("start-R1-retry");
-    const r1Promise = jsonRequest(harness.retryUrl, {
+    let startupProbeHits = 0;
+    setDreaminaStartupCheckBeforeProbeHookForTests(() => {
+      startupProbeHits += 1;
+    });
+    const clientOperationId = crypto.randomUUID();
+    const queuedRetry = await jsonRequest(harness.retryUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         taskUuid: parent.taskUuid,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId,
       }),
     });
-    await firstReached;
-    harness.timeline.push("R1-paused-in-A-startup");
+    leakFree(JSON.stringify(queuedRetry.body ?? {}));
+    assert.equal(queuedRetry.status, 200, JSON.stringify(queuedRetry.body));
+    assert.equal(startupProbeHits, 0, "HTTP 重试入队不得等待实时 startup 探测");
+    const childUuid = String(queuedRetry.body?.data?.taskUuid ?? "");
+    assert.match(childUuid, /^[0-9a-f-]{36}$/i, JSON.stringify(queuedRetry.body));
+    assert.notEqual(childUuid, parent.taskUuid);
+    assert.equal(String(queuedRetry.body?.data?.status ?? ""), "queued");
+    assert.equal(String(queuedRetry.body?.data?.clientOperationId ?? "").toLowerCase(), clientOperationId.toLowerCase());
+    assert.equal(await countProjectRows("o_storyboardGenerationOperation"), before.operations + 1);
+    assert.equal(await countProjectRows("o_storyboardGenerationTask"), before.tasks + 1);
+    assert.equal(await countDispatch(), before.dispatch + 1);
+    assert.equal(commandNames(harness.logFile).some(isGenerateCommand), false, "HTTP 重试入队阶段不得调用生成命令");
+
+    setDreaminaStartupCheckBeforeProbeHookForTests(null);
     const migrated = await migrateAToBAndRelease(harness);
-    harness.timeline.push("release-R1");
-    releaseFirst();
-    const r1 = await r1Promise;
-    harness.timeline.push("R1-finished");
-    leakFree(JSON.stringify(r1.body ?? {}));
-    assert.notEqual(r1.status, 200, `过期 readiness 不得入队: ${JSON.stringify(r1)}`);
-    assert.equal(await countProjectRows("o_storyboardGenerationOperation"), before.operations);
-    assert.equal(await countProjectRows("o_storyboardGenerationTask"), before.tasks);
-    assert.equal(await countDispatch(), before.dispatch);
+    const [projectTask, dispatch] = await Promise.all([
+      runWithProjectStorage(PROJECT, () =>
+        activeDb("o_storyboardGenerationTask").where({ taskUuid: childUuid }).first()),
+      accountDb("o_dreaminaCliDispatch").where({ taskUuid: childUuid }).first(),
+    ]);
+    assert.equal(String(projectTask?.status ?? ""), "queued", "路径迁移不得删除已接受的重试子任务");
+    assert.equal(String(projectTask?.parentTaskUuid ?? ""), parent.taskUuid);
+    assert.equal(String(dispatch?.queueState ?? ""), "queued");
+    assert.equal(String(dispatch?.providerState ?? ""), "not_sent");
+    assert.equal(Number(dispatch?.slotHeld ?? -1), 0);
+    assert.equal(await countProjectRows("o_storyboardGenerationOperation"), before.operations + 1);
+    assert.equal(await countProjectRows("o_storyboardGenerationTask"), before.tasks + 1);
+    assert.equal(await countDispatch(), before.dispatch + 1);
     assert.equal(commandNames(harness.logFile).some(isGenerateCommand), false);
     assert.equal(commandLines(harness.logFile).length, migrated.logAfterR2);
     assert.equal(readDreaminaSchedulerWakeCountForTests(), migrated.wakesBefore);
-
-    writeReadyDreaminaTestCapability();
-    resetDreaminaStartupStatusCheckForTests();
-    fs.writeFileSync(harness.logFile, "");
-    const readyRetry = await jsonRequest(harness.retryUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        taskUuid: parent.taskUuid,
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(readyRetry.body ?? {}));
-    assert.equal(readyRetry.status, 200, JSON.stringify(readyRetry.body));
-    const childUuid = String(readyRetry.body?.data?.taskUuid ?? readyRetry.body?.data?.tasks?.[0]?.taskUuid ?? "");
-    assert.ok(childUuid && childUuid !== parent.taskUuid, JSON.stringify(readyRetry.body));
-    assert.equal(commandLines(harness.logFile).length, 0, "B 的 ready 缓存不得再跑无意义探测");
-    assert.equal(readDreaminaCapabilityCache().state, "ready");
   });
 });
 
@@ -591,7 +637,7 @@ test("capability inFlight 必须按身份隔离：B 不得 join 旧 A，A 完成
       (value) => ({ ok: true as const, value }),
       (error) => ({ ok: false as const, error }),
     );
-    await firstReached;
+    await waitForFirstHitOrEarlyResult(firstReached, r1Promise, "capability R1");
     harness.timeline.push("R1-paused-in-A-capability");
     const migrated = await migrateAToBAndRelease(harness);
     let bProbeRan = false;

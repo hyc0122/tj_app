@@ -4,197 +4,157 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-// 以当前测试文件为锚点，同时兼容 CommonJS tsc 与现有 tsx 执行方式。
+// 以当前测试文件为锚点，避免测试结果依赖调用命令时的当前目录。
 const require = createRequire(__filename);
 const { load: parseYaml } = require("js-yaml") as {
   load: (source: string) => Record<string, any>;
 };
 
-// 所有合同文件都从源码位置确定性解析，不依赖调用命令时的当前目录。
 const appRoot = path.resolve(__dirname, "../..");
 const repositoryRoot = path.resolve(appRoot, "..");
-const workflowPath = path.join(repositoryRoot, ".github", "workflows", "app-release.yml");
-const workflowSource = fs.readFileSync(workflowPath, "utf8");
-const workflow = parseYaml(workflowSource);
-const forbiddenCscPattern = new RegExp([
-  ["WINDOWS", "CSC"].join("_"),
-  ["CSC", "LINK"].join("_"),
-  ["CSC", "KEY", "PASSWORD"].join("_"),
-].join("|"));
 
-const expectedMatrix = [
-  {
-    id: "windows-x64", platform: "windows", processPlatform: "win32",
-    builderPlatform: "win", arch: "x64", runner: "windows-2025",
-    metadataFile: "latest.yml", releaseMetadataFile: "latest-windows-x64.yml",
-    binaryExtensions: [".exe"],
-    feedUrl: "https://api.j11.com.cn/desktop/beta/windows/x64",
-  },
-  {
-    id: "macos-x64", platform: "macos", processPlatform: "darwin",
-    builderPlatform: "mac", arch: "x64", runner: "macos-15-intel",
-    metadataFile: "latest-mac.yml", releaseMetadataFile: "latest-mac-x64.yml",
-    binaryExtensions: [".dmg", ".zip"],
-    feedUrl: "https://api.j11.com.cn/desktop/beta/macos/x64",
-  },
-  {
-    id: "macos-arm64", platform: "macos", processPlatform: "darwin",
-    builderPlatform: "mac", arch: "arm64", runner: "macos-15",
-    metadataFile: "latest-mac.yml", releaseMetadataFile: "latest-mac-arm64.yml",
-    binaryExtensions: [".dmg", ".zip"],
-    feedUrl: "https://api.j11.com.cn/desktop/beta/macos/arm64",
-  },
-  {
-    id: "linux-x64", platform: "linux", processPlatform: "linux",
-    builderPlatform: "linux", arch: "x64", runner: "ubuntu-24.04",
-    metadataFile: "latest-linux.yml", releaseMetadataFile: "latest-linux-x64.yml",
-    binaryExtensions: [".AppImage"],
-    feedUrl: "https://api.j11.com.cn/desktop/beta/linux/x64",
-  },
-  {
-    id: "linux-arm64", platform: "linux", processPlatform: "linux",
-    builderPlatform: "linux", arch: "arm64", runner: "ubuntu-24.04-arm",
-    metadataFile: "latest-linux.yml", releaseMetadataFile: "latest-linux-arm64.yml",
-    binaryExtensions: [".AppImage"],
-    feedUrl: "https://api.j11.com.cn/desktop/beta/linux/arm64",
-  },
-] as const;
+function readWorkflow(fileName: string) {
+  const filePath = path.join(repositoryRoot, ".github", "workflows", fileName);
+  const source = fs.readFileSync(filePath, "utf8");
+  return { source, workflow: parseYaml(source) };
+}
 
-const allowedActions = new Set([
-  "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
-  "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
-  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-  "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
-  "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6",
-  "softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65",
-]);
+function stepText(job: Record<string, any>): string {
+  return JSON.stringify(job.steps ?? []);
+}
 
-test("Beta workflow 只展开 Task 1 五目标和三个固定 Job", () => {
-  assert.deepEqual(Object.keys(workflow.jobs).sort(), ["build", "provenance", "publish"]);
-  assert.deepEqual(workflow.jobs.build.strategy.matrix.include, expectedMatrix);
-  assert.equal(workflow.jobs.build.strategy["fail-fast"], false);
-  assert.equal(workflow.jobs.build["runs-on"], "${{ matrix.runner }}");
-});
-
-test("五目标公开 Beta feed 只由原生打包 step 按 matrix 注入", () => {
-  const feedEnvironmentName = "TIANJIANG_UPDATE_FEED_URL";
-  const buildStep = workflow.jobs.build.steps.find(
-    (step: any) => step.name === "构建未签名矩阵目标",
-  );
-
-  // 独立确认注入入口，防止 matrix 正确但打包命令未消费。
-  assert.equal(buildStep.env[feedEnvironmentName], "${{ matrix.feedUrl }}");
-  assert.equal(workflow.env?.[feedEnvironmentName], undefined);
-  assert.equal(workflow.jobs.build.env?.[feedEnvironmentName], undefined);
-  assert.equal(workflow.jobs.provenance.env?.[feedEnvironmentName], undefined);
-  assert.equal(workflow.jobs.publish.env?.[feedEnvironmentName], undefined);
-});
-
-test("五目标共用的矩阵打包 step 固定 4096 MiB V8 heap", () => {
-  const nodeOptionsEnvironmentName = "NODE_OPTIONS";
-  const buildStep = workflow.jobs.build.steps.find(
-    (step: any) => step.name === "构建未签名矩阵目标",
-  );
-
-  // 同一个 build step 会被五行 matrix 逐一展开，确保所有目标获得同一显式上限。
-  assert.equal(workflow.jobs.build.strategy.matrix.include.length, 5);
-  assert.equal(buildStep.env[nodeOptionsEnvironmentName], "--max-old-space-size=4096");
-});
-
-test("V8 heap 上限只进入矩阵打包 step，不跨入来源证明或发布事务", () => {
-  const nodeOptionsEnvironmentName = "NODE_OPTIONS";
-  const buildStep = workflow.jobs.build.steps.find(
-    (step: any) => step.name === "构建未签名矩阵目标",
-  );
-
-  assert.equal(workflow.env?.[nodeOptionsEnvironmentName], undefined);
-  for (const job of Object.values(workflow.jobs) as any[]) {
-    assert.equal(job.env?.[nodeOptionsEnvironmentName], undefined);
-    for (const step of job.steps) {
-      if (step !== buildStep) assert.equal(step.env?.[nodeOptionsEnvironmentName], undefined);
+function assertPinnedActions(jobs: Record<string, any>): void {
+  for (const [jobName, job] of Object.entries(jobs)) {
+    for (const step of job.steps ?? []) {
+      if (!step.uses) continue;
+      assert.match(
+        step.uses,
+        /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/,
+        `${jobName}/${step.name ?? step.uses} 必须固定到 40 位 Commit SHA`,
+      );
     }
+  }
+}
+
+const betaEntry = readWorkflow("app-release.yml");
+const cloudPipeline = readWorkflow("app-cloud-release.yml");
+
+test("Beta 入口只负责从根 package.json 创建不可移动 Tag 并调用统一云端发布", () => {
+  const jobs = betaEntry.workflow.jobs ?? {};
+  assert.deepEqual(Object.keys(jobs).sort(), ["create-tag", "release-pipeline"]);
+
+  const createTag = jobs["create-tag"];
+  assert.equal(createTag["runs-on"], "ubuntu-latest");
+  assert.deepEqual(createTag.permissions, { contents: "write" });
+  assert.equal(createTag.outputs.tag, "${{ steps.release.outputs.tag }}");
+
+  const createTagText = stepText(createTag);
+  assert.match(createTagText, /require\('\.\/package\.json'\)\.version/);
+  assert.match(createTagText, /require\('\.\/app\/package\.json'\)\.version/);
+  assert.match(createTagText, /-beta/);
+  assert.match(createTagText, /git rev-parse origin\/main/);
+  assert.match(createTagText, /git ls-remote --tags origin/);
+  assert.match(createTagText, /git tag -a/);
+  assert.match(createTagText, /git push origin/);
+
+  const pipeline = jobs["release-pipeline"];
+  assert.deepEqual(pipeline.needs, ["create-tag"]);
+  assert.equal(pipeline.uses, "./.github/workflows/app-cloud-release.yml");
+  assert.equal(pipeline.with.channel, "beta");
+  assert.equal(pipeline.with.prerelease, true);
+  assert.match(pipeline.with.tag, /github\.ref_name/);
+  assert.match(pipeline.with.tag, /needs\.create-tag\.outputs\.tag/);
+  assert.equal(pipeline.secrets, "inherit");
+});
+
+test("统一云端工作流只包含质量门、三平台构建、来源证明和 GitHub Release", () => {
+  const jobs = cloudPipeline.workflow.jobs ?? {};
+  assert.deepEqual(
+    Object.keys(jobs).sort(),
+    ["build-linux", "build-macos", "build-windows", "provenance", "quality", "release"],
+  );
+
+  assert.equal(jobs.quality["runs-on"], "ubuntu-latest");
+  assert.equal(jobs["build-windows"]["runs-on"], "windows-latest");
+  assert.equal(jobs["build-linux"]["runs-on"], "ubuntu-latest");
+  assert.equal(jobs["build-macos"]["runs-on"], "macos-latest");
+  assert.deepEqual(jobs.provenance.needs, ["build-windows", "build-linux", "build-macos"]);
+  assert.deepEqual(jobs.release.needs, ["provenance"]);
+
+  assert.deepEqual(jobs.quality.permissions, { contents: "read" });
+  assert.deepEqual(jobs["build-windows"].permissions, { contents: "read" });
+  assert.deepEqual(jobs["build-linux"].permissions, { contents: "read" });
+  assert.deepEqual(jobs["build-macos"].permissions, { contents: "read" });
+  assert.deepEqual(jobs.provenance.permissions, { contents: "read", "id-token": "write" });
+  assert.deepEqual(jobs.release.permissions, { contents: "write" });
+  assertPinnedActions(jobs);
+});
+
+test("质量门使用冻结依赖和项目标准测试、检查与构建命令", () => {
+  const qualityText = stepText(cloudPipeline.workflow.jobs.quality);
+  assert.match(qualityText, /yarn install --frozen-lockfile --non-interactive/);
+  assert.match(qualityText, /yarn native:node && yarn native:verify:node/);
+  assert.match(qualityText, /yarn test:tianjiang && yarn lint && yarn build/);
+  assert.match(qualityText, /yarn test:tianjiang-ui && yarn type-check && yarn build/);
+  assert.match(qualityText, /require\('\.\.\/package\.json'\)\.version/);
+  assert.match(qualityText, /git rev-list -n 1/);
+});
+
+test("三个正式构建 Job 各自冻结安装并上传原样 Actions Artifact", () => {
+  const jobs = cloudPipeline.workflow.jobs;
+  const expected = [
+    ["build-windows", "yarn dist:win:x64", "/desktop/${{ inputs.channel }}/windows/x64"],
+    ["build-linux", "yarn dist:linux:x64", "/desktop/${{ inputs.channel }}/linux/x64"],
+    ["build-macos", "yarn dist:mac:${{ steps.platform.outputs.arch }}", "/desktop/${{ inputs.channel }}/macos/"],
+  ] as const;
+
+  for (const [jobId, buildCommand, feedPath] of expected) {
+    const text = stepText(jobs[jobId]);
+    assert.match(text, /yarn install --frozen-lockfile --non-interactive/);
+    assert.ok(text.includes(buildCommand));
+    assert.ok(text.includes(feedPath));
+    assert.match(text, /actions\/upload-artifact/);
+    assert.match(text, /prepareReleaseTarget/);
   }
 });
 
-test("三个 Job 权限最小化且 Action 全部命中固定 SHA allowlist", () => {
-  assert.deepEqual(workflow.jobs.build.permissions, { contents: "read" });
-  assert.deepEqual(workflow.jobs.provenance.permissions, {
-    contents: "read",
-    "id-token": "write",
-  });
-  assert.deepEqual(workflow.jobs.publish.permissions, { contents: "write" });
+test("Windows 与 macOS 签名只在云端凭据齐全时启用并执行平台验证", () => {
+  const windowsText = stepText(cloudPipeline.workflow.jobs["build-windows"]);
+  const macosText = stepText(cloudPipeline.workflow.jobs["build-macos"]);
 
-  const steps = Object.values(workflow.jobs)
-    .flatMap((job: any) => job.steps)
-    .filter((step: any) => step.uses);
-  for (const step of steps) assert.ok(allowedActions.has(step.uses), step.uses);
+  assert.match(windowsText, /WINDOWS_CSC_LINK/);
+  assert.match(windowsText, /WINDOWS_CSC_KEY_PASSWORD/);
+  assert.match(windowsText, /Get-AuthenticodeSignature/);
+  assert.match(windowsText, /Status.*Valid/);
 
-  // 两个上传根都位于 .local，必须显式允许固定 Action 收集隐藏目录内容。
-  const buildUpload = workflow.jobs.build.steps.find(
-    (step: any) => step.name === "上传唯一目标目录",
-  );
-  const provenanceUpload = workflow.jobs.provenance.steps.find(
-    (step: any) => step.name === "上传完整 publication root",
-  );
-  assert.equal(buildUpload.with["include-hidden-files"], true);
-  assert.equal(provenanceUpload.with["include-hidden-files"], true);
+  assert.match(macosText, /MACOS_CSC_LINK/);
+  assert.match(macosText, /APPLE_APP_SPECIFIC_PASSWORD/);
+  assert.match(macosText, /codesign --verify --deep --strict/);
+  assert.match(macosText, /xcrun stapler validate/);
 });
 
-test("Sigstore 先签后验且只证明 Manifest 来源", () => {
-  const steps = workflow.jobs.provenance.steps;
-  const signIndex = steps.findIndex((step: any) => step.run?.includes("cosign sign-blob"));
-  const verifyIndex = steps.findIndex((step: any) => step.run?.includes("cosign verify-blob"));
-  const prepareIndex = steps.findIndex((step: any) => step.run?.includes("prepare-release-publication.mjs"));
-  assert.ok(signIndex >= 0 && signIndex < verifyIndex && verifyIndex < prepareIndex);
-  assert.match(steps[verifyIndex].run, /--certificate-oidc-issuer https:\/\/token\.actions\.githubusercontent\.com/);
-  assert.match(steps[verifyIndex].run, /app-release\.yml@refs\/tags\/\$\{GITHUB_REF_NAME\}/);
-});
-
-test("OSS Beta 事务成功后紧邻创建 GitHub prerelease", () => {
-  const steps = workflow.jobs.publish.steps;
-  const publishIndex = steps.findIndex((step: any) => step.run?.includes("publish-release-transaction.mjs"));
-  const releaseIndex = steps.findIndex((step: any) => step.uses?.startsWith("softprops/action-gh-release@"));
-  assert.equal(releaseIndex, publishIndex + 1);
-  assert.equal(steps[publishIndex].env.TIANJIANG_RELEASE_SINGLE_WRITER.endsWith(":beta"), true);
-  assert.equal(steps[releaseIndex].with.prerelease, true);
-  assert.equal(steps[releaseIndex].with.files, "app/.local/release-publication/github-release/*");
-});
-
-test("Beta workflow 与 Stable 共用全局单写者并发门且保持五目标 prerelease", () => {
-  assert.deepEqual(workflow.concurrency, {
-    group: "tianjiang-desktop-release",
-    "cancel-in-progress": false,
-  });
-  assert.equal(workflow.jobs.build.strategy.matrix.include.length, 5);
-  const releaseStep = workflow.jobs.publish.steps.find(
-    (step: any) => step.uses?.startsWith("softprops/action-gh-release@"),
+test("Actions 只创建 GitHub Release，OSS 发布明确留给本地 relay", () => {
+  const combinedSource = `${betaEntry.source}\n${cloudPipeline.source}`;
+  assert.doesNotMatch(
+    combinedSource,
+    /OSS_ACCESS_KEY|OSS_BUCKET|OSS_ENDPOINT|publish-platform-release|ali-oss|ossutil|\bscp\b/i,
   );
-  assert.equal(releaseStep.with.prerelease, true);
+
+  const provenanceText = stepText(cloudPipeline.workflow.jobs.provenance);
+  const releaseText = stepText(cloudPipeline.workflow.jobs.release);
+  assert.match(provenanceText, /cosign sign-blob/);
+  assert.match(provenanceText, /cosign verify-blob/);
+  assert.match(provenanceText, /release-manifest\.json\.sigstore\.json/);
+  assert.match(releaseText, /softprops\/action-gh-release/);
+  assert.match(releaseText, /release-assets\/\*/);
+  assert.match(releaseText, /OSS 发布由本地 release:relay:oss/);
 });
 
-test("Beta workflow 通过仓库 prepare/publish 入口推进每目标平台 Catalog", () => {
-  const prepareStep = workflow.jobs.provenance.steps.find(
-    (step: any) => step.run?.includes("prepare-release-publication.mjs"),
-  );
-  const publishStep = workflow.jobs.publish.steps.find(
-    (step: any) => step.run?.includes("publish-release-transaction.mjs"),
-  );
-  assert.ok(prepareStep);
-  assert.ok(publishStep);
-  assert.equal(workflow.jobs.build.strategy.matrix.include.length, 5);
-  assert.match(prepareStep.run, /prepare-release-publication\.mjs/);
-  assert.match(publishStep.run, /publish-release-transaction\.mjs/);
-});
-
-test("产品保持未签名但微软 VC++ 运行库 Authenticode 门保留", () => {
-  const builder = fs.readFileSync(path.join(appRoot, "electron-builder.yml"), "utf8");
+test("微软 VC++ 运行库仍保留 Authenticode 校验门", () => {
   const runtimePreparation = fs.readFileSync(
     path.join(appRoot, "scripts", "prepare-vc-runtime.mjs"),
     "utf8",
   );
-  assert.match(builder, /forceCodeSigning:\s*false/);
-  assert.match(builder, /identity:\s*null/);
-  assert.doesNotMatch(workflowSource, forbiddenCscPattern);
   assert.match(runtimePreparation, /Get-AuthenticodeSignature/);
   assert.match(runtimePreparation, /Microsoft Corporation/);
 });

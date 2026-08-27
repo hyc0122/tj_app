@@ -61,7 +61,7 @@ async function columnNames(database: Knex, table: string): Promise<string[]> {
   return rows.map((row) => row.name);
 }
 
-test("账号迁移链必须在 database-role-account-v1 之后追加即梦三表，项目链不得出现", () => {
+test("账号迁移链必须在 database-role-account-v1 之后按序追加即梦迁移，项目链不得出现", () => {
   const account = buildApplicationMigrations({ role: "account", skipEmbeddingInit: true });
   const project = buildApplicationMigrations({ role: "project", skipEmbeddingInit: true });
   const roleMarker = account.find((item) => item.name === "database-role-account-v1");
@@ -69,8 +69,14 @@ test("账号迁移链必须在 database-role-account-v1 之后追加即梦三表
   assert.ok(roleMarker, "账号角色标记不得消失");
   assert.ok(dreamina, "账号链必须追加 dreamina-cli-account-v1");
   assert.equal(dreamina!.version, roleMarker!.version + 1);
-  assert.equal(account.at(-1)?.name, "dreamina-dispatch-enqueue-idempotency-v1");
-  assert.equal(account.at(-2)?.name, "dreamina-cli-runtime-state-v1");
+  assert.deepEqual(account.slice(-6).map((item) => item.name), [
+    "dreamina-cli-account-v1",
+    "dreamina-cli-runtime-state-v1",
+    "dreamina-dispatch-enqueue-idempotency-v1",
+    "dreamina-cli-enabled-v1",
+    "dreamina-cli-pause-reason-v1",
+    "dreamina-cli-poll-seconds-v1",
+  ]);
   assert.ok(!project.some((item) => item.name.includes("dreamina")));
   assert.ok(!account.some((item) => item.name === "storyboard-project-schema-v1"));
 });

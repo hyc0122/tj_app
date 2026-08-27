@@ -387,7 +387,7 @@ test("preview 与 generate 的 prompt、references 和 digest 必须一致", asy
   });
 });
 
-test("能力未就绪的截图等价请求：preview 成功、generate 稳定拒绝且零写入", async () => {
+test("能力未就绪的截图等价请求：preview 成功、generate 先耐久入队", async () => {
   await withRuntime("r19-capability-gate", { capability: "none" }, async ({ port, shotUuid }) => {
     const payload = {
       shotUuid, mediaType: "video", providerModel: "dreamina-cli:seedance2.0fast",
@@ -399,27 +399,29 @@ test("能力未就绪的截图等价请求：preview 成功、generate 稳定拒
       body: JSON.stringify(payload),
     });
     assert.equal(preview.status, 200);
+    const clientOperationId = crypto.randomUUID();
     const generated = await jsonRequest(generateUrl(port), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...payload,
         expectedPreviewDigest: preview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId,
       }),
     });
-    assert.equal(generated.status, 400);
-    // 中文注释：缓存为空只能证明能力尚不可用；没有 installed=false 证据时不得推断为未安装。
-    assert.equal(generated.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE");
-    assert.equal(generated.body?.message, "即梦 CLI 不可用");
+    // 中文注释：缓存未就绪是可恢复运行环境，不得阻塞 HTTP 耐久受理或误报未安装。
+    assert.equal(generated.status, 200, JSON.stringify(generated.body));
+    assert.equal(generated.body?.code, 0, JSON.stringify(generated.body));
+    assert.equal(generated.body?.data?.[0]?.status, "queued", JSON.stringify(generated.body));
+    assert.equal(generated.body?.data?.[0]?.clientOperationId, clientOperationId, JSON.stringify(generated.body));
     leakFree(`${generated.status}:${JSON.stringify(generated.body)}${generated.text}`);
     const tasks = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask").select());
     const ops = await runWithProjectStorage(PROJECT, async () => {
       const hasOps = await activeDb.schema.hasTable("o_storyboardGenerationOperation");
       return hasOps ? activeDb("o_storyboardGenerationOperation").select() : [];
     });
-    assert.equal(tasks.length, 0);
-    assert.equal(Array.isArray(ops) ? ops.length : 0, 0);
+    assert.equal(tasks.length, 1);
+    assert.equal(Array.isArray(ops) ? ops.length : 0, 1);
   });
 });
 

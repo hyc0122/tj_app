@@ -151,6 +151,26 @@ async function countRows(table: string): Promise<number> {
   });
 }
 
+async function waitForOperationState(
+  clientOperationId: string,
+  expected: string,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const operation = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationOperation")
+      .where({ clientOperationId })
+      .first("state"));
+    if (String(operation?.state ?? "") === expected) {
+      const task = await runWithProjectStorage(PROJECT, () => activeDb("o_storyboardGenerationTask")
+        .where({ clientOperationId })
+        .first("status", "errorCode", "errorSummary"));
+      return (task ?? {}) as Record<string, unknown>;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`操作 ${clientOperationId} 未在期限内进入 ${expected}`);
+}
+
 function vendorStub(id: string): string {
   return `
 const vendor = {
@@ -357,11 +377,13 @@ test("P1-1 URL 项目视频模型确定性 stub 必须暂存全部引用并进�
     assert.equal(resolveVendorMediaCapability("volcengine", "audio").form, "url");
     assert.equal(resolveVendorMediaCapability("volcengine", "video").form, "url");
     u.vendor.writeCode("volcengine", vendorStub("volcengine"));
-    if (!await accountDatabase()("o_vendorConfig").where({ id: "volcengine" }).first()) {
-      await accountDatabase()("o_vendorConfig").insert({
-        id: "volcengine", inputValues: "{}", models: "[]", enable: 1,
-      });
-    }
+    const volcengineModels = JSON.stringify([
+      { modelName: "doubao-seedance-2-0-260128", name: "Seedance-2.0", type: "video" },
+      { modelName: "doubao-seedream-4-5-251128", name: "Seedream-4.5", type: "image" },
+    ]);
+    await accountDatabase()("o_vendorConfig").insert({
+      id: "volcengine", inputValues: "{}", models: volcengineModels, enable: 1,
+    }).onConflict("id").merge({ inputValues: "{}", models: volcengineModels, enable: 1 });
     const staged: string[] = [];
     configureModelMediaResolver({
       stageLocalPath: async (reference) => {
@@ -383,17 +405,27 @@ test("P1-1 URL 项目视频模型确定性 stub 必须暂存全部引用并进�
       body: JSON.stringify(urlBody),
     });
     assert.equal(urlPreview.status, 200, JSON.stringify(urlPreview.body));
+    const urlOperationId = crypto.randomUUID();
+    const urlGenerateBody = {
+      ...urlBody,
+      expectedPreviewDigest: urlPreview.body?.data?.previewDigest,
+      clientOperationId: urlOperationId,
+    };
+    const urlAccepted = await jsonRequest(generateUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(urlGenerateBody),
+    });
+    leakFree(JSON.stringify(urlAccepted.body));
+    assert.equal(urlAccepted.status, 202, JSON.stringify(urlAccepted.body));
+    assert.equal(urlAccepted.body?.data?.tasks?.[0]?.status, "queued", JSON.stringify(urlAccepted.body));
+    await waitForOperationState(urlOperationId, "completed");
+    // 中文注释：同一操作完成后重放权威快照，不能把 202 受理响应误当成同步完成。
     const urlGen = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...urlBody,
-        expectedPreviewDigest: urlPreview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
-      }),
+      body: JSON.stringify(urlGenerateBody),
     });
-    leakFree(JSON.stringify(urlGen.body));
-    assert.notEqual(urlGen.body?.code, "VENDOR_MEDIA_STAGING_FAILED", JSON.stringify(urlGen.body));
     assert.equal(urlGen.status, 200, JSON.stringify(urlGen.body));
     const tasks = Array.isArray(urlGen.body?.data) ? urlGen.body.data : [];
     assert.equal(tasks[0]?.status, "completed", JSON.stringify(urlGen.body));
@@ -422,19 +454,21 @@ test("P1-1 URL 项目视频模型确定性 stub 必须暂存全部引用并进�
       headers: { "content-type": "application/json" },
       body: JSON.stringify(urlBody),
     });
+    const failOperationId = crypto.randomUUID();
     const failGen = await jsonRequest(generateUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...urlBody,
         expectedPreviewDigest: failPreview.body?.data?.previewDigest,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: failOperationId,
       }),
     });
     leakFree(JSON.stringify(failGen.body));
-    assert.equal(failGen.body?.code, "VENDOR_MEDIA_STAGING_FAILED", JSON.stringify(failGen.body));
-    assert.equal(failGen.body?.message, "参考素材暂存失败，请检查网络或稍后重试");
-    assert.equal(failGen.body?.stagingStep, "upload_session", JSON.stringify(failGen.body));
+    assert.equal(failGen.status, 202, JSON.stringify(failGen.body));
+    assert.equal(failGen.body?.data?.tasks?.[0]?.status, "queued", JSON.stringify(failGen.body));
+    const failedTask = await waitForOperationState(failOperationId, "failed_fatal");
+    assert.equal(failedTask.errorCode, "VENDOR_MEDIA_STAGING_FAILED", JSON.stringify(failedTask));
     assert.ok(staged.length >= 1);
     assert.equal(await countRows("o_dreaminaCliDispatch"), 0);
     const failOps = await runWithProjectStorage(PROJECT, async () =>
@@ -469,124 +503,93 @@ test("P1-2 已登录但能力缓存 failed 必须是 CLI_UNAVAILABLE 而不是�
   invalidateDreaminaCapabilityCache();
 });
 
-test("P1-2 即梦安装/登录/能力探测失败/模式不支持必须分码且零授权命令", async () => {
-  await withRuntime("r22-fix-dreamina-class", async ({ boundShot, generateUrl, previewUrl, statusUrl, logFile }) => {
-    const dreaminaBody = {
-      shotUuid: boundShot,
-      mediaType: "video",
-      providerModel: "dreamina-cli:seedance2.0",
-      mode: "auto",
-      durationMs: 5000,
-      aspectRatio: "9:16",
-    };
+test("P1-2 即梦临时环境错误先受理，已禁用模式与关闭开关仍同步拒绝", async () => {
+  const scenarios = [
+    {
+      name: "missing",
+      setup: async () => {
+        delete process.env.DREAMINA_TEST_EXECUTABLE;
+        await writeDreaminaCliSettings({
+          enabled: true,
+          executablePath: path.join(process.cwd(), "missing-dreamina.exe"),
+        });
+      },
+    },
+    {
+      name: "logged-out",
+      setup: async () => {
+        process.env.DREAMINA_TEST_EXECUTABLE = FAKE_CLI;
+        process.env.DREAMINA_FAKE_SCENARIO = "not_logged_in";
+      },
+    },
+    {
+      name: "probe-failed",
+      setup: async ({ statusUrl }: { statusUrl: string }) => {
+        const status = await jsonRequest(statusUrl);
+        assert.equal(status.status, 200, JSON.stringify(status.body));
+        assert.equal(payloadOf(status.body).install?.state, "installed");
+        assert.equal(payloadOf(status.body).account?.state, "logged_in");
+        invalidateDreaminaCapabilityCache();
+        process.env.DREAMINA_FAKE_SCENARIO = "not_installed";
+      },
+    },
+    {
+      name: "mode-unavailable",
+      setup: async () => {
+        writeReadyModes({ multimodal2video: { enabled: false, fields: [] } });
+      },
+    },
+  ] as const;
 
-    const previousExec = process.env.DREAMINA_TEST_EXECUTABLE;
-    delete process.env.DREAMINA_TEST_EXECUTABLE;
-    await writeDreaminaCliSettings({ enabled: true, executablePath: path.join(process.cwd(), "missing-dreamina.exe") });
-    resetDreaminaStartupStatusCheckForTests();
-    invalidateDreaminaCapabilityCache();
-    fs.writeFileSync(logFile, "");
-    const missingPreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
+  for (const scenario of scenarios) {
+    await withRuntime(`r22-fix-dreamina-${scenario.name}`, async (runtime) => {
+      await scenario.setup(runtime);
+      resetDreaminaStartupStatusCheckForTests();
+      if (scenario.name !== "mode-unavailable") invalidateDreaminaCapabilityCache();
+      fs.writeFileSync(runtime.logFile, "");
+      const body = {
+        shotUuid: runtime.boundShot,
+        mediaType: "video",
+        providerModel: "dreamina-cli:seedance2.0",
+        mode: "auto",
+        durationMs: 5000,
+        aspectRatio: "9:16",
+      };
+      const preview = await jsonRequest(runtime.previewUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      assert.equal(preview.status, 200, `${scenario.name} ${JSON.stringify(preview.body)}`);
+      const clientOperationId = crypto.randomUUID();
+      const accepted = await jsonRequest(runtime.generateUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...body,
+          expectedPreviewDigest: preview.body?.data?.previewDigest,
+          clientOperationId,
+        }),
+      });
+      leakFree(JSON.stringify(accepted.body));
+      if (scenario.name === "mode-unavailable") {
+        // 中文注释：已发布能力明确禁用当前模式是确定性合同错误，不能写入一个注定无效的收费任务。
+        assert.equal(accepted.status, 400, JSON.stringify(accepted.body));
+        assert.equal(accepted.body?.code, "400", JSON.stringify(accepted.body));
+        assert.equal(await countRows("o_storyboardGenerationOperation"), 0);
+        assert.equal(await countRows("o_storyboardGenerationTask"), 0);
+        assert.equal(commandLog(runtime.logFile).some((item) => String(item).endsWith("2video")), false);
+        return;
+      }
+      assert.equal(accepted.status, 200, `${scenario.name} ${JSON.stringify(accepted.body)}`);
+      assert.equal(accepted.body?.code, 0, `${scenario.name} ${JSON.stringify(accepted.body)}`);
+      assert.equal(accepted.body?.data?.[0]?.status, "queued", `${scenario.name} ${JSON.stringify(accepted.body)}`);
+      assert.equal(accepted.body?.data?.[0]?.clientOperationId, clientOperationId);
+      assert.equal(commandLog(runtime.logFile).includes("login"), false);
     });
-    const missing = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: missingPreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(missing.body));
-    assert.equal(missing.body?.code, "DREAMINA_CLI_NOT_INSTALLED", JSON.stringify(missing.body));
-    assert.notEqual(missing.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE");
-    assert.equal(commandLog(logFile).includes("login"), false, JSON.stringify(commandLog(logFile)));
+  }
 
-    process.env.DREAMINA_TEST_EXECUTABLE = previousExec ?? FAKE_CLI;
-    await writeDreaminaCliSettings({ enabled: true, executablePath: FAKE_CLI });
-    process.env.DREAMINA_FAKE_SCENARIO = "not_logged_in";
-    resetDreaminaStartupStatusCheckForTests();
-    invalidateDreaminaCapabilityCache();
-    fs.writeFileSync(logFile, "");
-    const loggedOutPreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
-    });
-    const loggedOut = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: loggedOutPreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(loggedOut.body));
-    assert.equal(loggedOut.body?.code, "DREAMINA_CLI_NOT_LOGGED_IN", JSON.stringify(loggedOut.body));
-    assert.notEqual(loggedOut.body?.code, "DREAMINA_CLI_NOT_INSTALLED");
-    assert.equal(commandLog(logFile).includes("login"), false);
-
-    delete process.env.DREAMINA_FAKE_SCENARIO;
-    resetDreaminaStartupStatusCheckForTests();
-    invalidateDreaminaCapabilityCache();
-    fs.writeFileSync(logFile, "");
-    const status = await jsonRequest(statusUrl);
-    assert.equal(status.status, 200, JSON.stringify(status.body));
-    assert.equal(payloadOf(status.body).install?.state, "installed");
-    assert.equal(payloadOf(status.body).account?.state, "logged_in");
-    invalidateDreaminaCapabilityCache();
-    process.env.DREAMINA_FAKE_SCENARIO = "not_installed";
-    fs.writeFileSync(logFile, "");
-    const failedPreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
-    });
-    const failed = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: failedPreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(failed.body));
-    assert.equal(failed.body?.code, "STORYBOARD_DREAMINA_CLI_UNAVAILABLE", JSON.stringify({
-      body: failed.body,
-      cache: readDreaminaCapabilityCache(),
-    }));
-    assert.notEqual(failed.body?.code, "DREAMINA_CLI_NOT_INSTALLED");
-    assert.equal(commandLog(logFile).includes("login"), false);
-
-    delete process.env.DREAMINA_FAKE_SCENARIO;
-    writeReadyModes({
-      multimodal2video: { enabled: false, fields: [] },
-    });
-    fs.writeFileSync(logFile, "");
-    const modePreview = await jsonRequest(previewUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(dreaminaBody),
-    });
-    const unsupported = await jsonRequest(generateUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...dreaminaBody,
-        expectedPreviewDigest: modePreview.body?.data?.previewDigest ?? "0".repeat(64),
-        clientOperationId: crypto.randomUUID(),
-      }),
-    });
-    leakFree(JSON.stringify(unsupported.body));
-    assert.equal(unsupported.body?.code, "STORYBOARD_DREAMINA_MODE_UNSUPPORTED", JSON.stringify(unsupported.body));
-    assert.equal(commandLog(logFile).includes("login"), false);
-    assert.equal(commandLog(logFile).some((item) => String(item).endsWith("2video")), false);
-
+  await withRuntime("r22-fix-dreamina-disabled", async ({ boundShot, generateUrl, logFile }) => {
     await writeDreaminaCliSettings({ enabled: false });
     resetDreaminaStartupStatusCheckForTests();
     invalidateDreaminaCapabilityCache();
@@ -595,7 +598,12 @@ test("P1-2 即梦安装/登录/能力探测失败/模式不支持必须分码且
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        ...dreaminaBody,
+        shotUuid: boundShot,
+        mediaType: "video",
+        providerModel: "dreamina-cli:seedance2.0",
+        mode: "auto",
+        durationMs: 5000,
+        aspectRatio: "9:16",
         expectedPreviewDigest: "0".repeat(64),
         clientOperationId: crypto.randomUUID(),
       }),
@@ -608,11 +616,13 @@ test("P1-2 即梦安装/登录/能力探测失败/模式不支持必须分码且
 test("P1-3 单项图片请求必须使用模型 B 并经假供应商返回成功", async () => {
   await withRuntime("r22-fix-image-success", async ({ generateAssetsUrl }) => {
     u.vendor.writeCode("volcengine", vendorStub("volcengine"));
-    if (!await accountDatabase()("o_vendorConfig").where({ id: "volcengine" }).first()) {
-      await accountDatabase()("o_vendorConfig").insert({
-        id: "volcengine", inputValues: "{}", models: "[]", enable: 1,
-      });
-    }
+    const volcengineModels = JSON.stringify([
+      { modelName: "doubao-seedance-2-0-260128", name: "Seedance-2.0", type: "video" },
+      { modelName: "doubao-seedream-4-5-251128", name: "Seedream-4.5", type: "image" },
+    ]);
+    await accountDatabase()("o_vendorConfig").insert({
+      id: "volcengine", inputValues: "{}", models: volcengineModels, enable: 1,
+    }).onConflict("id").merge({ inputValues: "{}", models: volcengineModels, enable: 1 });
     const created = await jsonRequest(generateAssetsUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },

@@ -59,6 +59,23 @@ async function jsonRequest(url: string, init: RequestInit = {}): Promise<{ statu
   return { status: response.status, body: text ? JSON.parse(text) : null };
 }
 
+async function waitForRuntimeReadOrEarlyResponse(
+  firstReached: Promise<void>,
+  request: Promise<{ status: number; body: any }>,
+  requestName: string,
+): Promise<void> {
+  const outcome = await Promise.race([
+    firstReached.then(() => ({ kind: "runtime-read" } as const)),
+    request.then((response) => ({ kind: "early-response", response } as const)),
+  ]);
+  if (outcome.kind === "early-response") {
+    // 中文注释：请求若在运行时读取钩子前结束，立即失败，让外层 finally 关闭服务与数据库。
+    assert.fail(
+      `${requestName} 在 runtime-read 测试钩子前结束: HTTP ${outcome.response.status} ${JSON.stringify(outcome.response.body)}`,
+    );
+  }
+}
+
 function samePath(left: string | null | undefined, right: string | null | undefined): boolean {
   if (!left || !right) return false;
   const normalize = (value: string) => (process.platform === "win32"
@@ -131,7 +148,7 @@ async function withUpdateServer(
       await writeDreaminaCliSettings({
         enabled: true,
         executablePath: FAKE_CLI,
-        pauseNewClaims: false,
+        pauseReason: "manual_pause",
         maxConcurrency: 1,
       });
       await writeDreaminaRuntimeState({
@@ -248,7 +265,8 @@ async function assertFinalBWithHelpers(pathB: string): Promise<void> {
       "不得出现 settings=B、runtime=A",
     );
     assert.equal(final.settings.maxConcurrency, 3);
-    assert.equal(final.settings.pauseNewClaims, true);
+    assert.equal(final.settings.pauseReason, "manual_pause", "并发辅助设置不得覆盖 R26 手动暂停原因");
+    assert.equal(final.settings.pauseNewClaims, true, "兼容派生字段必须反映 R26 手动暂停状态");
     assert.equal(final.runtime.preferredExecutionTarget, "wsl");
     assert.notEqual(cache.snapshot?.version, "mine-before-A", "cache 不得仍对应 A");
     assert.equal(samePath(token.executablePath, pathB), true, `probe token 必须绑定 B: ${token.executablePath}`);
@@ -275,10 +293,9 @@ test("R1 辅助设置读到 runtime A 后暂停，R2 迁到 B，禁止 settings=
       body: JSON.stringify({
         preferredExecutionTarget: "wsl",
         maxConcurrency: 3,
-        pauseNewClaims: true,
       }),
     });
-    await firstReached;
+    await waitForRuntimeReadOrEarlyResponse(firstReached, r1Promise, "R1");
     timeline.push("R1-paused-after-runtime-read-A");
     const paused = await runWithUserStorage(IDENTITY, () => readDreaminaRuntimeState());
     assert.equal(samePath(paused.executablePath, pathA), true, "暂停时 runtime 仍必须是 A");
@@ -348,7 +365,7 @@ test("相反到达：R2 路径迁移读到 A 后暂停，R1 辅助设置先完�
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ executablePath: pathB }),
     });
-    await firstReached;
+    await waitForRuntimeReadOrEarlyResponse(firstReached, r2Promise, "R2");
     timeline.push("R2-paused-after-runtime-read-A");
     const paused = await runWithUserStorage(IDENTITY, () => readDreaminaRuntimeState());
     assert.equal(samePath(paused.executablePath, pathA), true, "R2 暂停时 runtime 仍必须是 A");
@@ -360,13 +377,11 @@ test("相反到达：R2 路径迁移读到 A 后暂停，R1 辅助设置先完�
       body: JSON.stringify({
         preferredExecutionTarget: "wsl",
         maxConcurrency: 3,
-        pauseNewClaims: true,
       }),
     });
     const r1AppliedWhileHeld = await waitUntil("r1-helpers", async () => {
       const snap = await snapshotState();
       return snap.settings.maxConcurrency === 3
-        && snap.settings.pauseNewClaims === true
         && snap.runtime.preferredExecutionTarget === "wsl";
     });
     if (r1AppliedWhileHeld) {
