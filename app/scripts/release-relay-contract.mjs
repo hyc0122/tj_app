@@ -7,6 +7,13 @@ const STABLE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const BETA_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const COMMIT_SHA = /^[a-f0-9]{40}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
+const SUPPORTED_TARGETS = new Set([
+  "windows-x64",
+  "linux-x64",
+  "linux-arm64",
+  "macos-x64",
+  "macos-arm64",
+]);
 const COMMON_ASSETS = Object.freeze([
   "release-manifest.json",
   "release-manifest.json.sigstore.json",
@@ -88,7 +95,12 @@ function assertManifestShape(manifest) {
     ) {
       fail("ReleaseManifest 资产字段无效或重复");
     }
-    if (!artifact.mutable && (
+    const expectedTargetId = `${artifact.platform}-${artifact.arch}`;
+    if (artifact.targetId !== expectedTargetId || !SUPPORTED_TARGETS.has(expectedTargetId)) {
+      fail("ReleaseManifest targetId、平台或架构不一致");
+    }
+    const isPlatformRelease = artifact.kind === "platform-release";
+    if (!artifact.mutable && !isPlatformRelease && (
       typeof artifact.compatibilityOssKey !== "string"
       || artifact.compatibilityOssKey.startsWith("/")
       || artifact.compatibilityOssKey.includes("..")
@@ -98,12 +110,44 @@ function assertManifestShape(manifest) {
     if (artifact.mutable && artifact.compatibilityOssKey !== null) {
       fail("渠道指针不得声明兼容对象路径");
     }
+    if (isPlatformRelease && (
+      artifact.mutable
+      || artifact.compatibilityOssKey !== null
+      || artifact.releaseAsset !== `release-${artifact.targetId}.json`
+      || artifact.ossKey !== `desktop/${manifest.channel}/${artifact.platform}/${artifact.arch}/catalog/releases/${manifest.version}/release.json`
+    )) {
+      fail("平台 release.json 资产字段无效");
+    }
     names.add(artifact.releaseAsset);
   }
   const artifactTargets = [...new Set(manifest.artifacts.map((artifact) => artifact.targetId))]
     .sort((left, right) => left.localeCompare(right, "en"));
   if (JSON.stringify(artifactTargets) !== JSON.stringify(expectedTargets)) {
     fail("ReleaseManifest 目标与资产覆盖不一致");
+  }
+  for (const targetId of expectedTargets) {
+    const targetArtifacts = manifest.artifacts.filter((artifact) => artifact.targetId === targetId);
+    const platformReleases = targetArtifacts.filter((artifact) => artifact.kind === "platform-release");
+    const catalogPointers = targetArtifacts.filter((artifact) => artifact.kind === "catalog-pointer");
+    if (platformReleases.length !== 1) {
+      fail(`目标缺少唯一平台 release.json：${targetId}`);
+    }
+    if (catalogPointers.length !== 1) {
+      fail(`目标缺少唯一平台 latest.json 指针：${targetId}`);
+    }
+    const platformRelease = platformReleases[0];
+    const catalogPointer = catalogPointers[0];
+    const targetRoot = `desktop/${manifest.channel}/${platformRelease.platform}/${platformRelease.arch}`;
+    if (
+      catalogPointer.mutable !== true
+      || catalogPointer.compatibilityOssKey !== null
+      || catalogPointer.platform !== platformRelease.platform
+      || catalogPointer.arch !== platformRelease.arch
+      || catalogPointer.releaseAsset !== `latest-${targetId}.json`
+      || catalogPointer.ossKey !== `${targetRoot}/catalog/latest.json`
+    ) {
+      fail(`目标平台 release 与 latest 指针不匹配：${targetId}`);
+    }
   }
 }
 

@@ -17,6 +17,19 @@ test("正式版高于同基线 Beta，平台 Key 固定在 Windows x64", () => {
   });
 });
 
+test("Stable 平台 Key 覆盖云端工作流已有的 Linux x64 与 macOS arm64", () => {
+  assert.deepEqual(platformReleaseKeys("stable", "linux", "x64", "1.1.18"), {
+    latest: "desktop/stable/linux/x64/catalog/latest.json",
+    release: "desktop/stable/linux/x64/catalog/releases/1.1.18/release.json",
+    nativeMetadata: "desktop/stable/linux/x64/latest-linux.yml",
+  });
+  assert.deepEqual(platformReleaseKeys("stable", "macos", "arm64", "1.1.18"), {
+    latest: "desktop/stable/macos/arm64/catalog/latest.json",
+    release: "desktop/stable/macos/arm64/catalog/releases/1.1.18/release.json",
+    nativeMetadata: "desktop/stable/macos/arm64/latest-mac.yml",
+  });
+});
+
 test("平台指针拒绝跨通道 release", () => {
   assert.throws(() => parsePlatformLatest({
     schemaVersion: 2,

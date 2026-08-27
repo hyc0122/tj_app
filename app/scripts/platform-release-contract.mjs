@@ -32,8 +32,7 @@ function assertTarget(channel, platform, arch) {
   assertChannel(channel);
   const targetId = `${platform}-${arch}`;
   if (!BETA_TARGETS.has(targetId)) fail("平台或架构不在桌面发布目标内");
-  // Stable 仍只批准 Task 1 的 Windows x64；Beta 平台合同覆盖 Task 3 五目标。
-  if (channel === "stable" && targetId !== "windows-x64") fail("stable 只批准 windows/x64");
+  // Stable 与 Beta 共用云端三平台目标；兼容晋升仍在 release 来源校验中单独限制。
   return targetId;
 }
 

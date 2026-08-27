@@ -70,7 +70,7 @@ export function createOssPublicationPlan({ directory, manifest, verifiedFiles })
 
   for (const artifact of manifest.artifacts) {
     if (artifact.mutable) continue;
-    const phaseIndex = artifact.kind === "blockmap" ? 1 : 0;
+    const phaseIndex = ["blockmap", "platform-release"].includes(artifact.kind) ? 1 : 0;
     append(phaseIndex, buildObject({
       key: artifact.ossKey,
       releaseAsset: artifact.releaseAsset,
@@ -79,14 +79,16 @@ export function createOssPublicationPlan({ directory, manifest, verifiedFiles })
       mutable: false,
       phase: phases[phaseIndex].name,
     }));
-    append(phaseIndex, buildObject({
-      key: artifact.compatibilityOssKey,
-      releaseAsset: artifact.releaseAsset,
-      directory,
-      verifiedFiles,
-      mutable: false,
-      phase: phases[phaseIndex].name,
-    }));
+    if (artifact.compatibilityOssKey !== null) {
+      append(phaseIndex, buildObject({
+        key: artifact.compatibilityOssKey,
+        releaseAsset: artifact.releaseAsset,
+        directory,
+        verifiedFiles,
+        mutable: false,
+        phase: phases[phaseIndex].name,
+      }));
+    }
   }
 
   const targetDescriptors = manifest.targets.map((targetId) => {

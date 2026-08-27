@@ -3,6 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { readValidatedTarget } from "./build-release-manifest.mjs";
+import {
+  parsePlatformLatest,
+  parsePlatformRelease,
+  platformReleaseKeys,
+} from "./platform-release-contract.mjs";
 import { resolveReleaseTarget } from "./release-targets.mjs";
 
 const STABLE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -59,16 +64,42 @@ function assertTargetSet(targets) {
 }
 
 export function createChannelPointerBytes(context, target) {
-  return jsonBytes({
-    schemaVersion: 3,
+  const keys = platformReleaseKeys(context.channel, target.platform, target.arch, context.version);
+  return jsonBytes(parsePlatformLatest({
+    schemaVersion: 2,
     channel: context.channel,
+    platform: target.platform,
+    arch: target.arch,
+    version: context.version,
+    release: keys.release,
+  }, { channel: context.channel, platform: target.platform, arch: target.arch }));
+}
+
+/** 生成客户端先读取的不可变平台 release.json，文件摘要直接来自 Runner 目标索引。 */
+export function createPlatformReleaseBytes(context, target) {
+  const keys = platformReleaseKeys(context.channel, target.platform, target.arch, context.version);
+  const targetRoot = `desktop/${context.channel}/${target.platform}/${target.arch}`;
+  const release = parsePlatformRelease({
+    schemaVersion: 2,
+    channel: context.channel,
+    sourceChannel: context.channel,
+    platform: target.platform,
+    arch: target.arch,
     version: context.version,
     tag: context.tag,
     commitSha: context.commitSha,
-    platform: target.platform,
-    arch: target.arch,
-    releaseManifest: `desktop/${context.channel}/${target.platform}/${target.arch}/catalog/releases/${context.version}/release-manifest.json`,
-  });
+    nativeMetadata: keys.nativeMetadata,
+    artifacts: target.files
+      .filter((file) => file.fileName !== target.metadataFile)
+      .map((file) => ({
+        path: `${targetRoot}/${file.fileName}`,
+        fileName: file.fileName,
+        kind: file.kind,
+        size: file.size,
+        sha256: file.sha256,
+      })),
+  }, { channel: context.channel, platform: target.platform, arch: target.arch });
+  return jsonBytes(release);
 }
 
 /**
@@ -125,6 +156,24 @@ export function createCloudReleaseManifest({ context, targets, signing = {} }) {
         sha256: file.sha256,
       });
     }
+
+    const releaseBytes = createPlatformReleaseBytes(context, target);
+    const releaseAsset = `release-${target.id}.json`;
+    if (releaseAssets.has(releaseAsset)) fail(`Release Asset 名称重复：${releaseAsset}`);
+    releaseAssets.add(releaseAsset);
+    artifacts.push({
+      releaseAsset,
+      ossKey: `desktop/${context.channel}/${target.platform}/${target.arch}/catalog/releases/${context.version}/release.json`,
+      // 平台 release.json 只存在于不可变版本目录，不需要 updater 根目录兼容副本。
+      compatibilityOssKey: null,
+      targetId: target.id,
+      platform: target.platform,
+      arch: target.arch,
+      kind: "platform-release",
+      mutable: false,
+      size: releaseBytes.length,
+      sha256: sha256(releaseBytes),
+    });
 
     const pointerBytes = createChannelPointerBytes(context, target);
     const pointerAsset = `latest-${target.id}.json`;
@@ -208,6 +257,8 @@ export function prepareCloudReleaseAssets({ targetsRoot, destinationRoot, contex
       for (const file of target.files) {
         fs.copyFileSync(file.sourcePath, path.join(assetsRoot, file.fileName), fs.constants.COPYFILE_EXCL);
       }
+      const releaseName = `release-${target.id}.json`;
+      writeExclusive(path.join(assetsRoot, releaseName), createPlatformReleaseBytes(context, target));
       const pointerName = `latest-${target.id}.json`;
       writeExclusive(path.join(assetsRoot, pointerName), createChannelPointerBytes(context, target));
     }
