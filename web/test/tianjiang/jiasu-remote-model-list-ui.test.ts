@@ -46,6 +46,21 @@ describe("佳速手动添加远端模型", () => {
 
     models.handleAddModel();
     expect(models.modelFormData.value.type).toBe("video");
+    expect(models.modelFormData.value.mode).toEqual(["multiReference"]);
+    expect(models.modelFormData.value.mixedMode).toEqual([
+      "imageReference",
+      "videoReference",
+      "audioReference",
+    ]);
+    expect(models.modelFormData.value.mixedModeCount).toEqual({
+      imageReference: 9,
+      videoReference: 3,
+      audioReference: 3,
+    });
+    expect(models.modelFormData.value.durationResolutionMap).toEqual([{
+      duration: Array.from({ length: 27 }, (_, index) => String(index + 4)),
+      resolution: ["480p", "720p", "1080p"],
+    }]);
     expect(post).not.toHaveBeenCalled();
     expect(typeof models.loadRemoteModels).toBe("function");
 
@@ -62,6 +77,16 @@ describe("佳速手动添加远端模型", () => {
     expect(models.modelFormData.value.name).toBe("video-model-a");
     expect(models.modelFormData.value.modelName).toBe("video-model-a");
     expect(models.modelFormData.value.type).toBe("video");
+    expect(models.modelFormData.value.mode).toEqual(["multiReference"]);
+    expect(models.modelFormData.value.mixedModeCount).toEqual({
+      imageReference: 9,
+      videoReference: 3,
+      audioReference: 3,
+    });
+    expect(models.modelFormData.value.durationResolutionMap[0]).toEqual({
+      duration: Array.from({ length: 27 }, (_, index) => String(index + 4)),
+      resolution: ["480p", "720p", "1080p"],
+    });
   });
 
   it("非佳速供应商仍保持文本模型默认值", () => {

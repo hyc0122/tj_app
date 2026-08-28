@@ -13,7 +13,10 @@ import {
   migrateLegacyVendorIdentity,
   migrateLegacyVendorSourceFile,
 } from "./product-identity-migration";
-import { migrateJiasuProviderV4 } from "./jiasu-provider-migration";
+import {
+  migrateJiasuProviderModelCatalogV44,
+  migrateJiasuProviderV4,
+} from "./jiasu-provider-migration";
 import { migrateProviderImageRecovery } from "./provider-image-recovery-migration";
 import { migrateDefaultVideoPromptToChinese } from "./video-prompt-language-migration";
 import {
@@ -319,6 +322,27 @@ export function buildApplicationMigrations(
             name: "dreamina-cli-poll-seconds-v1",
             checksumSource: "append o_dreaminaCliSettings.pollSeconds default 30 range 5 300 v1",
             up: migrateDreaminaCliPollSeconds,
+          } satisfies SqliteMigration,
+          {
+            version: tableMigrations.length + 17,
+            name: "jiasu-provider-model-catalog-v4-4",
+            checksumSource: "upgrade installed tianjiang provider source below 4.4 for remote model catalog v1",
+            up: async (database) => {
+              await migrateJiasuProviderModelCatalogV44(database, {
+                builtinSource: rawVendorData["tianjiang.ts"],
+                readInstalledVersion: () => {
+                  const code = u.vendor.getCode("tianjiang");
+                  if (!code) return undefined;
+                  try {
+                    return String(u.vendor.getVendor("tianjiang")?.version ?? "");
+                  } catch {
+                    // 损坏或无法执行的旧动态源码按待修复版本处理。
+                    return undefined;
+                  }
+                },
+                writeInstalledSource: (source) => u.vendor.writeCode("tianjiang", source),
+              });
+            },
           } satisfies SqliteMigration,
         ]),
   ];

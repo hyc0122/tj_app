@@ -110,16 +110,27 @@ export function normalizeDurationResolutionRows(rows: DrmRow[]):
 export function createEmptyModelForm(
   type: VendorModelForm["type"] = "text",
 ): VendorModelForm {
+  const isVideo = type === "video";
   return {
     name: "",
     modelName: "",
     type,
     think: false,
-    mode: [],
-    mixedMode: [],
-    mixedModeCount: {},
+    mode: isVideo ? ["multiReference"] : [],
+    mixedMode: isVideo
+      ? ["imageReference", "videoReference", "audioReference"]
+      : [],
+    mixedModeCount: isVideo
+      ? { imageReference: 9, videoReference: 3, audioReference: 3 }
+      : {},
     audio: "optional",
-    durationResolutionMap: [{ duration: [], resolution: [] }],
+    durationResolutionMap: isVideo
+      ? [{
+          // 佳速视频模型默认开放 4—30 秒及三档常用分辨率。
+          duration: Array.from({ length: 27 }, (_, index) => String(index + 4)),
+          resolution: ["480p", "720p", "1080p"],
+        }]
+      : [{ duration: [], resolution: [] }],
   };
 }
 

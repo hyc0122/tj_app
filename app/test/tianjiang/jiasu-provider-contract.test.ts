@@ -172,14 +172,21 @@ async function createMockServer() {
 }
 
 test("佳速 API 模板使用正式 OpenAPI 的文本、图片、视频基准模型", async () => {
+  const source = fs.readFileSync(templatePath, "utf8");
   const runtime = loadTemplate("http://127.0.0.1:1/v1");
   assert.equal(runtime.vendor.name, "佳速 API");
-  assert.equal(runtime.vendor.version, "4.3");
+  assert.equal(runtime.vendor.version, "4.4");
   assert.match(runtime.vendor.description, /https:\/\/jsapi\.apifox\.cn\//);
   assert.match(runtime.vendor.description, /https:\/\/js\.jiasuapi\.com\//);
   assert.match(runtime.vendor.description, /https:\/\/js\.jiasuapi\.com\/keys/);
   assert.doesNotMatch(runtime.vendor.description, /https:\/\/jiasu\.apifox\.cn\//);
   assert.doesNotMatch(runtime.vendor.description, /api\.tianjiang\.net/);
+  assert.match(
+    source,
+    /const PRODUCTION_BASE_URL = "https:\/\/js\.jiasuapi\.com\/v1"/,
+  );
+  assert.match(source, /async function listModels\(\)[\s\S]*?requestJson\(\s*"\/models"/);
+  assert.doesNotMatch(source, /LEGACY_BASE_URL|api\.tianjiang\.net/);
   assert.deepEqual(
     runtime.vendor.models.map((model) => model.type),
     ["text", "image", "video"],
@@ -196,7 +203,7 @@ test("佳速 API 模板使用正式 OpenAPI 的文本、图片、视频基准模
   const normalizeLineEndings = (value: string) => value.replace(/\r\n/g, "\n");
   assert.equal(
     normalizeLineEndings(rawVendorData["tianjiang.ts"]),
-    normalizeLineEndings(fs.readFileSync(templatePath, "utf8")),
+    normalizeLineEndings(source),
   );
 });
 

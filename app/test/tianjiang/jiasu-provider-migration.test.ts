@@ -6,7 +6,11 @@ import test from "node:test";
 import knex, { type Knex } from "knex";
 
 import { getInitialTableSchemas } from "../../src/lib/initDB";
-import { migrateJiasuProviderV4 } from "../../src/tianjiang/data/jiasu-provider-migration";
+import { buildApplicationMigrations } from "../../src/tianjiang/data/application-migrations";
+import {
+  migrateJiasuProviderModelCatalogV44,
+  migrateJiasuProviderV4,
+} from "../../src/tianjiang/data/jiasu-provider-migration";
 import { migrateProviderImageRecovery } from "../../src/tianjiang/data/provider-image-recovery-migration";
 
 const controlledTempRoot = path.resolve(process.cwd(), "..", ".tmp");
@@ -216,4 +220,61 @@ test("图片恢复迁移只替换错误预置并保留密钥、自定义模型�
     await database.destroy();
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("4.2 旧源码必须升级到含模型列表的 4.4，并保留账号配置和模型", async () => {
+  const { database, root } = await createDatabase("tj-jiasu-model-catalog-");
+  const writes: string[] = [];
+  try {
+    const inputValues = JSON.stringify({
+      apiKey: "existing-secret",
+      baseUrl: "https://js.jiasuapi.com/v1",
+      userField: "保留值",
+    });
+    const models = JSON.stringify([
+      { name: "用户视频模型", modelName: "custom-video", type: "video" },
+    ]);
+    await database("o_vendorConfig").insert({
+      id: "tianjiang",
+      inputValues,
+      models,
+      enable: 1,
+    });
+
+    await migrateJiasuProviderModelCatalogV44(database, {
+      builtinSource: "exports.vendor={version:'4.4'};exports.listModels=async()=>[]",
+      readInstalledVersion: () => "4.2",
+      writeInstalledSource: (source) => writes.push(source),
+    });
+
+    const row = await database("o_vendorConfig").where({ id: "tianjiang" }).first();
+    assert.equal(row.inputValues, inputValues);
+    assert.equal(row.models, models);
+    assert.equal(row.enable, 1);
+    assert.deepEqual(writes, [
+      "exports.vendor={version:'4.4'};exports.listModels=async()=>[]",
+    ]);
+  } finally {
+    await database.destroy();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("账号库注册佳速 4.4 源码升级迁移，项目库不得重复改写全局供应商源码", () => {
+  const accountMigrations = buildApplicationMigrations({
+    role: "account",
+    skipEmbeddingInit: true,
+  });
+  const projectMigrations = buildApplicationMigrations({
+    role: "project",
+    skipEmbeddingInit: true,
+  });
+  assert.equal(
+    accountMigrations.at(-1)?.name,
+    "jiasu-provider-model-catalog-v4-4",
+  );
+  assert.equal(
+    projectMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"),
+    false,
+  );
 });

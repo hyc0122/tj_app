@@ -2,6 +2,7 @@ import type { Knex } from "knex";
 
 const JIASU_BASE_URL = "https://js.jiasuapi.com/v1";
 const MINIMUM_TEMPLATE_VERSION = [4, 0];
+const MODEL_CATALOG_TEMPLATE_VERSION = [4, 4];
 
 interface VendorConfigRow {
   id: string;
@@ -68,4 +69,24 @@ export async function migrateJiasuProviderV4(
         baseUrl: JIASU_BASE_URL,
       }),
     });
+}
+
+/**
+ * 把已安装的旧佳速动态源码升级到 4.4，使现有账号获得远端模型列表能力。
+ * 该迁移只替换内置供应商源码，不修改密钥、模型、启用状态或其他账号配置。
+ */
+export async function migrateJiasuProviderModelCatalogV44(
+  database: Knex | Knex.Transaction,
+  dependencies: JiasuProviderMigrationDependencies,
+): Promise<void> {
+  if (!(await database.schema.hasTable("o_vendorConfig"))) return;
+  const row = await database<VendorConfigRow>("o_vendorConfig")
+    .where({ id: "tianjiang" })
+    .first();
+  if (!row || isVersionAtLeast(
+    dependencies.readInstalledVersion(),
+    MODEL_CATALOG_TEMPLATE_VERSION,
+  )) return;
+  if (!dependencies.builtinSource.trim()) throw new Error("佳速 API 4.4 内置模板缺失");
+  dependencies.writeInstalledSource(dependencies.builtinSource);
 }

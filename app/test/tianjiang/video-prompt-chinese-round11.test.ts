@@ -253,5 +253,5 @@ test("应用迁移链必须保留中文默认视频提示词并追加当前账�
   const account = buildApplicationMigrations({ role: "account", skipEmbeddingInit: true });
   assert.ok(account.some((item) => item.name === "video-prompt-default-zh-v1"));
   assert.ok(account.some((item) => item.name === "database-role-account-v1"));
-  assert.equal(account.at(-1)?.name, "dreamina-cli-poll-seconds-v1");
+  assert.equal(account.at(-1)?.name, "jiasu-provider-model-catalog-v4-4");
 });

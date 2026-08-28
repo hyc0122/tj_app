@@ -7,7 +7,7 @@
  * - 视频创建：POST /video/generations
  * - 视频查询：GET /video/generations/{task_id}
  *
- * @version 4.3
+ * @version 4.4
  */
 
 type VideoMode =
@@ -155,13 +155,12 @@ declare const exports: {
 };
 
 const PRODUCTION_BASE_URL = "https://js.jiasuapi.com/v1";
-const LEGACY_BASE_URL = "https://api.tianjiang.net/v1";
 const PROVIDER_UPDATE_BASE_URL =
   "https://api.j11.com.cn/api/tianjiang/v1/public/provider-sources/tianjiang";
 
 const vendor: VendorConfig = {
   id: "tianjiang",
-  version: "4.3",
+  version: "4.4",
   author: "JiasuAPI",
   name: "佳速 API",
   description:
@@ -206,9 +205,8 @@ function getApiKey(): string {
 
 function getBaseUrl(): string {
   const configured = String(vendor.inputValues.baseUrl ?? "").trim().replace(/\/+$/, "");
-  // 已安装旧版配置时自动切到新地址；本地测试或用户显式自定义地址则保留。
-  if (!configured || configured === LEGACY_BASE_URL) return PRODUCTION_BASE_URL;
-  return configured;
+  // 空配置使用佳速正式地址；显式地址仅用于受控测试或私有代理。
+  return configured || PRODUCTION_BASE_URL;
 }
 
 function stringValue(value: unknown): string {
