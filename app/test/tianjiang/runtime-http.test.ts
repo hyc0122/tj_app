@@ -1461,8 +1461,8 @@ test("单活动账号切换会原子覆盖 active 数据，旧账号仅进入 re
   bobDatabase.close();
   assert.deepEqual(
     bobMigrationVersions.map((row) => row.version),
-    Array.from({ length: 42 }, (_unused, index) => index + 1),
-    "账号切换只允许把完整迁移链应用到 Bob 目标库（含即梦启用、暂停原因与轮询间隔迁移）",
+    Array.from({ length: 43 }, (_unused, index) => index + 1),
+    "账号切换只允许把完整迁移链应用到 Bob 目标库（含即梦启用、暂停原因、轮询间隔与佳速模型目录迁移）",
   );
 
   assert.equal(fs.existsSync(recoveryRoot), true);
