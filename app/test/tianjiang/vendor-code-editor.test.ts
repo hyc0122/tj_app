@@ -91,7 +91,12 @@ test("源码写盘继续经过 sanitizeVendorSourceSecrets", () => {
     path.join(process.cwd(), "src/routes/setting/vendorConfig/updateCode.ts"),
     "utf8",
   );
-  assert.match(update, /sanitizeVendorSourceSecrets/);
+  const sharedUpdate = fs.readFileSync(
+    path.join(process.cwd(), "src/utils/vendor-source-update.ts"),
+    "utf8",
+  );
+  assert.match(update, /applyVendorSourceUpdate/);
+  assert.match(sharedUpdate, /sanitizeVendorSourceSecrets/);
   const secret = "user-private-password-literal-xyz";
   const source = `const k = "${secret}";\nexports.vendor = { inputs: [{ key: "apiKey", type: "password" }], inputValues: { apiKey: "${secret}" } };`;
   const cleaned = sanitizeVendorSourceSecrets(

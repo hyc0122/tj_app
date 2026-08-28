@@ -50,6 +50,12 @@
             :message="$t('settings.vendor.msg.vendorNeedsUpdate')"
             style="margin-bottom: 12px"
           />
+          <t-alert
+            v-if="hasVendorUpdate && vendorUpdateNotice"
+            theme="info"
+            :message="vendorUpdateNotice"
+            style="margin-bottom: 12px"
+          />
           <t-form-item>
             <MdPreview
               v-model="currentVendor.description"
@@ -174,14 +180,20 @@
           </t-card>
         </t-form>
         <div class="updateAction">
+          <t-button
+            v-if="canUpdateVendor"
+            theme="primary"
+            :loading="vendorUpdateBusy"
+            @click="hasVendorUpdate ? confirmVendorUpdate() : checkVendorUpdate()"
+          >
+            {{ hasVendorUpdate ? `更新到 ${latestVendorVersion}` : "检查配置更新" }}
+          </t-button>
           <t-button theme="danger" :loading="updating" @click="handleDeleteVendor">
             {{ $t("settings.vendor.deleteVendor") }}
           </t-button>
           <t-button theme="default" :loading="updating || codeLoading" @click="handleEditVendorCode">
             {{ $t("settings.vendor.editCode") }}
           </t-button>
-          <!-- 原页面暂未启用的配置更新入口继续保留，避免后续恢复时丢失 i18n 语义。 -->
-          <!-- <t-button theme="primary">{{ $t("settings.vendor.updateConfig") }}</t-button> -->
         </div>
       </div>
     </div>
@@ -220,8 +232,11 @@ import DreaminaProviderPanel from "./DreaminaProviderPanel.vue";
 
 const {
   activeVendorId,
+  canUpdateVendor,
+  checkVendorUpdate,
   codeLoading,
   currentVendor,
+  confirmVendorUpdate,
   workspaceItems,
   isNativeDreamina,
   getInputIcon,
@@ -237,9 +252,11 @@ const {
   handleEditModel,
   handleEditVendorCode,
   handleTestModel,
+  hasVendorUpdate,
   imageTestVisible,
   isValidBase64,
   loading,
+  latestVendorVersion,
   needsUpdate,
   onBlurFn,
   onChange,
@@ -257,6 +274,8 @@ const {
   vendorSaveError,
   vendorSaveState,
   vendorSecretsLoaded,
+  vendorUpdateBusy,
+  vendorUpdateNotice,
   videoTestVisible,
 } = useVendorConfigContext();
 </script>

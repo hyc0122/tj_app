@@ -1893,6 +1893,11 @@
   "teamPage.confirm.transfer": "确认把团队所有权转移给 {name}？此操作不可自动撤销。",
   "teamPage.confirm.dissolve": "确认解散团队“{name}”？此操作需要所有者二次确认。",
   "settings.vendor.count": "个",
+  "settings.vendor.remoteModels": "佳速远端模型",
+  "settings.vendor.fetchRemoteModels": "获取模型列表",
+  "settings.vendor.remoteModelsPlaceholder": "先获取，再选择模型",
+  "settings.vendor.remoteModelsEmpty": "佳速 API 未返回可用模型",
+  "settings.vendor.remoteModelsFailed": "获取佳速模型列表失败",
   "settings.vendor.msg.operationFailed": "操作失败，请重试",
   "workbench.production.editImage.textRef": "文本参考",
   "common": {

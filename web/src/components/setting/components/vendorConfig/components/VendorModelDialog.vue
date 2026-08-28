@@ -13,6 +13,37 @@
   >
     <div class="addBox">
       <t-form :data="modelFormData" label-align="top">
+        <t-form-item
+          v-if="currentVendor?.id === 'tianjiang' && editingModelIndex === null"
+          :label="$t('settings.vendor.remoteModels')"
+        >
+          <div class="remoteModelPicker">
+            <t-select
+              v-model="selectedRemoteModelId"
+              filterable
+              clearable
+              :placeholder="$t('settings.vendor.remoteModelsPlaceholder')"
+              @change="selectRemoteModel(String($event ?? ''))"
+            >
+              <t-option
+                v-for="model in remoteModels"
+                :key="model.id"
+                :value="model.id"
+                :label="model.id"
+              />
+            </t-select>
+            <t-button
+              variant="outline"
+              :loading="remoteModelsLoading"
+              @click="loadRemoteModels"
+            >
+              {{ $t("settings.vendor.fetchRemoteModels") }}
+            </t-button>
+          </div>
+          <div v-if="remoteModelsLoaded && remoteModels.length === 0" class="remoteModelHint">
+            {{ $t("settings.vendor.remoteModelsEmpty") }}
+          </div>
+        </t-form-item>
         <t-form-item name="name" :label="$t('settings.vendor.displayName')">
           <t-input
             v-model="modelFormData.name"
@@ -178,13 +209,20 @@ import { useVendorConfigContext } from "../vendorConfigContext";
 
 const {
   audioOptions,
+  currentVendor,
   editingModelIndex,
   handleConfirmModel,
   imageModeOptions,
   modelDialogVisible,
   modelFormData,
   modelTypeOptions,
+  loadRemoteModels,
   referenceOptions,
+  remoteModels,
+  remoteModelsLoaded,
+  remoteModelsLoading,
+  selectedRemoteModelId,
+  selectRemoteModel,
   videoModeOptions,
 } = useVendorConfigContext();
 </script>

@@ -2033,6 +2033,11 @@
   "teamPage.confirm.transfer": "Transfer ownership to {name}? This cannot be automatically undone.",
   "teamPage.confirm.dissolve": "Dissolve team “{name}”? Owner confirmation is required.",
   "settings.vendor.count": "items",
+  "settings.vendor.remoteModels": "โมเดลระยะไกล Jiasu",
+  "settings.vendor.fetchRemoteModels": "ดึงรายการโมเดล",
+  "settings.vendor.remoteModelsPlaceholder": "ดึงแล้วเลือกโมเดล",
+  "settings.vendor.remoteModelsEmpty": "Jiasu API ไม่ส่งคืนโมเดลที่ใช้ได้",
+  "settings.vendor.remoteModelsFailed": "ดึงรายการโมเดล Jiasu ไม่สำเร็จ",
   "settings.vendor.msg.operationFailed": "Operation failed. Try again.",
   "workbench.production.editImage.textRef": "Text reference",
   "common": {

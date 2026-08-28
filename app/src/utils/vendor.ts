@@ -14,6 +14,14 @@ import {
   resolveVendorSourceFile,
   resolveWritableVendorSourceFile,
 } from "@/utils/vendor-source-path";
+import { loadVendorPrivateInputs } from "@/utils/vendor-private-config";
+
+export interface RemoteVendorModel {
+  id: string;
+  object?: string;
+  created?: number;
+  owned_by?: string;
+}
 
 export function writeCode(id: string | number, tsCode: string) {
   const safeId = assertSafeVendorId(String(id));
@@ -119,6 +127,98 @@ export async function getModelList(id: string): Promise<Array<any>> {
   const models = await accountDb("o_vendorConfig").where("id", id).select("models").first();
   if (!models) return [];
   return buildMergedVendorModelList(id, models.models);
+}
+
+export async function listRemoteModels(
+  id: string,
+  options: {
+    source?: string;
+    privateInputs?: Record<string, string>;
+  } = {},
+): Promise<RemoteVendorModel[]> {
+  const safeId = assertSafeVendorId(id);
+  const source = options.source ?? getCode(safeId);
+  if (!source.trim()) throw new Error("供应商源码不存在或为空");
+  const javascript = transform(source, { transforms: ["typescript"] }).code;
+
+  // 先在禁网沙盒预检顶层代码，避免模型列表入口加载时偷偷发起请求。
+  u.vm(javascript, undefined, { provider: safeId, networkPolicy: "blocked" });
+  const runtime = u.vm(javascript, undefined, { provider: safeId });
+  if (!runtime?.vendor?.inputValues || typeof runtime.listModels !== "function") {
+    throw new Error("供应商未提供模型列表功能");
+  }
+  const privateInputs = options.privateInputs ?? await loadVendorPrivateInputs(safeId);
+  Object.assign(runtime.vendor.inputValues, privateInputs);
+  const remoteModels = await runtime.listModels();
+  if (!Array.isArray(remoteModels)) throw new Error("模型列表响应格式无效");
+
+  // 沙盒返回值仍在本地后端做二次收敛，绝不把密钥或任意对象透传到页面。
+  const seen = new Set<string>();
+  const models: RemoteVendorModel[] = [];
+  for (const item of remoteModels) {
+    if (!item || typeof item !== "object") continue;
+    const idValue = typeof item.id === "string" ? item.id.trim() : "";
+    if (!idValue || seen.has(idValue)) continue;
+    seen.add(idValue);
+    const model: RemoteVendorModel = { id: idValue };
+    if (typeof item.object === "string") model.object = item.object;
+    if (typeof item.created === "number" && Number.isFinite(item.created)) model.created = item.created;
+    if (typeof item.owned_by === "string") model.owned_by = item.owned_by;
+    models.push(model);
+  }
+  return models;
+}
+
+export interface RemoteVendorUpdate {
+  hasUpdate: boolean;
+  latestVersion: string;
+  notice: string;
+}
+
+async function loadUpdateRuntime(
+  id: string,
+  options: { source?: string; privateInputs?: Record<string, string> } = {},
+) {
+  const safeId = assertSafeVendorId(id);
+  const source = options.source ?? getCode(safeId);
+  if (!source.trim()) throw new Error("供应商源码不存在或为空");
+  const javascript = transform(source, { transforms: ["typescript"] }).code;
+  // 更新入口和模型列表入口使用同一顶层禁网预检，下载只允许发生在显式调用阶段。
+  u.vm(javascript, undefined, { provider: safeId, networkPolicy: "blocked" });
+  const runtime = u.vm(javascript, undefined, { provider: safeId });
+  if (!runtime?.vendor?.inputValues) throw new Error("供应商源码缺少 vendor 配置");
+  const privateInputs = options.privateInputs ?? await loadVendorPrivateInputs(safeId);
+  Object.assign(runtime.vendor.inputValues, privateInputs);
+  return runtime;
+}
+
+export async function checkRemoteVendorUpdate(
+  id: string,
+  options: { source?: string; privateInputs?: Record<string, string> } = {},
+): Promise<RemoteVendorUpdate> {
+  const runtime = await loadUpdateRuntime(id, options);
+  if (typeof runtime.checkForUpdates !== "function") throw new Error("供应商未提供检查更新功能");
+  const result = await runtime.checkForUpdates();
+  if (!result || typeof result !== "object") throw new Error("供应商更新检查响应无效");
+  const latestVersion = typeof result.latestVersion === "string" ? result.latestVersion.trim() : "";
+  if (!latestVersion) throw new Error("供应商更新检查缺少最新版本号");
+  return {
+    hasUpdate: result.hasUpdate === true,
+    latestVersion,
+    notice: typeof result.notice === "string" ? result.notice : "",
+  };
+}
+
+export async function downloadRemoteVendorUpdate(
+  id: string,
+  options: { source?: string; privateInputs?: Record<string, string> } = {},
+): Promise<string> {
+  const runtime = await loadUpdateRuntime(id, options);
+  if (typeof runtime.updateVendor !== "function") throw new Error("供应商未提供更新功能");
+  const source = await runtime.updateVendor();
+  if (typeof source !== "string" || !source.trim()) throw new Error("供应商更新源码为空");
+  assertVendorSourceSize(source);
+  return source;
 }
 
 export function getVendor(id: string) {

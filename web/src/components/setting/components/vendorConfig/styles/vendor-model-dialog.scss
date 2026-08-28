@@ -7,6 +7,19 @@
   scrollbar-gutter: stable;
 }
 
+.remoteModelPicker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.remoteModelHint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder, #999);
+}
+
 .videoModeEditor {
   display: flex;
   flex-direction: column;

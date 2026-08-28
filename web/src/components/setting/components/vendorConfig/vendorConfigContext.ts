@@ -3,17 +3,20 @@ import settingStore from "@/stores/setting";
 import { useVendorCatalog } from "./useVendorCatalog";
 import { useVendorImport } from "./useVendorImport";
 import { useVendorModels } from "./useVendorModels";
+import { useVendorUpdates } from "./useVendorUpdates";
 
 export function createVendorConfigContext() {
   const { themeSetting } = storeToRefs(settingStore());
   const catalog = useVendorCatalog();
   const models = useVendorModels(catalog);
   const vendorImport = useVendorImport(catalog);
+  const vendorUpdates = useVendorUpdates(catalog);
 
   return {
     ...catalog,
     ...models,
     ...vendorImport,
+    ...vendorUpdates,
     themeSetting,
   };
 }

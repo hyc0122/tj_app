@@ -38,6 +38,13 @@ export interface VideoModel {
 
 export type VendorModel = TextModel | ImageModel | VideoModel;
 
+export interface RemoteVendorModel {
+  id: string;
+  object?: string;
+  created?: number;
+  owned_by?: string;
+}
+
 export interface VendorInput {
   key: string;
   label: string;

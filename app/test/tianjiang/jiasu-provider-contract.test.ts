@@ -29,6 +29,7 @@ interface TemplateRuntime {
   imageRequest: (config: Record<string, unknown>, model: Record<string, unknown>) => Promise<string>;
   videoRequest: (config: Record<string, unknown>, model: Record<string, unknown>) => Promise<string>;
   queryTask: (remoteTaskId: string) => Promise<Record<string, unknown>>;
+  listModels: () => Promise<Array<{ id: string }>>;
 }
 
 const appRoot = path.resolve(process.cwd());
@@ -116,6 +117,17 @@ async function createMockServer() {
         data: [{ url: "https://media.example/generated.png" }],
       }));
     }
+    if (request.method === "GET" && requestPath === "/v1/models") {
+      return response.end(JSON.stringify({
+        object: "list",
+        data: [
+          { id: "video-model-b", object: "model", created: 2, owned_by: "jiasu" },
+          { id: "video-model-a", object: "model", created: 1, owned_by: "jiasu" },
+          { id: "video-model-b", object: "model", created: 2, owned_by: "jiasu" },
+          { id: "", object: "model", created: 0, owned_by: "jiasu" },
+        ],
+      }));
+    }
     if (request.method === "POST" && requestPath === "/v1/video/generations") {
       return response.end(JSON.stringify({
         id: "video-task-1",
@@ -133,7 +145,7 @@ async function createMockServer() {
           object: "video",
           status: "completed",
           progress: 100,
-          url: "https://media.example/generated.mp4",
+          output: { url: "https://media.example/generated.mp4" },
         },
       }));
     }
@@ -162,7 +174,7 @@ async function createMockServer() {
 test("佳速 API 模板使用正式 OpenAPI 的文本、图片、视频基准模型", async () => {
   const runtime = loadTemplate("http://127.0.0.1:1/v1");
   assert.equal(runtime.vendor.name, "佳速 API");
-  assert.equal(runtime.vendor.version, "4.2");
+  assert.equal(runtime.vendor.version, "4.3");
   assert.match(runtime.vendor.description, /https:\/\/jsapi\.apifox\.cn\//);
   assert.match(runtime.vendor.description, /https:\/\/js\.jiasuapi\.com\//);
   assert.match(runtime.vendor.description, /https:\/\/js\.jiasuapi\.com\/keys/);
@@ -227,16 +239,16 @@ test("无参考图通过 /v1/images/create 以 JSON 同步返回图片 URL", asy
     assert.deepEqual(JSON.parse(fixture.requests[0].body.toString("utf8")), {
       model: "example-image-model",
       prompt: "生成角色立绘",
+      references: [],
       n: 1,
       size: "1024x576",
-      response_format: "url",
     });
   } finally {
     await fixture.close();
   }
 });
 
-test("单参考图通过 /v1/images/create 以 JSON image 字符串发送", async () => {
+test("单参考图通过 /v1/images/create 以 references 数组发送", async () => {
   const fixture = await createMockServer();
   try {
     const runtime = loadTemplate(fixture.baseUrl);
@@ -263,17 +275,16 @@ test("单参考图通过 /v1/images/create 以 JSON image 字符串发送", asyn
     assert.deepEqual(JSON.parse(fixture.requests[0].body.toString("utf8")), {
       model: "example-image-model",
       prompt: "保持角色一致并修改服装",
+      references: ["data:image/png;base64,aW1hZ2UtYnl0ZXM="],
       n: 1,
       size: "576x1024",
-      response_format: "url",
-      image: "data:image/png;base64,aW1hZ2UtYnl0ZXM=",
     });
   } finally {
     await fixture.close();
   }
 });
 
-test("多参考图通过 /v1/images/create 以 JSON image 数组保持原顺序", async () => {
+test("多参考图通过 /v1/images/create 以 references 数组保持原顺序", async () => {
   const fixture = await createMockServer();
   try {
     const runtime = loadTemplate(fixture.baseUrl);
@@ -296,10 +307,12 @@ test("多参考图通过 /v1/images/create 以 JSON image 数组保持原顺序"
     assert.equal(fixture.requests.length, 1);
     assert.equal(fixture.requests[0].path, "/v1/images/create");
     const requestBody = JSON.parse(fixture.requests[0].body.toString("utf8"));
-    assert.deepEqual(requestBody.image, [
+    assert.deepEqual(requestBody.references, [
       "data:image/png;base64,Zmlyc3Q=",
       "https://media.example/second.png",
     ]);
+    assert.equal("image" in requestBody, false);
+    assert.equal("response_format" in requestBody, false);
   } finally {
     await fixture.close();
   }
@@ -329,6 +342,14 @@ test("视频只创建一次并在持久化远端 ID 后 GET 查询原任务", as
         type: "image",
         sourceType: "base64",
         base64: "https://media.example/reference.png",
+      }, {
+        type: "video",
+        sourceType: "base64",
+        base64: "https://media.example/reference.mp4",
+      }, {
+        type: "audio",
+        sourceType: "base64",
+        base64: "https://media.example/reference.mp3",
       }],
     }, model);
     assert.equal(result, "https://media.example/generated.mp4");
@@ -346,12 +367,30 @@ test("视频只创建一次并在持久化远端 ID 后 GET 查询原任务", as
     assert.equal(createBody.duration, 5);
     assert.equal(createBody.ratio, "16:9");
     assert.equal(createBody.resolution, "720p");
-    assert.equal(createBody.generate_audio, true);
-    assert.deepEqual(createBody.content, [{
-      type: "image_url",
-      image_url: { url: "https://media.example/reference.png" },
-      role: "reference_image",
-    }]);
+    assert.deepEqual(createBody.images, ["https://media.example/reference.png"]);
+    assert.deepEqual(createBody.videos, ["https://media.example/reference.mp4"]);
+    assert.deepEqual(createBody.audios, ["https://media.example/reference.mp3"]);
+    assert.equal("generate_audio" in createBody, false);
+    assert.equal("content" in createBody, false);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("获取模型列表只返回去重后的非空模型 ID", async () => {
+  const fixture = await createMockServer();
+  try {
+    const runtime = loadTemplate(fixture.baseUrl);
+    const models = await runtime.listModels();
+    assert.deepEqual(models, [
+      { id: "video-model-b", object: "model", created: 2, owned_by: "jiasu" },
+      { id: "video-model-a", object: "model", created: 1, owned_by: "jiasu" },
+    ]);
+    assert.equal(fixture.requests.length, 1);
+    assert.equal(fixture.requests[0].method, "GET");
+    assert.equal(fixture.requests[0].path, "/v1/models");
+    assert.equal(fixture.requests[0].headers.authorization, "Bearer test-api-key");
+    assert.doesNotMatch(JSON.stringify(models), /test-api-key/);
   } finally {
     await fixture.close();
   }

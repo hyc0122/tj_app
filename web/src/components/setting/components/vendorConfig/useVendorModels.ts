@@ -2,6 +2,7 @@ import { DialogPlugin } from "tdesign-vue-next";
 import axios from "@/utils/axios";
 import type { useVendorCatalog } from "./useVendorCatalog";
 import type { VendorModel, VideoModel } from "./types";
+import { useVendorRemoteModels } from "./useVendorRemoteModels";
 import {
   buildVideoModes,
   createEmptyModelForm,
@@ -58,6 +59,15 @@ export function useVendorModels(
   const textTestVisible = ref(false);
   const imageTestVisible = ref(false);
   const videoTestVisible = ref(false);
+  const {
+    loadRemoteModels,
+    remoteModels,
+    remoteModelsLoaded,
+    remoteModelsLoading,
+    resetRemoteModels,
+    selectedRemoteModelId,
+    selectRemoteModel,
+  } = useVendorRemoteModels(catalog, modelFormData);
 
   function resetModelForm(type: "text" | "image" | "video" = "text") {
     modelFormData.value = createEmptyModelForm(type);
@@ -145,7 +155,8 @@ export function useVendorModels(
     }
     editingModelIndex.value = null;
     editingModelName.value = null;
-    resetModelForm();
+    resetRemoteModels();
+    resetModelForm(catalog.currentVendor.value.id === "tianjiang" ? "video" : "text");
     modelDialogVisible.value = true;
   }
 
@@ -251,7 +262,13 @@ export function useVendorModels(
     modelDialogVisible,
     modelFormData,
     modelTypeOptions,
+    loadRemoteModels,
     referenceOptions,
+    remoteModels,
+    remoteModelsLoaded,
+    remoteModelsLoading,
+    selectedRemoteModelId,
+    selectRemoteModel,
     testingModel,
     textTestVisible,
     videoModeOptions,
