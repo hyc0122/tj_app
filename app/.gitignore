@@ -35,6 +35,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 build/*
+# 托盘资源属于 Electron 正式构建输入，公开快照和发布构建都必须纳入 Git。
+!build/tray.ico
+!build/trayTemplate.png
+!build/trayTemplate@2x.png
 
 upload/*
 uploads/*

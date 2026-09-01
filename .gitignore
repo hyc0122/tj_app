@@ -39,6 +39,9 @@ app/data/*
 *.pfx
 *.crt
 *.cer
+# 仅放行随源码发布的固定自签名测试夹具，真实凭据仍由上方规则忽略。
+!app/test/tianjiang/fixtures/tls/cdn.test.crt.pem
+!app/test/tianjiang/fixtures/tls/cdn.test.key.pem
 id_rsa
 id_ed25519
 
