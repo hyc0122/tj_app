@@ -30,8 +30,23 @@ const nodes = {
       position: { x: 540, y: 130 },
       data: { label: "画面", kind: "image", prompt: "黄昏海边风衣少女", aspectRatio: "16:9", nodeWidth: 320, modelId: "fake:image" },
     },
+    {
+      id: "director-1",
+      type: "directorConsole",
+      position: { x: 940, y: 130 },
+      data: {
+        kind: "directorConsole",
+        label: "导演台",
+        scene: { characters: [], cameras: [], aspect: "auto" },
+        activeViewpoint: "director",
+        status: "idle",
+      },
+    },
   ],
-  edges: [{ id: "e-1", source: "idea-1", target: "image-1", type: "typed", animated: true }],
+  edges: [
+    { id: "e-1", source: "idea-1", target: "image-1", type: "typed", animated: true },
+    { id: "e-2", source: "image-1", target: "director-1", type: "typed", animated: true },
+  ],
   viewport: { x: 0, y: 0, zoom: 1 },
 };
 
@@ -96,8 +111,40 @@ async function handleApi(req, res) {
   if (req.method === "GET" && p.endsWith("/canvas-events")) return json(res, 200, { items: [] });
   if (req.method === "GET" && p === "/executions") return json(res, 200, { items: [] });
   if (req.method === "GET" && p === "/tasks/inbox") return json(res, 200, { items: [], unreadCount: 0, nextCursor: null, hasMore: false });
-  if (req.method === "GET" && p === "/codex/bridges") return json(res, 200, { items: [] });
+  if (req.method === "GET" && p === "/codex/bridges") {
+    return json(res, 200, {
+      items: [],
+      status: "offline",
+      pairingRequired: true,
+      pairingHint: "本机尚未连接 Codex Bridge。请复制配对命令完成首次安装，在线前不会谎报可派发。",
+    });
+  }
   if (req.method === "GET" && p === "/codex/tasks") return json(res, 200, { items: [] });
+  if (req.method === "POST" && p === "/memory/context") {
+    return json(res, 200, {
+      context: {
+        userPreferences: [],
+        projectFacts: [],
+        bookFacts: [],
+        chapterFacts: [],
+        artifactRefs: [],
+        rollups: { user: [], project: [], book: [], chapter: [], session: [] },
+        recentConversation: [],
+      },
+      summaryText: "",
+      promptText: "",
+    });
+  }
+  if (req.method === "POST" && p === "/memory/project-sessions") return json(res, 200, { items: [] });
+  if (req.method === "POST" && p === "/public/agents/chat/status") {
+    const body = await readJsonBody(req);
+    return json(res, 200, {
+      sessionId: String(body.sessionKey || "visual-session"),
+      durable: true,
+      activeTurn: false,
+      turn: null,
+    });
+  }
   if (req.method === "GET" && p.startsWith("/agents/")) return json(res, 200, { items: [], productName: "Agent 配置", candidates: [], attachments: [], skills: [], builtInCapabilities: [], currentProject: null, workflowProjects: [], invocations: [] });
   if (req.method === "GET" && p === "/new-api-models/readiness") {
     return json(res, 200, {

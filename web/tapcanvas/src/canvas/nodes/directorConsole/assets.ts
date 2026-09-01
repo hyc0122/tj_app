@@ -1,3 +1,5 @@
+import { tapcanvasAssetUrl } from '../../../tianjiang/tapcanvasAssetUrl'
+
 export type PropShape =
   | 'box' | 'sphere' | 'cylinder' | 'cone' | 'plane'
   | 'table' | 'low-table' | 'chair' | 'stool' | 'sofa' | 'bed' | 'cabinet' | 'sideboard' | 'shelf' | 'lamp'
@@ -8,8 +10,8 @@ export type LibraryItem =
 
 // 自托管素体 GLB（标准 Mixamo 骨骼 X Bot，T-pose 绑定，见 public/director/ATTRIBUTION.md），可用环境变量覆盖为自有模型。
 // 姿势系统按人形骨骼校准（pose.ts）：Mixamo 命名精确映射，其它命名走模糊匹配。
-const GLB_A = import.meta.env.VITE_DIRECTOR_GLB_MALE || '/director/xbot.glb'
-const GLB_B = import.meta.env.VITE_DIRECTOR_GLB_FEMALE || '/director/xbot.glb'
+const GLB_A = tapcanvasAssetUrl(import.meta.env.VITE_DIRECTOR_GLB_MALE || 'director/xbot.glb')
+const GLB_B = tapcanvasAssetUrl(import.meta.env.VITE_DIRECTOR_GLB_FEMALE || 'director/xbot.glb')
 
 // 身型档：同一标准骨骼 GLB + 身高/体宽比例近似 liblib 的素体库（模型本体可后续换成自有 8 套）。
 export const BODY_TYPES: LibraryItem[] = [

@@ -222,6 +222,7 @@ export default function CanvasHubPage(): JSX.Element {
       try {
         const receipt = await bootstrapProjectFlow({
           name: prompt,
+          prompt,
           flowName: '画布',
           nodes: [],
           edges: [],

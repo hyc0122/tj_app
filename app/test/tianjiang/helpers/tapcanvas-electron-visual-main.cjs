@@ -97,6 +97,28 @@ app.whenReady().then(async () => {
   await sleep(8000);
   const nodesCanvas = await capture(win, "03-nodes-canvas.png");
 
+  const directorOpened = await win.webContents.executeJavaScript(`
+    (() => {
+      const button = Array.from(document.querySelectorAll('button')).find((item) =>
+        (item.textContent || '').trim() === '打开导演台'
+      );
+      if (!(button instanceof HTMLElement)) throw new Error('未找到真实导演台入口');
+      button.click();
+      return true;
+    })()
+  `, true);
+  if (!directorOpened || !await waitFor(win, `document.body.innerText.includes('3D导演台')`, 30000)) {
+    throw new Error('真实导演台未打开');
+  }
+  await sleep(5000);
+  const director = await capture(win, "04-director-console.png");
+
+  // 中文注释：用真实页面重载关闭全屏导演台，再继续右侧 AI 与收费确认验收。
+  await win.loadURL(`${origin}/tapcanvas/studio?projectId=nodes-canvas&tianjiangVisualAcceptance=1`);
+  await waitFor(win, `Boolean(document.querySelector('.react-flow, .mantine-AppShell-root, [class*="app-shell"], .github-gate'))`, 50000);
+  await dismissFeatureTour(win);
+  await sleep(5000);
+
   const chatOpened = await win.webContents.executeJavaScript(`
     (async () => {
       if (!window.__tjVisual?.openChat) throw new Error('missing real visual chat hook');
@@ -110,7 +132,7 @@ app.whenReady().then(async () => {
     throw new Error('真实 AI 对话框未打开');
   }
   await sleep(2000);
-  const ai = await capture(win, "04-right-ai.png");
+  const ai = await capture(win, "05-right-ai.png");
   const confirmOpened = await win.webContents.executeJavaScript(`
     (() => {
       if (!window.__tjVisual?.openConfirm) throw new Error('missing real visual confirm hook');
@@ -122,7 +144,7 @@ app.whenReady().then(async () => {
     throw new Error('真实收费确认框未打开');
   }
   await sleep(400);
-  const confirm = await capture(win, "05-paid-confirm.png");
+  const confirm = await capture(win, "06-paid-confirm.png");
 
   const hasConfirm = await win.webContents.executeJavaScript(
     `Boolean(document.querySelector('[data-tapcanvas-confirm]'))`,
@@ -132,7 +154,7 @@ app.whenReady().then(async () => {
     windowType: "BrowserWindow",
     origin,
     homeProbe,
-    screenshots: { home, emptyCanvas, nodesCanvas, ai, confirm },
+    screenshots: { home, emptyCanvas, nodesCanvas, director, ai, confirm },
     hasConfirm,
   }));
   app.quit();

@@ -310,6 +310,7 @@ export type FlowDto = {
 }
 export type FlowSaveReceipt = Omit<FlowDto, 'data'> & {
   dataAdjusted: boolean
+  data?: FlowDto['data']
 }
 export type PublicProjectFlowListItemDto = {
   id: string
@@ -5246,6 +5247,8 @@ export type ProjectFlowBootstrapReceipt =
 
 export async function bootstrapProjectFlow(payload: {
   name: string
+  /** 首页“一句话规划”的真实输入；普通空白新建不传，避免误调用模型。 */
+  prompt?: string
   teamId?: string | null
   flowName: string
   nodes: Node[]
@@ -5262,6 +5265,7 @@ export async function bootstrapProjectFlow(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: payload.name,
+      ...(payload.prompt?.trim() ? { prompt: payload.prompt.trim() } : null),
       ...(payload.teamId ? { teamId: payload.teamId } : null),
       flow: { name: payload.flowName, data },
     }),
@@ -6597,7 +6601,7 @@ export const NewApiGatewayReadinessSchema = z.object({
     registerUrl: z.string().url(),
     topupUrl: z.string().url(),
     tokenUrl: z.string().url(),
-  }),
+  }).optional(),
 })
 
 export type NewApiGatewayReadinessDto = z.infer<typeof NewApiGatewayReadinessSchema>

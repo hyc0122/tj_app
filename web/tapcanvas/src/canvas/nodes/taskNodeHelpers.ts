@@ -4,8 +4,9 @@ import type { TaskNodeHandlesConfig } from './taskNodeSchema'
 import type { TaskResultDto } from '../../api/server'
 
 export const MAX_VEO_REFERENCE_IMAGES = 3
-export const HANDLE_HORIZONTAL_OFFSET = 36
-export const HANDLE_VERTICAL_OFFSET = 36
+/** 连接点中心贴合卡片边框；点击热区由 CSS ::after 扩大，不得再把节点向外推开。 */
+export const HANDLE_HORIZONTAL_OFFSET = 0
+export const HANDLE_VERTICAL_OFFSET = 0
 export const CHARACTER_CLIP_MIN = 1.2
 export const CHARACTER_CLIP_MAX = 3
 
