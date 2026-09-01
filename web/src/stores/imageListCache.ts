@@ -1,5 +1,8 @@
 import "@/views/production/components/workbench/type/type";
 import axios from "@/utils/axios";
+import { isVolatileMediaSrc, trackObjectUrl, revokeTrackedObjectUrls } from "@/features/tianjiang/project/object-url-registry";
+
+export const IMAGE_LIST_CACHE_PROJECT_LIMIT = 8;
 
 /**
  * 图片列表缓存 Pinia Store
@@ -23,16 +26,27 @@ interface ResolveUrlItem {
   sources: string | undefined;
 }
 
-/** 生成 urlMap 的复合键: "id:sources" */
-function makeUrlKey(id: number | null | undefined, sources: string | undefined): string {
+/** 生成后端接口使用的复合键: "id:sources" */
+function makeBackendUrlKey(id: number | null | undefined, sources: string | undefined): string {
   return `${id ?? ""}:${sources ?? ""}`;
 }
 
-/** 从完整 URL 中提取路径部分（去掉 origin） */
+/**
+ * 生成前端内存缓存键。素材 ID 只在项目内唯一，因此必须包含 projectId，
+ * 否则切换到另一个包含相同素材 ID 的项目时会串用旧项目 URL。
+ */
+function makeUrlKey(
+  projectId: CacheKey,
+  id: number | null | undefined,
+  sources: string | undefined,
+): string {
+  return `${String(projectId)}:${makeBackendUrlKey(id, sources)}`;
+}
+
+/** 从完整 URL 中提取路径部分（去掉 origin）。禁止把 data:/blob: 写入可持久化缓存。 */
 function extractPath(url: string | undefined): string {
   if (!url) return "";
-  // data: / blob: 等特殊协议直接保留
-  if (url.startsWith("data:") || url.startsWith("blob:")) return url;
+  if (isVolatileMediaSrc(url)) return "";
   try {
     const u = new URL(url);
     return u.pathname + u.search + u.hash;
@@ -40,6 +54,21 @@ function extractPath(url: string | undefined): string {
     // 如果已经是路径或者解析失败，直接返回
     return url;
   }
+}
+
+function stripVolatileMediaSrc(value: unknown): unknown {
+  if (typeof value === "string") {
+    return isVolatileMediaSrc(value) ? "" : value;
+  }
+  if (Array.isArray(value)) return value.map(stripVolatileMediaSrc);
+  if (value && typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      next[key] = stripVolatileMediaSrc(nested);
+    }
+    return next;
+  }
+  return value;
 }
 
 /** 将 UploadItem[] 转为缓存格式（src 只保留路径） */
@@ -55,8 +84,38 @@ export default defineStore(
   () => {
     const cacheData = ref<ImageListCacheData>({});
 
-    /** URL 解析缓存: "id:sources" -> 后端返回的完整 URL，避免重复请求 */
+    /** URL 解析缓存: "projectId:id:sources" -> 完整 URL，项目之间严格隔离。 */
     const urlMap = ref<Record<string, string>>({});
+    const urlKeysByProject = new Map<string, Set<string>>();
+    const projectOrder: string[] = [];
+    const projectEpoch = new Map<string, number>();
+    let globalUrlEpoch = 0;
+
+    function rememberUrlKey(projectId: CacheKey, key: string): void {
+      const owner = String(projectId);
+      let keys = urlKeysByProject.get(owner);
+      if (!keys) {
+        keys = new Set();
+        urlKeysByProject.set(owner, keys);
+      }
+      keys.add(key);
+    }
+
+    function touchProject(projectId: CacheKey): void {
+      const owner = String(projectId);
+      // 持久化恢复后 projectOrder 为空；首次访问时先把已有项目纳入容量治理。
+      for (const cachedProjectId of Object.keys(cacheData.value)) {
+        if (!projectOrder.includes(cachedProjectId)) projectOrder.push(cachedProjectId);
+      }
+      const existing = projectOrder.indexOf(owner);
+      if (existing >= 0) projectOrder.splice(existing, 1);
+      projectOrder.push(owner);
+      while (projectOrder.length > IMAGE_LIST_CACHE_PROJECT_LIMIT) {
+        const evict = projectOrder[0];
+        if (!evict || evict === owner) break;
+        clearProjectCache(evict);
+      }
+    }
 
     /**
      * 批量通过 id + sources 获取当前可用的完整 URL
@@ -69,19 +128,32 @@ export default defineStore(
      *   { data: [{ id: 1, sources: "storyboard", url: "http://..." }, ...] }
      *   或 { data: { "1:storyboard": "http://...", ... } }
      */
-    async function resolveUrls(items: ResolveUrlItem[]): Promise<Record<string, string>> {
+    async function resolveUrls(
+      projectId: CacheKey,
+      items: ResolveUrlItem[],
+    ): Promise<Record<string, string>> {
       if (!items.length) return {};
+      const owner = String(projectId);
+      const requestProjectEpoch = projectEpoch.get(owner) ?? 0;
+      const requestGlobalEpoch = globalUrlEpoch;
       // 过滤掉已经解析过的、id 无效的项
       const needResolve = items.filter((item) => {
         if (item.id == null) return false;
-        const key = makeUrlKey(item.id, item.sources);
-        return true;
+        const key = makeUrlKey(projectId, item.id, item.sources);
+        return !urlMap.value[key];
       });
       if (needResolve.length) {
         try {
           const { data } = await axios.post("/production/workbench/getFileUrl", {
             items: needResolve.map((item) => ({ id: item.id, sources: item.sources })),
           });
+          if (
+            requestGlobalEpoch !== globalUrlEpoch
+            || requestProjectEpoch !== (projectEpoch.get(owner) ?? 0)
+          ) {
+            // 中文注释：项目已释放或 URL 缓存已重置，丢弃旧请求结果。
+            return {};
+          }
           // axios 拦截器已返回 response.data，后端可能再包一层 { data: { ... } }
           const rawData = data.data;
 
@@ -91,14 +163,17 @@ export default defineStore(
             // 格式: [{ id: 1, sources: "storyboard", url: "http://..." }, ...]
             rawData.forEach((item: any) => {
               if (item.id != null && item.url) {
-                const key = makeUrlKey(item.id, item.sources);
+                const key = makeUrlKey(projectId, item.id, item.sources);
                 resolved[key] = item.url;
+                rememberUrlKey(projectId, key);
               }
             });
           } else if (rawData && typeof rawData === "object" && !Array.isArray(rawData)) {
             // 格式: { "id:sources": fullUrl } 或 { [compositeKey]: fullUrl }
             Object.entries(rawData).forEach(([key, url]) => {
-              resolved[key] = url as string;
+              const scopedKey = `${String(projectId)}:${key}`;
+              resolved[scopedKey] = url as string;
+              rememberUrlKey(projectId, scopedKey);
             });
           }
 
@@ -111,16 +186,21 @@ export default defineStore(
       // 返回所有请求项的映射（含之前缓存的）
       const result: Record<string, string> = {};
       items.forEach((item) => {
-        const key = makeUrlKey(item.id, item.sources);
+        const key = makeUrlKey(projectId, item.id, item.sources);
         result[key] = urlMap.value[key] || item.id?.toString() || "";
       });
       return result;
     }
 
     /** 通过 id + sources 同步解析为完整 URL（优先走内存缓存） */
-    function resolveUrlSync(id: number | null | undefined, sources: string | undefined, fallbackPath?: string): string {
+    function resolveUrlSync(
+      projectId: CacheKey,
+      id: number | null | undefined,
+      sources: string | undefined,
+      fallbackPath?: string,
+    ): string {
       if (id != null) {
-        const key = makeUrlKey(id, sources);
+        const key = makeUrlKey(projectId, id, sources);
         if (urlMap.value[key]) return urlMap.value[key];
       }
       // 降级返回原始路径
@@ -128,10 +208,10 @@ export default defineStore(
     }
 
     /** 将缓存项还原为带完整 URL 的 UploadItem[]（同步版，需先调用 resolveUrls） */
-    function toFullItems(items: CachedUploadItem[]): UploadItem[] {
+    function toFullItems(projectId: CacheKey, items: CachedUploadItem[]): UploadItem[] {
       return items.map((item) => ({
         ...item,
-        src: resolveUrlSync(item.id, (item as any).sources, item.src),
+        src: resolveUrlSync(projectId, item.id, (item as any).sources, item.src),
       })) as UploadItem[];
     }
 
@@ -142,7 +222,8 @@ export default defineStore(
     function getCache(projectId: CacheKey, scriptId: CacheKey, trackId: CacheKey): UploadItem[] | undefined {
       const cached = cacheData.value[projectId]?.[scriptId]?.[trackId];
       if (!cached) return undefined;
-      return toFullItems(cached);
+      touchProject(projectId);
+      return toFullItems(projectId, cached);
     }
 
     /**
@@ -152,19 +233,23 @@ export default defineStore(
     async function getCacheWithResolve(projectId: CacheKey, scriptId: CacheKey, trackId: CacheKey): Promise<UploadItem[] | undefined> {
       const cached = cacheData.value[projectId]?.[scriptId]?.[trackId];
       if (!cached) return undefined;
+      touchProject(projectId);
       // 收集所有需要解析的 id + sources
       const resolveItems: ResolveUrlItem[] = cached
         .filter((item) => item.id != null)
         .map((item) => ({ id: item.id, sources: (item as any).sources }));
-      await resolveUrls(resolveItems);
-      return toFullItems(cached);
+      await resolveUrls(projectId, resolveItems);
+      return toFullItems(projectId, cached);
     }
 
     /**
      * 获取原始缓存数据（src 为路径，不解析 URL）
      */
     function getRawCache(projectId: CacheKey, scriptId: CacheKey, trackId: CacheKey): CachedUploadItem[] | undefined {
-      return cacheData.value[projectId]?.[scriptId]?.[trackId];
+      const cached = cacheData.value[projectId]?.[scriptId]?.[trackId];
+      if (!cached) return undefined;
+      touchProject(projectId);
+      return cached;
     }
 
     /**
@@ -182,7 +267,12 @@ export default defineStore(
       let urlMapDirty = false;
       imageList.forEach((item) => {
         if (!item.src || item.id == null) return;
-        const key = makeUrlKey(item.id, (item as any).sources);
+        if (item.src.startsWith("blob:")) {
+          trackObjectUrl(String(projectId), item.src);
+        }
+        if (isVolatileMediaSrc(item.src)) return;
+        const key = makeUrlKey(projectId, item.id, (item as any).sources);
+        rememberUrlKey(projectId, key);
         if (!urlMap.value[key]) {
           urlMap.value[key] = item.src;
           urlMapDirty = true;
@@ -192,6 +282,7 @@ export default defineStore(
         urlMap.value = { ...urlMap.value };
       }
       cacheData.value[projectId][scriptId][trackId] = toCachedItems(imageList);
+      touchProject(projectId);
     }
 
     /**
@@ -226,9 +317,22 @@ export default defineStore(
       }
     }
     function clearProjectCache(projectId: CacheKey): void {
+      const owner = String(projectId);
+      projectEpoch.set(owner, (projectEpoch.get(owner) ?? 0) + 1);
       if (cacheData.value && cacheData.value?.[projectId]) {
         delete cacheData.value[projectId];
+        cacheData.value = { ...cacheData.value };
       }
+      const keys = urlKeysByProject.get(owner);
+      if (keys) {
+        const nextUrlMap = { ...urlMap.value };
+        for (const key of keys) delete nextUrlMap[key];
+        urlMap.value = nextUrlMap;
+        urlKeysByProject.delete(owner);
+      }
+      revokeTrackedObjectUrls(owner);
+      const orderIndex = projectOrder.indexOf(owner);
+      if (orderIndex >= 0) projectOrder.splice(orderIndex, 1);
     }
     /**
      * 从后端返回的 trackList 批量初始化缓存
@@ -242,6 +346,7 @@ export default defineStore(
         if (!cacheData.value[projectId][scriptId]) cacheData.value[projectId][scriptId] = {};
         cacheData.value[projectId][scriptId][track.id] = toCachedItems(track.medias);
       });
+      touchProject(projectId);
     }
 
     /**
@@ -257,6 +362,7 @@ export default defineStore(
         if (track.id == null) return;
         cacheData.value[projectId][scriptId][track.id] = toCachedItems(track.medias);
       });
+      touchProject(projectId);
     }
 
     /**
@@ -266,26 +372,29 @@ export default defineStore(
     async function warmUpUrls(projectId: CacheKey, scriptId: CacheKey): Promise<void> {
       const scriptCache = cacheData.value[projectId]?.[scriptId];
       if (!scriptCache) return;
+      touchProject(projectId);
       const allItems: ResolveUrlItem[] = [];
       const seen = new Set<string>();
       Object.values(scriptCache).forEach((items) => {
         items.forEach((item) => {
           if (item.id == null) return;
-          const key = makeUrlKey(item.id, (item as any).sources);
+          const key = makeBackendUrlKey(item.id, (item as any).sources);
           if (!seen.has(key)) {
             seen.add(key);
             allItems.push({ id: item.id, sources: (item as any).sources });
           }
         });
       });
-      await resolveUrls(allItems);
+      await resolveUrls(projectId, allItems);
     }
 
     /**
      * 清除 URL 解析缓存（当后端地址/端口变更时调用）
      */
     function clearUrlMap(): void {
+      globalUrlEpoch += 1;
       urlMap.value = {};
+      urlKeysByProject.clear();
     }
 
     return {
@@ -307,5 +416,21 @@ export default defineStore(
       clearProjectCache,
     };
   },
-  { persist: { pick: ["cacheData"] } },
+  {
+    persist: {
+      pick: ["cacheData"],
+      serializer: {
+        serialize(data) {
+          return JSON.stringify(stripVolatileMediaSrc(data));
+        },
+        deserialize(raw: string) {
+          try {
+            return stripVolatileMediaSrc(JSON.parse(raw)) as { cacheData?: ImageListCacheData };
+          } catch {
+            return { cacheData: {} };
+          }
+        },
+      },
+    },
+  },
 );

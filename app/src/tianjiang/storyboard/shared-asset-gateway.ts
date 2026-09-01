@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { db as activeDb, prepareProjectDatabase } from "@/utils/db";
+import { db as activeDb, acquireProjectDatabaseLease, releaseProjectDatabaseLease } from "@/utils/db";
 import getPath from "@/utils/getPath";
 import oss from "@/utils/oss";
 import { deleteProjectFile, writeProjectFileAtomic } from "@/tianjiang/media/project-file-store";
@@ -754,14 +754,18 @@ async function listLocalAssetDependents(
   for (const name of fs.readdirSync(projectsRoot)) {
     const dbPath = path.join(projectsRoot, name, "project.sqlite");
     if (!fs.existsSync(dbPath)) continue;
-    await prepareProjectDatabase(name);
-    await runWithProjectStorage(name, async () => {
-      if (!await activeDb.schema.hasTable("o_storyboardShotAsset")) return;
-      const rows = await activeDb("o_storyboardShotAsset").where({ assetUuid }).select("shotUuid");
-      for (const row of rows) {
-        dependents.push({ projectUuid: name, shotUuid: String(row.shotUuid) });
-      }
-    });
+    await acquireProjectDatabaseLease(name, "scheduler");
+    try {
+      await runWithProjectStorage(name, async () => {
+        if (!await activeDb.schema.hasTable("o_storyboardShotAsset")) return;
+        const rows = await activeDb("o_storyboardShotAsset").where({ assetUuid }).select("shotUuid");
+        for (const row of rows) {
+          dependents.push({ projectUuid: name, shotUuid: String(row.shotUuid) });
+        }
+      });
+    } finally {
+      await releaseProjectDatabaseLease(name, "scheduler");
+    }
   }
   return dependents;
 }

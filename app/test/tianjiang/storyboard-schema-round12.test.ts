@@ -78,7 +78,8 @@ test("账号角色迁移链只写账号角色标记，不得创建分镜表", ()
   assert.ok(videoPrompt);
   assert.ok(roleMarker);
   assert.equal(roleMarker!.version, videoPrompt!.version + 1);
-  assert.equal(account.at(-1)?.name, "jiasu-provider-model-catalog-v4-4");
+  assert.ok(account.some((item) => item.name === "jiasu-provider-model-catalog-v4-4"));
+  assert.equal(account.at(-1)?.name, "canvas-import-staging-reservations-v1");
   assert.ok(!account.some((item) => item.name === "storyboard-project-schema-v1"));
 });
 

@@ -46,7 +46,11 @@ export function createControlPlaneRouter(
       try {
         requestBody = validateClientControlPlaneRequest(clientEndpoint, requestBody);
       } catch (error) {
-        return writePublicContractError(req, res, "INVALID_REQUEST", {
+        const coded = (error as { errorCode?: ErrorCode } | null)?.errorCode;
+        const code = coded && ERROR_DEFINITIONS.some((item) => item.code === coded)
+          ? coded
+          : "INVALID_REQUEST";
+        return writePublicContractError(req, res, code, {
           message: error instanceof Error ? error.message : "请求参数无效",
         });
       }

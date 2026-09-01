@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import Database from "better-sqlite3";
 
-import { accountDb, db as activeDb, prepareProjectDatabase } from "@/utils/db";
+import { accountDb, db as activeDb, acquireProjectDatabaseLease, releaseProjectDatabaseLease } from "@/utils/db";
 import getPath from "@/utils/getPath";
 import { getStableDeviceUUID } from "@/tianjiang/auth/device";
 import { projectDirectory } from "@/tianjiang/data/paths";
@@ -9,6 +10,26 @@ import { assertManagedPathChainHasNoLinks } from "@/tianjiang/media/project-file
 import { currentUserStorage, runWithProjectStorage } from "@/tianjiang/runtime/user-storage-context";
 import { upsertPendingMutationJournalInTrx } from "@/tianjiang/runtime/legacy-mutation-journal";
 import { createDreaminaDispatchIdentityDigest, insertDreaminaDispatch } from "./task-store";
+
+function sqliteHasTable(databasePath: string, tableName: string): boolean {
+  let database: Database.Database | undefined;
+  try {
+    database = new Database(databasePath, { readonly: true, fileMustExist: true });
+    return Boolean(
+      database.prepare(
+        "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+      ).get(tableName),
+    );
+  } catch {
+    return false;
+  } finally {
+    try {
+      database?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
 import {
   assertAcceptedDreaminaEnqueueIntegrity,
   resumeDreaminaEnqueueOperation,
@@ -97,7 +118,7 @@ async function quarantineInvalidRunnableWorkbenchBindings(): Promise<number> {
     const projectUuid = String(candidate.projectUuid ?? "").toLowerCase();
     const clientOperationId = String(candidate.clientOperationId ?? "").toLowerCase();
     try {
-      await prepareProjectDatabase(projectUuid);
+      await acquireProjectDatabaseLease(projectUuid, "scheduler");
       await assertAcceptedDreaminaEnqueueIntegrity({ projectUuid, clientOperationId });
     } catch (error) {
       const changed = await accountDb("o_dreaminaCliDispatch")
@@ -112,6 +133,8 @@ async function quarantineInvalidRunnableWorkbenchBindings(): Promise<number> {
         clientOperationId,
         errorCode: safeRecoveryErrorCode(error),
       });
+    } finally {
+      await releaseProjectDatabaseLease(projectUuid, "scheduler");
     }
   }
   return quarantined;
@@ -134,11 +157,13 @@ export async function rebuildMissingDreaminaDispatch(): Promise<number> {
     }
     const dbPath = path.join(projectsRoot, name, "project.sqlite");
     if (!fs.existsSync(dbPath)) continue;
+    if (!sqliteHasTable(dbPath, "o_storyboardGenerationTask")) continue;
     try {
-      await prepareProjectDatabase(name);
+      await acquireProjectDatabaseLease(name, "scheduler");
     } catch {
       continue;
     }
+    try {
     const inventory = await runWithProjectStorage(name, async () => {
       if (!await activeDb.schema.hasTable("o_storyboardGenerationTask")) {
         return { operations: [], operationTasks: [], legacyTasks: [] };
@@ -255,6 +280,9 @@ export async function rebuildMissingDreaminaDispatch(): Promise<number> {
         });
       }
       rebuilt += 1;
+    }
+    } finally {
+      await releaseProjectDatabaseLease(name, "scheduler");
     }
   }
   return rebuilt;

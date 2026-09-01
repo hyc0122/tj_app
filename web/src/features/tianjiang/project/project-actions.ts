@@ -85,7 +85,7 @@ export async function updateCatalogProject(
   projectUuid: string,
   input: {
     name: string;
-    businessType: "novel" | "script" | "storyboard";
+    businessType: "novel" | "script" | "storyboard" | "canvas";
     description?: string;
     artStyle?: string;
     aspectRatio?: string;
@@ -121,6 +121,7 @@ export async function syncCatalogProjectNow(projectUuid: string): Promise<void> 
         accessMode?: "readwrite" | "readonly";
         readonlyReason?: string;
         lockHolder?: string;
+        runtimeGeneration?: number;
       }
     | undefined;
   if (runtime?.project && runtime.projectUuid && runtime.accessMode) {
@@ -129,6 +130,7 @@ export async function syncCatalogProjectNow(projectUuid: string): Promise<void> 
       mode: runtime.accessMode,
       reason: runtime.readonlyReason ?? "",
       lockHolder: runtime.lockHolder ?? "",
+      runtimeGeneration: runtime.runtimeGeneration,
     });
   }
 }

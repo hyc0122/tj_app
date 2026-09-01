@@ -269,9 +269,10 @@ test("账号库注册佳速 4.4 源码升级迁移，项目库不得重复改写
     role: "project",
     skipEmbeddingInit: true,
   });
+  assert.ok(accountMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"));
   assert.equal(
     accountMigrations.at(-1)?.name,
-    "jiasu-provider-model-catalog-v4-4",
+    "canvas-import-staging-reservations-v1",
   );
   assert.equal(
     projectMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"),

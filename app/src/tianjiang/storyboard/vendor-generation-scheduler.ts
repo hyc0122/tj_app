@@ -1,8 +1,13 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import Database from "better-sqlite3";
+import type { Knex } from "knex";
+import { decideDurableGenerationRecovery } from "@/tianjiang/generation/durable-generation-worker";
 
-import { db as activeDb, prepareProjectDatabase } from "@/utils/db";
+export { decideDurableGenerationRecovery };
+
+import { db as activeDb, acquireProjectDatabaseLease, releaseProjectDatabaseLease } from "@/utils/db";
 import Ai from "@/utils/ai";
 import getPath from "@/utils/getPath";
 import { getStableDeviceUUID } from "@/tianjiang/auth/device";
@@ -50,6 +55,27 @@ interface RunnableVendorTask extends PersistedVendorTask {
 const activeRuns = new Map<string, Promise<void>>();
 let acceptingRuns = true;
 type DurableBatchInspection = "runnable" | "foreign_device" | "invalid";
+
+function sqliteHasTable(databasePath: string, tableName: string): boolean {
+  if (!fs.existsSync(databasePath)) return false;
+  let database: Database.Database | undefined;
+  try {
+    database = new Database(databasePath, { readonly: true, fileMustExist: true });
+    return Boolean(
+      database.prepare(
+        "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+      ).get(tableName),
+    );
+  } catch {
+    return false;
+  } finally {
+    try {
+      database?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
 
 /** 唤醒指定耐久批次；同账号同项目同 operation 在本进程内只能存在一个执行 Promise。 */
 export function wakeVendorGenerationScheduler(input: {
@@ -106,7 +132,9 @@ export async function recoverDurableVendorGenerationOperations(): Promise<{
     const projectUuid = entry.name.toLowerCase();
     try {
       assertManagedPathChainHasNoLinks(getPath(), projectDirectory(getPath(), projectUuid, context.segment));
-      await prepareProjectDatabase(projectUuid);
+      const databasePath = path.join(projectDirectory(getPath(), projectUuid, context.segment), "project.sqlite");
+      if (!sqliteHasTable(databasePath, "o_storyboardGenerationOperation")) continue;
+      await acquireProjectDatabaseLease(projectUuid, "scheduler");
       const operations = await runWithProjectStorage(projectUuid, async () => {
         if (!await activeDb.schema.hasTable("o_storyboardGenerationOperation")
           || !await activeDb.schema.hasTable("o_storyboardGenerationTask")) return [];
@@ -160,6 +188,8 @@ export async function recoverDurableVendorGenerationOperations(): Promise<{
       }
     } catch {
       // 中文注释：单项目损坏不得阻断其余项目恢复，也不得输出可能含路径或 SQL 的底层异常。
+    } finally {
+      await releaseProjectDatabaseLease(projectUuid, "scheduler");
     }
   }
   return { recovered, quarantined };
@@ -172,17 +202,19 @@ export async function runVendorGenerationOperation(
   projectUuid: string,
   clientOperationId: string,
 ): Promise<void> {
-  let tasks: RunnableVendorTask[] | null;
+  await acquireProjectDatabaseLease(projectUuid, "scheduler");
   try {
-    tasks = await claimReadyOperation(projectUuid, clientOperationId);
-  } catch {
-    // 中文注释：耐久快照损坏时必须在越过收费边界前隔离，禁止反复恢复或执行被篡改请求。
-    await quarantineInterruptedOperation(projectUuid, clientOperationId, "recovery_required");
-    return;
-  }
-  if (!tasks) return;
+    let tasks: RunnableVendorTask[] | null;
+    try {
+      tasks = await claimReadyOperation(projectUuid, clientOperationId);
+    } catch {
+      // 中文注释：耐久快照损坏时必须在越过收费边界前隔离，禁止反复恢复或执行被篡改请求。
+      await quarantineInterruptedOperation(projectUuid, clientOperationId, "recovery_required");
+      return;
+    }
+    if (!tasks) return;
 
-  try {
+    try {
     // 中文注释：Team 角色、设备、锁与 fencing 必须在任何供应商 prepare/execute 前重新验证。
     assertCandidateInstallWritable(projectUuid);
     // 中文注释：整批先完成纯本地适配与 prepare，再统一 stage；任一失败时不得执行任何收费调用。
@@ -220,8 +252,11 @@ export async function runVendorGenerationOperation(
       await markTaskCompleted(projectUuid, clientOperationId, task.taskUuid);
     }
     await markOperationCompleted(projectUuid, clientOperationId, tasks.length);
-  } catch (error) {
-    await markOperationFailed(projectUuid, clientOperationId, error);
+    } catch (error) {
+      await markOperationFailed(projectUuid, clientOperationId, error);
+    }
+  } finally {
+    await releaseProjectDatabaseLease(projectUuid, "scheduler");
   }
 }
 
@@ -487,20 +522,34 @@ async function markTaskCompleted(
 ): Promise<void> {
   const completedAt = Date.now();
   await runWithProjectStorage(projectUuid, () => activeDb.transaction(async (trx) => {
-    const changed = await trx("o_storyboardGenerationTask")
-      .where({ taskUuid, clientOperationId, status: "submitting" })
-      .update({
-        status: "completed",
-        providerCompletedAt: completedAt,
-        resultLocatorDigest: crypto.createHash("sha256").update(taskUuid).digest("hex"),
-        progress: 100,
-        errorCode: null,
-        errorSummary: null,
-        updatedAt: completedAt,
-      });
-    if (Number(changed) !== 1) throw new Error("普通供应商任务完成态写入失败");
+    await completeVendorGenerationTaskInTrx(trx, taskUuid, clientOperationId, completedAt);
     await upsertPendingMutationJournalInTrx(trx, "vendorGenerationTaskCompleted");
   }));
+}
+
+/** 与 scheduler 完成状态机共用：仅 submitting→completed，已完成则幂等。 */
+export async function completeVendorGenerationTaskInTrx(
+  trx: Knex.Transaction,
+  taskUuid: string,
+  clientOperationId?: string,
+  completedAt = Date.now(),
+): Promise<void> {
+  const query = trx("o_storyboardGenerationTask").where({ taskUuid });
+  if (clientOperationId) query.andWhere({ clientOperationId, status: "submitting" });
+  else query.whereIn("status", ["submitting"]);
+  const changed = await query.update({
+    status: "completed",
+    providerCompletedAt: completedAt,
+    resultLocatorDigest: crypto.createHash("sha256").update(taskUuid).digest("hex"),
+    progress: 100,
+    errorCode: null,
+    errorSummary: null,
+    updatedAt: completedAt,
+  });
+  if (Number(changed) === 1) return;
+  const existing = await trx("o_storyboardGenerationTask").where({ taskUuid }).first();
+  if (String(existing?.status ?? "") === "completed") return;
+  throw new Error("普通供应商任务完成态写入失败");
 }
 
 async function markOperationCompleted(

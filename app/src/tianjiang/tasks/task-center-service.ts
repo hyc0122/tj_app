@@ -46,6 +46,8 @@ export function taskCenterList(
   return aggregateTaskCenterList(sources, query);
 }
 
+export { mapCanvasTaskCenterState } from "./task-center-aggregation";
+
 export function taskCenterCategories(session: CentralSession | undefined) {
   const active = requireSession(session);
   return aggregateTaskCategories(sourcesForSession(active));

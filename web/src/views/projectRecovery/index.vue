@@ -43,7 +43,9 @@ async function keep(recoveryId: string): Promise<void> {
   if (!pending.value.length && project.value) {
     // 恢复副本保留后先以只读进入；下一次状态轮询确认锁有效才重新开放写入。
     store.setAccessMode("readonly", "recovery_kept");
-    await router.push(`/${project.value.projectType}`);
+    const { projectCapabilities } = await import("@/features/tianjiang/project/create-project");
+    const workspace = projectCapabilities(project.value.projectType).workspacePath?.(access.value.projectUuid);
+    await router.push(workspace ?? `/${project.value.projectType}`);
   }
 }
 

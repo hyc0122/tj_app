@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { Knex } from "knex";
 
 import { db as activeDb } from "@/utils/db";
 import getPath from "@/utils/getPath";
@@ -1370,6 +1371,7 @@ export async function installStoryboardCandidate(input: {
   relativePath: string;
   select: boolean;
   candidateUuid?: string;
+  trx?: Knex.Transaction;
 }): Promise<string> {
   assertCandidateInstallWritable(input.projectUuid);
   const { db: activeDb } = await import("@/utils/db");
@@ -1379,7 +1381,7 @@ export async function installStoryboardCandidate(input: {
   return runWithProjectStorage(input.projectUuid, async () => {
     // 中文注释：即梦结果使用 taskUuid 作为候选键，重启重放只能命中原记录，禁止重复候选。
     const candidateUuid = input.candidateUuid ?? randomUUID();
-    await activeDb.transaction(async (trx) => {
+    const apply = async (trx: Knex.Transaction) => {
       const existing = await trx("o_storyboardCandidate").where({ candidateUuid }).first();
       if (existing) {
         if (String(existing.shotUuid) !== input.shotUuid
@@ -1391,7 +1393,9 @@ export async function installStoryboardCandidate(input: {
           await trx("o_storyboardCandidate").where({ shotUuid: input.shotUuid }).update({ selected: 0 });
           await trx("o_storyboardCandidate").where({ candidateUuid }).update({ selected: 1 });
         }
-        await upsertPendingMutationJournalInTrx(trx, "storyboardCandidate");
+        if (await trx.schema.hasTable("o_legacyMutationJournal")) {
+          await upsertPendingMutationJournalInTrx(trx, "storyboardCandidate");
+        }
         return;
       }
       if (input.select) {
@@ -1405,8 +1409,12 @@ export async function installStoryboardCandidate(input: {
         selected: input.select ? 1 : 0,
         createdAt: new Date().toISOString(),
       });
-      await upsertPendingMutationJournalInTrx(trx, "storyboardCandidate");
-    });
+      if (await trx.schema.hasTable("o_legacyMutationJournal")) {
+        await upsertPendingMutationJournalInTrx(trx, "storyboardCandidate");
+      }
+    };
+    if (input.trx) await apply(input.trx);
+    else await activeDb.transaction(apply);
     return candidateUuid;
   });
 }

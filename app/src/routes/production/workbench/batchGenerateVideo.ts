@@ -6,11 +6,14 @@ import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { ReferenceList } from "@/utils/ai";
 import { prepareProjectDatabase } from "@/utils/db";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "@/tianjiang/tasks/generation-completion-contract";
+import { toProjectLogicalPath } from "@/utils/oss";
 import { runWithProjectStorage } from "@/tianjiang/runtime/user-storage-context";
 import {
   enqueueWorkbenchDreaminaVideos,
   isDreaminaCliModel,
   resolveWorkbenchProjectUuid,
+  withWorkbenchSchedulerLease,
   writeWorkbenchDreaminaError,
 } from "@/tianjiang/workbench/dreamina-workbench-enqueue";
 const router = express.Router();
@@ -59,6 +62,7 @@ export default router.post(
           projectId,
           (req as { centralSession?: unknown }).centralSession,
         );
+        await withWorkbenchSchedulerLease(projectUuid, async () => {
         await prepareProjectDatabase(projectUuid);
         await runWithProjectStorage(projectUuid, async () => {
           const bound = await enqueueWorkbenchDreaminaVideos({
@@ -88,6 +92,7 @@ export default router.post(
             trackId: item.trackId,
             taskId: item.taskId,
           }))));
+        });
         });
       } catch (error) {
         writeWorkbenchDreaminaError(res, error);
@@ -146,7 +151,14 @@ export default router.post(
               return { base64: await u.oss.getImageBase64(item.path), type: item.sources == "audio" ? "audio" : "image" };
             }),
           );
-          const relatedObjects = { projectId, videoId, scriptId, type: "视频" };
+          const relatedObjects = stringifyGenerationCompletionContract(createGenerationCompletionContract({
+            kind: "video",
+            mediaType: "video",
+            relativePath: toProjectLogicalPath(videoPath),
+            videoId,
+            projectId,
+            scriptId,
+          }));
           const aiVideo = u.Ai.Video(model);
           aiVideo
             .run(
@@ -163,7 +175,7 @@ export default router.post(
                 projectId,
                 taskClass: "视频生成",
                 describe: "根据提示词生成视频",
-                relatedObjects: JSON.stringify(relatedObjects),
+                relatedObjects,
               },
             )
             .then(async () => await aiVideo.save(videoPath))

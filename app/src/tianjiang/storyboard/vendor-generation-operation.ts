@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import type { DurableGenerationIdentity } from "@/tianjiang/generation/durable-generation-operation";
+
+export type { DurableGenerationIdentity };
 
 import { db as activeDb } from "@/utils/db";
 import getPath from "@/utils/getPath";

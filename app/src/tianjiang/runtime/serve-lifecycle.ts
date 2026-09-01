@@ -12,6 +12,8 @@ import {
 } from "@/utils/db";
 import { syncCoordinator } from "./runtime";
 import { serveReadinessGate } from "./serve-readiness";
+import { canvasExecutionRuntime } from "@/tianjiang/canvas/canvas-execution-runtime";
+import { resumeRawInboxConsumer, stopRawInboxConsumer } from "@/tianjiang/canvas/canvas-provider-raw-inbox";
 
 export interface ServeRuntimeResources {
   httpServer: http.Server;
@@ -97,6 +99,9 @@ export function registerServeRuntimeResources(
   profileKeyRecoveryStopPromise = undefined;
   operations = { ...defaultOperations(), ...overrides };
   resetDatabaseRuntimeForServe();
+  void canvasExecutionRuntime.commit;
+  void resumeRawInboxConsumer;
+  void stopRawInboxConsumer;
   if (!serveReadinessGate.snapshot().accepting) serveReadinessGate.startAccepting();
   state = {
     phase: "open",

@@ -741,6 +741,7 @@
       "jumpGithub": "Githubにジャンプ",
       "feedbackQuestions": "フィードバックの質問",
       "team": "チーム",
+      "infiniteCanvas": "無限キャンバス",
       "navAria": "メインナビゲーション"
     },
     "project": {
@@ -2156,5 +2157,60 @@
   "syncProgress.phase.releasing": "チームロックを解放中",
   "syncProgress.phase.release_lock": "チームロックを解放中",
   "syncProgress.phase.completed": "完了",
-  "syncProgress.phase.failed": "失敗"
+  "syncProgress.phase.failed": "失敗",
+  "infiniteCanvas": {
+    "menu": "無限キャンバス",
+    "home": {
+      "greeting": "こんにちは、{name}",
+      "create": "キャンバスを作成",
+      "search": "キャンバスを検索",
+      "empty": "キャンバスはまだありません"
+    },
+    "editor": {
+      "save": "保存",
+      "undo": "元に戻す",
+      "redo": "やり直す",
+      "layout": "自動整列",
+      "importExport": "インポート/エクスポート",
+      "assets": "素材",
+      "history": "履歴",
+      "accepted": "受理済み"
+    },
+    "starter": {
+      "novel": "小説をアップロード",
+      "storyboard": "絵コンテガイド",
+      "textToImage": "テキストから画像",
+      "firstFrameToVideo": "先頭フレームから動画"
+    },
+    "a11y": {
+      "liveStatus": "キャンバス保存状態",
+      "resizeHandle": "キャンバスパネルをリサイズ"
+    },
+    "ai": {
+      "greeting": "こんにちは、{name}",
+      "newChat": "新しい会話",
+      "history": "履歴",
+      "collapse": "折りたたむ",
+      "fullscreen": "全画面",
+      "restore": "復元",
+      "placeholder": "一文でキャンバスのアイデアを入力",
+      "send": "送信",
+      "voice": "音声入力",
+      "skill": "創作モード",
+      "model": "テキストモデル",
+      "applyPlan": "キャンバスに適用",
+      "waitingOrigin": "元のデバイスでキャンセルしてください",
+      "cancelOnOrigin": "元のデバイスでキャンセルしてください"
+    },
+    "execution": {
+      "desk": "実行デスク",
+      "confirm": "実行を確認",
+      "preview": "実行プレビュー",
+      "fee": "料金案内",
+      "failure": "失敗の詳細",
+      "waitingForOriginDevice": "元デバイスのキュー待ち",
+      "queued": "キュー済み",
+      "running": "生成中"
+    }
+  }
 }

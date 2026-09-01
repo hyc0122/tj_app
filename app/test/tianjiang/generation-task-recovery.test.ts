@@ -11,9 +11,23 @@ import {
   type GenerationTaskIdentity,
   type RemoteGenerationResult,
 } from "../../src/tianjiang/tasks/generation-task-recovery";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "../../src/tianjiang/tasks/generation-completion-contract";
+import { installManagedStaging } from "./helpers/managed-generation-staging";
 
 const HOUR = 60 * 60 * 1000;
 const NOW = 2_000_000_000_000;
+const FIXTURE_MP4 = path.resolve(__dirname, "fixtures", "minimal-adoptable.mp4");
+
+function completedArtifact(localPath: string): RemoteGenerationResult {
+  return {
+    state: "completed",
+    artifact: {
+      mediaType: "video",
+      sourceKind: "local_path",
+      localPath,
+    },
+  };
+}
 
 test("重启后 24 小时内只按原远端 ID 继续轮询并完成", async () => {
   const fixture = await createFixture();
@@ -32,7 +46,7 @@ test("重启后 24 小时内只按原远端 ID 继续轮询并完成", async () 
     const second = await recoverGenerationTasks(fixture.database, {
       poll: async (task) => {
         calls.push(task);
-        return { state: "completed" };
+        return completedArtifact(fixture.stagedMp4);
       },
     }, NOW + 5_000);
     assert.equal(second.completed, 1);
@@ -127,6 +141,8 @@ test("远端恢复错误写入任务前必须消毒密钥、签名 URL 与本机
 
 async function createFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "tj-generation-recovery-"));
+  const staging = installManagedStaging(root);
+  const stagedMp4 = staging.stage(FIXTURE_MP4);
   const database = knex({
     client: "better-sqlite3",
     connection: { filename: path.join(root, "tasks.sqlite") },
@@ -146,9 +162,20 @@ async function createFixture() {
     table.string("generationStatus");
     table.integer("manualRetryRequired");
     table.integer("recoveryAttemptedAt");
+    table.string("taskClass");
+    table.text("relatedObjects");
+    table.text("resultLocator");
+  });
+  await database.schema.createTable("o_video", (table) => {
+    table.integer("id").primary();
+    table.text("filePath");
+    table.string("state");
+    table.text("errorReason");
   });
   return {
     database,
+    root,
+    stagedMp4,
     async addTask(input: { id: number; createdAt: number }) {
       await database("o_tasks").insert({
         id: input.id,
@@ -161,9 +188,18 @@ async function createFixture() {
         createdAt: input.createdAt,
         generationStatus: "polling",
         manualRetryRequired: 0,
+        taskClass: "视频生成",
+        relatedObjects: stringifyGenerationCompletionContract(createGenerationCompletionContract({
+          kind: "video",
+          mediaType: "video",
+          videoId: input.id,
+          relativePath: `files/videos/remote-${input.id}.mp4`,
+        })),
       });
+      await database("o_video").insert({ id: input.id, filePath: "", state: "生成中" });
     },
     async close() {
+      staging.dispose();
       await database.destroy();
       fs.rmSync(root, { recursive: true, force: true });
     },

@@ -266,6 +266,7 @@ export function aggregateTaskCenterList(
   for (const source of selected) {
     rows.push(...readProjectTasks(source, query, openDatabase));
     rows.push(...readStoryboardGenerationTasks(source, query, openDatabase));
+    rows.push(...readCanvasNodeRuns(source, query, openDatabase));
   }
 
   // 统一排序：startTime 降序，其次 id 降序，再 projectUuid 升序（完全确定）。
@@ -432,6 +433,92 @@ function readStoryboardGenerationTasks(
         projectUuid: source.projectUuid,
         projectName: source.projectName,
         rowKey: `${source.projectUuid}:storyboard:${taskUuid}`,
+      });
+    }
+    return rows;
+  } catch (error) {
+    if (error instanceof TaskCenterError) throw error;
+    throw new TaskCenterError(
+      `项目任务数据不可用（${source.projectUuid.slice(0, 8)}…）`,
+      422,
+      "TASK_CENTER_CORRUPT",
+    );
+  } finally {
+    try {
+      database?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function mapCanvasTaskCenterState(status: string): string {
+  switch (status) {
+    case "waiting_for_origin_device":
+      return "waiting_for_origin_device";
+    case "queued":
+      return "queued";
+    case "leased":
+    case "submitting":
+    case "submitted":
+    case "running":
+      return "running";
+    case "succeeded":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "canceled":
+      return "cancelled";
+    case "awaiting_confirmation":
+    case "draft":
+      return "confirmation_required";
+    case "outcome_unknown":
+      return "outcome_unknown";
+    default:
+      return status;
+  }
+}
+
+function readCanvasNodeRuns(
+  source: TaskCenterProjectSource,
+  query: Pick<TaskCenterQuery, "state" | "taskClass">,
+  openDatabase: (databasePath: string) => Database.Database,
+): TaskCenterRow[] {
+  let database: Database.Database | undefined;
+  try {
+    database = openDatabase(source.databasePath);
+    const hasTable = database
+      .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'canvas_node_runs' LIMIT 1")
+      .get() as { ok?: number } | undefined;
+    if (!hasTable) return [];
+    const rawRows = database.prepare(
+      `SELECT run_uuid, node_uuid, capability_id, state, failure_text, created_at
+       FROM canvas_node_runs`,
+    ).all() as Array<Record<string, unknown>>;
+    const rows: TaskCenterRow[] = [];
+    for (const row of rawRows) {
+      const runUuid = String(row.run_uuid ?? "");
+      if (!runUuid) continue;
+      const status = String(row.state ?? "");
+      const state = mapCanvasTaskCenterState(status);
+      if (query.taskClass && query.taskClass !== "canvas") continue;
+      if (query.state && query.state !== state && query.state !== status) continue;
+      const createdAt = Date.parse(String(row.created_at ?? "")) || 0;
+      const numericId = Number.parseInt(runUuid.replace(/-/g, "").slice(0, 8), 16);
+      const failure = asNullableString(row.failure_text);
+      rows.push({
+        id: Number.isFinite(numericId) ? numericId : createdAt,
+        taskClass: "canvas",
+        relatedObjects: runUuid,
+        model: asNullableString(row.capability_id),
+        describe: asNullableString(row.node_uuid),
+        state,
+        startTime: createdAt || null,
+        reason: failure || (status === "outcome_unknown" ? "结果待确认" : status === "waiting_for_origin_device" ? "等待原设备进入任务队列" : null),
+        projectId: source.legacyProjectId,
+        projectUuid: source.projectUuid,
+        projectName: source.projectName,
+        rowKey: `${source.projectUuid}+${runUuid}`,
       });
     }
     return rows;

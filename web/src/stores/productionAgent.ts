@@ -10,6 +10,8 @@ import {
 import type { FlowData, Storyboard } from "@/views/production/utils/flowBuilder";
 import type { ChatMessagesData } from "@tdesign-vue-next/chat";
 import { useThrottleFn } from "@vueuse/core";
+import { registerProjectRuntimeReleaser } from "@/features/tianjiang/project/project-runtime-disposal";
+import { getActivePinia } from "pinia";
 
 /**
  * XML 仅是流式预览；导演规划由后端校验后事务提交，前端不得用预览反向覆盖权威数据。
@@ -52,7 +54,7 @@ function makeProductionAgentStore(projectId: string) {
 
     const episodesId = ref<number>();
 
-    const { connected, messages, chat, stopGenerate, socket, status, reconnect, connect, disconnect } = useChat({
+    const { connected, messages, chat, stopGenerate, socket, status, reconnect, connect, disconnect, disposeUiSocket } = useChat({
       url: `${settingStore().baseUrl}/socket/productionAgent`,
       auth: () => {
         // HTTP/Socket 边界：projectId 必须为 JSON number；scriptId 有值时亦须正安全整数
@@ -380,7 +382,7 @@ function makeProductionAgentStore(projectId: string) {
         const { data } = await axios.post("/production/assets/pollingImage", {
           ids: ids,
         });
-        if (!data || data.length === 0) return;
+        if (!Array.isArray(data) || data.length === 0) return;
         const records = data as Array<{ id: number; state: string; src?: string; errorReason?: string; prompt?: string }>;
         records.forEach((record) => {
           flowData.value.assets.forEach((asset) => {
@@ -445,7 +447,7 @@ function makeProductionAgentStore(projectId: string) {
         const { data } = await axios.post("/production/storyboard/pollingImage", {
           ids: ids,
         });
-        if (!data || data.length === 0) return;
+        if (!Array.isArray(data) || data.length === 0) return;
         const records = data as Array<{ id: number; state: string; src?: string; reason?: string }>;
         records.forEach((record) => {
           const item = flowData.value.storyboard.find((s) => s.id === record.id);
@@ -553,6 +555,22 @@ function makeProductionAgentStore(projectId: string) {
       }
     }
 
+    function releaseRuntime() {
+      stopAssetsPolling();
+      stopStoryboardPolling();
+      disposeUiSocket();
+      messages.value = [];
+      flowData.value = {
+        script: "",
+        scriptPlan: "",
+        storyboardTable: "",
+        assets: [],
+        storyboard: [],
+        workbench: { videoList: [] },
+      };
+      episodesId.value = undefined;
+    }
+
     return {
       connected,
       messages,
@@ -574,6 +592,8 @@ function makeProductionAgentStore(projectId: string) {
       reconnect,
       connect,
       disconnect,
+      disposeUiSocket,
+      releaseRuntime,
       thinkLevel,
       updateThinkConfig,
     };
@@ -594,3 +614,34 @@ export default function useProductionAgentStore() {
   if (!id) throw new Error("No project selected");
   return createProductionAgentStore(id)();
 }
+
+export function releaseProductionAgentStore(projectId: string): void {
+  const key = String(projectId ?? "").trim();
+  if (!key) return;
+  const factory = storeMap.get(key);
+  if (!factory) return;
+  try {
+    const store = factory();
+    const storeId = store.$id;
+    store.releaseRuntime?.();
+    store.$dispose();
+    // 中文注释：$dispose 只移除作用域和注册表，还需删除 Pinia state 中的项目状态壳。
+    const pinia = getActivePinia();
+    if (pinia?.state.value) delete pinia.state.value[storeId];
+  } catch {
+    // 已销毁或尚未挂到当前 Pinia
+  }
+  storeMap.delete(key);
+}
+
+export function getProductionAgentStoreCount(): number {
+  return storeMap.size;
+}
+
+export function hasProductionAgentStore(projectId: string): boolean {
+  return storeMap.has(String(projectId ?? "").trim());
+}
+
+registerProjectRuntimeReleaser("productionAgent", (projectId) => {
+  releaseProductionAgentStore(projectId);
+});

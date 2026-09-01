@@ -130,6 +130,7 @@ export async function completeLocalProjectInit(
     mode: opened.accessMode,
     reason: opened.readonlyReason ?? "",
     lockHolder: opened.lockHolder ?? "",
+    runtimeGeneration: opened.runtimeGeneration,
   });
   await axios.post("/project/editProject", {
     id: localId,

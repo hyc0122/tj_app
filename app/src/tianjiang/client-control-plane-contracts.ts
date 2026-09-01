@@ -1,4 +1,16 @@
-import { BUSINESS_USERNAME_PATTERN } from "./contracts";
+import { BUSINESS_USERNAME_PATTERN, type ErrorCode } from "./contracts";
+
+export class ControlPlaneContractError extends Error {
+  readonly errorCode: ErrorCode;
+
+  constructor(errorCode: ErrorCode, message: string) {
+    super(message);
+    this.name = "ControlPlaneContractError";
+    this.errorCode = errorCode;
+  }
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const CLIENT_CONTROL_PLANE_ENDPOINTS = Object.freeze({
   inviteTeamMember: {
@@ -144,8 +156,25 @@ export function validateClientControlPlaneRequest(
     && businessType !== "novel"
     && businessType !== "script"
     && businessType !== "storyboard"
+    && businessType !== "canvas"
   ) {
-    throw new Error("businessType 只能是 novel、script 或 storyboard");
+    throw new ControlPlaneContractError("PROJECT_SCOPE_INVALID", "businessType 只能是 novel、script、storyboard 或 canvas");
+  }
+  const clientCreateRequestId = typeof request.clientCreateRequestId === "string"
+    ? request.clientCreateRequestId.trim()
+    : "";
+  if (businessType === "canvas") {
+    if (!UUID_PATTERN.test(clientCreateRequestId)) {
+      throw new ControlPlaneContractError("PROJECT_SCOPE_INVALID", "canvas 必须携带合法 clientCreateRequestId");
+    }
+    if (scope === "team" || teamUuid) {
+      throw new ControlPlaneContractError("CANVAS_TEAM_SCOPE_NOT_SUPPORTED", "无限画布首期不支持团队归属");
+    }
+  } else if (clientCreateRequestId) {
+    throw new ControlPlaneContractError(
+      "PROJECT_CREATE_IDEMPOTENCY_FIELD_NOT_ALLOWED",
+      "该项目类型不得携带创建幂等字段",
+    );
   }
   if (sourceUuid && businessType !== "storyboard") {
     throw new Error("只有分镜项目可以指定资产来源");
@@ -160,5 +189,6 @@ export function validateClientControlPlaneRequest(
     ...(aspectRatio ? { aspectRatio } : {}),
     ...(defaultLanguage ? { defaultLanguage } : {}),
     ...(sourceUuid ? { assetSourceProjectUuid: sourceUuid } : {}),
+    ...(clientCreateRequestId ? { clientCreateRequestId } : {}),
   };
 }

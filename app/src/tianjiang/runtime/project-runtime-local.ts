@@ -5,6 +5,9 @@ import Database from "better-sqlite3";
 
 import { ProjectStore } from "../data/project-store";
 import { destroyProjectDatabaseHandle } from "@/utils/db";
+void import("@/tianjiang/canvas/canvas-execution-runtime");
+import { resumeRawInboxConsumer } from "@/tianjiang/canvas/canvas-provider-raw-inbox";
+void resumeRawInboxConsumer;
 import { projectDirectory } from "../data/paths";
 import type { PersonalLocal, PersonalManifest } from "../sync/personal-project-sync";
 import type { TeamLocal } from "../sync/team-project-sync";
@@ -190,6 +193,14 @@ export class RuntimeProjectLocal implements PersonalLocal, TeamLocal {
    * afterBackup：测试钩子（backup 完成后、读 capture 前），模拟 N+1 写入 live。
    */
   async createSnapshot(options?: {
+    afterBackup?: () => void | Promise<void>;
+  }): Promise<PersonalManifest> {
+    const { withProjectMutationGate } = await import("./project-mutation-gate");
+    // 中文注释：画布文档/素材与个人同步快照共用同一 mutation gate，避免混代上传。
+    return withProjectMutationGate(this.projectUuid, () => this.createSnapshotBody(options));
+  }
+
+  private async createSnapshotBody(options?: {
     afterBackup?: () => void | Promise<void>;
   }): Promise<PersonalManifest> {
     if (!this.store || !this.current) throw new Error("项目尚未加载");

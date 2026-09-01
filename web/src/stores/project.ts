@@ -1,3 +1,5 @@
+import { disposeProjectRuntime } from "@/features/tianjiang/project/project-runtime-disposal";
+
 export interface Project {
   id: string;
   name: string;
@@ -11,7 +13,7 @@ export interface Project {
   videoModel: string;
   /** 分镜视频生成分辨率；旧项目为空时由界面规范为 720p。 */
   resolution?: string;
-  projectType: "novel" | "script" | "storyboard";
+  projectType: "novel" | "script" | "storyboard" | "canvas";
   imageQuality: "1K" | "2K" | "4K" | "";
   mode: string;
   directorManual: string;
@@ -32,6 +34,7 @@ export interface ProjectAccess {
   mode: ProjectAccessMode;
   reason: string;
   lockHolder: string;
+  runtimeGeneration?: number;
 }
 
 /** 按账号隔离的删除 tombstone：中央已确认删除/进回收站后本地不得再展示。 */
@@ -161,6 +164,11 @@ export default defineStore(
       nextProject: Project,
       nextAccess: Omit<ProjectAccess, "projectUuid"> & { projectUuid?: string },
     ): void {
+      const previousId = project.value?.id;
+      const nextId = String(nextProject.id ?? "").trim();
+      if (previousId != null && String(previousId) !== nextId) {
+        disposeProjectRuntime(String(previousId), "project-switch");
+      }
       const projectUuid = String(nextAccess.projectUuid ?? nextProject.projectUuid ?? "").trim();
       project.value = {
         ...nextProject,
@@ -171,6 +179,7 @@ export default defineStore(
         mode: nextAccess.mode,
         reason: nextAccess.reason,
         lockHolder: nextAccess.lockHolder,
+        runtimeGeneration: nextAccess.runtimeGeneration,
       };
       if (projectUuid && nextProject.id != null) {
         uuidToLocalId.value = {
@@ -189,12 +198,17 @@ export default defineStore(
     }
 
     function clearActiveProject(): void {
+      const previousId = project.value?.id;
+      if (previousId != null && String(previousId).trim()) {
+        disposeProjectRuntime(String(previousId), "project-close");
+      }
       project.value = null;
       access.value = {
         projectUuid: "",
         mode: "readonly",
         reason: "project_not_open",
         lockHolder: "",
+        runtimeGeneration: undefined,
       };
     }
 

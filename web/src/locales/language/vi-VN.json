@@ -739,6 +739,7 @@
       "jumpGithub": "Chuyển tới Github",
       "feedbackQuestions": "Câu hỏi phản hồi",
       "team": "Nhóm",
+      "infiniteCanvas": "Canvas vô hạn",
       "navAria": "Điều hướng chính"
     },
     "project": {
@@ -2154,5 +2155,60 @@
   "syncProgress.phase.releasing": "Đang nhả khóa nhóm",
   "syncProgress.phase.release_lock": "Đang nhả khóa nhóm",
   "syncProgress.phase.completed": "Hoàn tất",
-  "syncProgress.phase.failed": "Thất bại"
+  "syncProgress.phase.failed": "Thất bại",
+  "infiniteCanvas": {
+    "menu": "Canvas vô hạn",
+    "home": {
+      "greeting": "Xin chào, {name}",
+      "create": "Tạo canvas",
+      "search": "Tìm canvas",
+      "empty": "Chưa có canvas"
+    },
+    "editor": {
+      "save": "Lưu",
+      "undo": "Hoàn tác",
+      "redo": "Làm lại",
+      "layout": "Tự sắp xếp",
+      "importExport": "Nhập / Xuất",
+      "assets": "Tài nguyên",
+      "history": "Lịch sử",
+      "accepted": "Đã tiếp nhận"
+    },
+    "starter": {
+      "novel": "Tải tiểu thuyết",
+      "storyboard": "Hướng dẫn phân cảnh",
+      "textToImage": "Chữ thành ảnh",
+      "firstFrameToVideo": "Khung đầu thành video"
+    },
+    "a11y": {
+      "liveStatus": "Trạng thái lưu canvas",
+      "resizeHandle": "Đổi kích thước bảng canvas"
+    },
+    "ai": {
+      "greeting": "Xin chào, {name}",
+      "newChat": "Hội thoại mới",
+      "history": "Lịch sử",
+      "collapse": "Thu gọn",
+      "fullscreen": "Toàn màn hình",
+      "restore": "Khôi phục",
+      "placeholder": "Mô tả canvas bằng một câu",
+      "send": "Gửi",
+      "voice": "Nhập bằng giọng nói",
+      "skill": "Chế độ sáng tạo",
+      "model": "Mô hình văn bản",
+      "applyPlan": "Áp dụng lên canvas",
+      "waitingOrigin": "Hãy hủy trên thiết bị gốc",
+      "cancelOnOrigin": "Hãy hủy trên thiết bị gốc"
+    },
+    "execution": {
+      "desk": "Bàn thực thi",
+      "confirm": "Xác nhận",
+      "preview": "Xem trước thực thi",
+      "fee": "Phí",
+      "failure": "Chi tiết thất bại",
+      "waitingForOriginDevice": "Đang chờ hàng đợi thiết bị gốc",
+      "queued": "Đã vào hàng đợi",
+      "running": "Đang tạo"
+    }
+  }
 }

@@ -7,8 +7,14 @@ import crypto from "node:crypto";
 import { currentUserStorage } from "@/tianjiang/runtime/user-storage-context";
 import {
   captureCurrentGenerationTask,
+  isCapturingGenerationTask,
   runWithGenerationTaskCapture,
+  settleCompletedGenerationTask,
 } from "@/tianjiang/tasks/generation-task-recovery";
+import { inferArtifactMediaType } from "@/tianjiang/tasks/generation-task-artifacts";
+import { stageInlineGenerationArtifact } from "@/tianjiang/tasks/generation-artifact-downloader";
+import { parseGenerationResultLocator } from "@/tianjiang/tasks/generation-result-locator";
+import { assertGenerationArtifactMagic } from "@/tianjiang/tasks/generation-artifact-magic";
 import {
   prepareModelMediaReferences,
   preflightModelMediaReferences,
@@ -196,16 +202,97 @@ async function withTaskRecord<T>(
       () => fn(modelName, false, 0),
     );
 
-    await taskRecord(1);
+    const artifact = await materializeLiveGenerationArtifact(result);
+    if (!artifact) {
+      await taskRecord.markPendingFinalize();
+      throw new Error("生成结果尚未落库，不能标记为已完成");
+    }
+    await settleCompletedGenerationTask({
+      database: u.db,
+      task: {
+        id: taskRecord.taskId,
+        taskClass,
+        relatedObjects,
+        projectUuid,
+        remoteTaskId: String(taskRecord.remoteTaskId ?? ""),
+        provider,
+      },
+      artifact,
+      now: Date.now(),
+    });
     return result;
   } catch (e) {
     const message = safeFailureSummary ?? u.error(e).message;
-    // 远端 ID 已落库后，网络/轮询异常不能把仍在运行的远端任务伪装成终态失败。
-    if (remoteTaskAttached) await taskRecord.markTemporaryFailure(message);
-    else await taskRecord(-1, message);
+    const row = await u.db("o_tasks").where("id", taskRecord.taskId).first().catch(() => undefined);
+    const locator = parseGenerationResultLocator((row as { resultLocator?: string } | undefined)?.resultLocator);
+    if (locator || (row as { generationStatus?: string } | undefined)?.generationStatus === "pending_finalize") {
+      await taskRecord.markPendingFinalize();
+    } else if (remoteTaskAttached) {
+      await taskRecord.markTemporaryFailure(message);
+    } else {
+      await taskRecord(-1, message);
+    }
     if (safeFailureSummary) throw createSafeVendorGenerationError();
     throw new Error(message);
   }
+}
+
+async function materializeLiveGenerationArtifact(result: unknown): Promise<{
+  mediaType: "image" | "video" | "audio";
+  sourceKind: "remote_url" | "local_path";
+  remoteUrl?: string;
+  localPath?: string;
+  contentType?: string;
+  sha256?: string;
+  byteLength?: number;
+} | undefined> {
+  const value = result && typeof result === "object" && "result" in result
+    ? (result as { result?: unknown }).result
+    : result;
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (/^https:\/\//i.test(trimmed)) {
+    return {
+      mediaType: inferArtifactMediaType(trimmed),
+      sourceKind: "remote_url",
+      remoteUrl: trimmed,
+    };
+  }
+  const decoded = decodeInlineGenerationBytes(trimmed);
+  if (!decoded) return undefined;
+  return stageInlineGenerationArtifact(decoded);
+}
+
+function decodeInlineGenerationBytes(value: string): {
+  bytes: Buffer;
+  mediaType: "image" | "video" | "audio";
+  contentType?: string;
+} | undefined {
+  const dataUrl = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
+  if (dataUrl) {
+    const contentType = dataUrl[1]!;
+    const bytes = Buffer.from(dataUrl[2]!, "base64");
+    if (bytes.length <= 0) return undefined;
+    const mediaType = inferArtifactMediaType("inline", contentType);
+    try {
+      assertGenerationArtifactMagic(mediaType, bytes);
+    } catch {
+      return undefined;
+    }
+    return { bytes, mediaType, contentType };
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length < 24) return undefined;
+  const bytes = Buffer.from(value, "base64");
+  if (bytes.length <= 0) return undefined;
+  for (const mediaType of ["image", "video", "audio"] as const) {
+    try {
+      assertGenerationArtifactMagic(mediaType, bytes);
+      return { bytes, mediaType };
+    } catch {
+      // try next
+    }
+  }
+  return undefined;
 }
 
 async function urlToBase64(url: string, retries = 3, delay = 1000): Promise<string> {
@@ -386,7 +473,9 @@ class AiImage {
               execute: async () => {
                 try {
                   this.result = String(await template.execute(vendorInput));
-                  if (this.result.startsWith("http")) this.result = await urlToBase64(this.result);
+                  if (this.result.startsWith("http") && !isCapturingGenerationTask()) {
+                    this.result = await urlToBase64(this.result);
+                  }
                   return this;
                 } catch (error) {
                   rethrowVendorPhaseOr("execute", error);
@@ -423,6 +512,7 @@ class AiImage {
     return (await (await this.prepare(input)).stage()).execute();
   }
   async save(path: string) {
+    if (this.result.startsWith("http")) return this;
     await u.oss.writeFile(path, this.result);
     return this;
   }
@@ -469,7 +559,9 @@ class AiVideo {
               execute: async () => {
                 try {
                   this.result = String(await template.execute(vendorInput));
-                  if (this.result.startsWith("http")) this.result = await urlToBase64(this.result);
+                  if (this.result.startsWith("http") && !isCapturingGenerationTask()) {
+                    this.result = await urlToBase64(this.result);
+                  }
                   return this;
                 } catch (error) {
                   rethrowVendorPhaseOr("execute", error);
@@ -506,6 +598,7 @@ class AiVideo {
     return (await (await this.prepare(input)).stage()).execute();
   }
   async save(path: string) {
+    if (this.result.startsWith("http")) return this;
     await u.oss.writeFile(path, this.result);
     return this;
   }

@@ -18,6 +18,14 @@ import {
   recoverGenerationTasks,
   registeredGenerationTaskPoller,
 } from "@/tianjiang/tasks/generation-task-recovery";
+import { cleanupStaleGenerationStaging } from "@/tianjiang/tasks/generation-artifact-downloader";
+import {
+  createBackgroundTaskSupervisor,
+  getProcessBackgroundTaskSupervisor,
+  setProcessBackgroundTaskSupervisor,
+  stopProcessBackgroundTaskSupervisor,
+  type SupervisorProjectSource,
+} from "@/tianjiang/tasks/background-task-supervisor";
 import { registerProductionGenerationStatusAdapters } from "@/tianjiang/tasks/vendor-status-adapters";
 import { ensureCurrentAccountBuiltinSkills } from "@/tianjiang/skills/account-skills";
 import {
@@ -44,8 +52,20 @@ interface DatabaseHandle {
 
 const handles = new Map<string, DatabaseHandle>();
 const projectHandles = new Map<string, DatabaseHandle>();
+export type ProjectDatabaseLeaseHolder = "ui" | "supervisor" | "scheduler";
+
+interface ProjectHandleLeaseCounts {
+  ui: number;
+  supervisor: number;
+  scheduler: number;
+}
+
+/** 工作区 UI / 后台监督器 / scheduler 分别持有 lease；计数归零后才能销毁句柄。 */
+const projectHandleLeases = new Map<string, ProjectHandleLeaseCounts>();
+const projectHandlesDestroying = new Set<string>();
 let generationRecoveryTimer: NodeJS.Timeout | undefined;
 let generationRecoveryPoller: (() => Promise<void>) | undefined;
+let generationRecoveryCycle: Promise<void> | undefined;
 let generationRecoveryPaused = false;
 let databaseRuntimeClosing = false;
 const generationRecoveryTasks = new Set<Promise<void>>();
@@ -76,6 +96,7 @@ export function resetDatabaseRuntimeForServe(): void {
     throw new Error("生成任务恢复仍在运行，不能重新开放数据库");
   }
   databaseRuntimeClosing = false;
+  projectHandleLeases.clear();
 }
 
 /** 统一登记恢复任务，使关闭流程能等待已经进入的异步恢复查询。 */
@@ -94,6 +115,7 @@ export function trackGenerationTaskRecovery(operation: () => Promise<void>): Pro
 export async function pauseGenerationTaskRecovery(): Promise<void> {
   // 中文注释：项目关闭前必须排空 generation 写库，阻断后可 resume。
   generationRecoveryPaused = true;
+  getProcessBackgroundTaskSupervisor()?.pause();
   if (generationRecoveryTimer) {
     clearInterval(generationRecoveryTimer);
     generationRecoveryTimer = undefined;
@@ -109,6 +131,7 @@ export function resumeGenerationTaskRecovery(): void {
     throw new Error("数据库正在安全关闭，禁止恢复生成任务轮询");
   }
   generationRecoveryPaused = false;
+  getProcessBackgroundTaskSupervisor()?.resume();
   armGenerationRecoveryTimer();
 }
 
@@ -120,9 +143,14 @@ function armGenerationRecoveryTimer(): void {
   generationRecoveryTimer = setInterval(() => {
     const poller = generationRecoveryPoller;
     if (!poller || generationRecoveryPaused || databaseRuntimeClosing) return;
-    void trackGenerationTaskRecovery(poller).catch((error) =>
-      console.error("生成任务恢复轮询失败:", error),
-    );
+    if (generationRecoveryCycle) return;
+    // 中文注释：账号任务与项目监督器组成同一恢复周期，防止定时器在慢网络下重入。
+    const cycle = trackGenerationTaskRecovery(poller);
+    const settled = cycle.finally(() => {
+      if (generationRecoveryCycle === settled) generationRecoveryCycle = undefined;
+    });
+    generationRecoveryCycle = settled;
+    void settled.catch((error) => console.error("生成任务恢复轮询失败:", error));
   }, 30_000);
   generationRecoveryTimer.unref();
 }
@@ -139,6 +167,7 @@ export async function stopGenerationTaskRecovery(): Promise<void> {
   while (generationRecoveryTasks.size > 0) {
     await Promise.all([...generationRecoveryTasks]);
   }
+  await stopProcessBackgroundTaskSupervisor();
 }
 
 /** 最终同步成功后销毁所有账号/项目 Knex 池；重复调用保持幂等。 */
@@ -183,6 +212,7 @@ export async function destroyProjectDatabaseHandle(
   projectUuid: string,
 ): Promise<void> {
   const key = `${userSegment}:${projectUuid}`;
+  projectHandleLeases.delete(key);
   const handle = projectHandles.get(key);
   if (!handle) return;
 
@@ -275,6 +305,7 @@ export async function activateUserDatabase(identity: UserStorageIdentity): Promi
   // 新登录或应用重启后立即恢复一次，只查询已持久化的远端任务 ID。
   await runWithUserStorage(identity, () =>
     recoverGenerationTasks(activeHandle.client, registeredGenerationTaskPoller));
+  await runWithUserStorage(identity, () => cleanupStaleGenerationStaging(activeHandle.client));
   try {
     const { ensureDreaminaSchedulerStarted } = await import(
       "@/tianjiang/model-providers/dreamina-cli/scheduler"
@@ -370,19 +401,67 @@ export async function activateUserDatabase(identity: UserStorageIdentity): Promi
   } catch {
     // 单个项目库损坏或调度器未就绪不阻断账号激活，耐久记录保留供下次恢复。
   }
+  const supervisor = createBackgroundTaskSupervisor({
+    accountKey: `${identity.issuer}:${identity.userId}`,
+    now: () => Date.now(),
+    poll: (task) => registeredGenerationTaskPoller.poll(task),
+    listSources: async () => listBackgroundTaskSources(identity, activeContext.segment),
+    openDatabase: async (databasePath) => knex({
+      client: "better-sqlite3",
+      connection: { filename: databasePath },
+      useNullAsDefault: true,
+    }),
+    closeDatabase: async (database) => {
+      await database.destroy();
+    },
+    runInProjectContext: async (projectUuid, run) =>
+      runWithUserStorage(identity, () => runWithProjectStorage(projectUuid, run)),
+    acquireProjectLease: (projectUuid) => runWithUserStorage(identity, () =>
+      acquireProjectDatabaseLease(projectUuid, "supervisor")),
+    releaseProjectLease: async (projectUuid) => runWithUserStorage(identity, () =>
+      releaseProjectDatabaseLease(projectUuid, "supervisor")),
+    onProjectIdle: async (projectUuid) => {
+      await runWithUserStorage(identity, () => releaseProjectDatabaseHandleIfIdle(projectUuid));
+    },
+  });
+  setProcessBackgroundTaskSupervisor(supervisor);
+  await supervisor.restoreFromPersistence();
   generationRecoveryPoller = () =>
-    recoverAllCurrentUserGenerationTasks(identity, activeContext.segment, activeHandle);
+    runWithUserStorage(identity, async () => {
+      await recoverGenerationTasks(activeHandle.client, registeredGenerationTaskPoller);
+      const activeSupervisor = getProcessBackgroundTaskSupervisor();
+      if (activeSupervisor) await activeSupervisor.tick();
+      else await recoverAllCurrentUserGenerationTasks(identity, activeContext.segment, activeHandle);
+      await cleanupStaleGenerationStaging(activeHandle.client);
+    });
   generationRecoveryPaused = false;
   armGenerationRecoveryTimer();
+  await runWithUserStorage(identity, async () => {
+    const { canvasExecutionRuntime } = await import("@/tianjiang/canvas/canvas-execution-runtime");
+    await canvasExecutionRuntime.resume();
+  });
+  // 中文注释：账号库激活成功后必须恢复 raw inbox，覆盖仅调用 activateUserDatabase、不经过 login.ts 的路径。
+  await runWithUserStorage(identity, async () => {
+    const { resumeRawInboxConsumer } = await import("@/tianjiang/canvas/canvas-provider-raw-inbox");
+    resumeRawInboxConsumer();
+  });
 }
 
 /**
  * 旧 UI 的项目业务表直接落入项目快照库，避免与同步层维护两份事实来源。
  */
-export async function prepareProjectDatabase(projectUuid: string): Promise<void> {
+export async function prepareProjectDatabase(
+  projectUuid: string,
+  options: { retain?: boolean; holder?: ProjectDatabaseLeaseHolder } = {},
+): Promise<void> {
   const context = currentUserStorage();
   if (!context) throw new Error("缺少中央用户存储上下文");
   const key = `${context.segment}:${projectUuid}`;
+  while (projectHandlesDestroying.has(key)) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const holder = options.holder ?? (options.retain === true ? "ui" : undefined);
+  if (holder) bumpProjectDatabaseLease(key, holder);
   const projectRoot = projectDirectory(getPath(), projectUuid, context.segment);
   const databasePath = path.join(projectRoot, "project.sqlite");
   // 中文注释：SQLite 无法安全绑定 Node fd；每次复用或新建句柄前只做静态链接、硬链接与真实路径校验。
@@ -400,13 +479,20 @@ export async function prepareProjectDatabase(projectUuid: string): Promise<void>
     assertDatabaseHandleCreationAllowed();
     handle = createHandle(databasePath);
     projectHandles.set(key, handle);
+    const created = handle;
     handle.ready = runWithProjectStorage(
       projectUuid,
-      () => initializeDatabase(handle!.client, databasePath, {
+      () => initializeDatabase(created.client, databasePath, {
         role: "project",
         skipEmbeddingInit: true,
       }),
     );
+    void handle.ready.catch(async () => {
+      if (projectHandles.get(key) === created && projectDatabaseLeaseTotal(key) === 0) {
+        try { await created.client.destroy(); } catch { /* ignore */ }
+        if (projectHandles.get(key) === created) projectHandles.delete(key);
+      }
+    });
   }
   await handle.ready;
   if (!handle.recoveryReady) {
@@ -431,11 +517,23 @@ export async function prepareProjectDatabase(projectUuid: string): Promise<void>
   await handle.recoveryReady;
 }
 
+export type LegacyWorkspaceProjectType = "novel" | "script" | "storyboard";
+
 export interface WorkspaceProjectMetadata {
   id: number;
   name: string;
-  projectType: "novel" | "script" | "storyboard";
+  projectType: LegacyWorkspaceProjectType;
   userId: number;
+}
+
+/** 通用项目库初始化：目录、数据库和素材根，不含影视 o_project。 */
+export async function initializeProjectRuntimeBase(projectUuid: string): Promise<void> {
+  await acquireProjectDatabaseLease(projectUuid, "ui");
+}
+
+/** 个人画布启动钩子；具体表由后续 Runtime 计划安装。 */
+export async function initializeCanvasWorkspace(projectUuid: string): Promise<void> {
+  await initializeProjectRuntimeBase(projectUuid);
 }
 
 /**
@@ -446,7 +544,10 @@ export async function initializeWorkspaceProject(
   projectUuid: string,
   metadata: WorkspaceProjectMetadata,
 ): Promise<void> {
-  await prepareProjectDatabase(projectUuid);
+  await acquireProjectDatabaseLease(projectUuid, "ui");
+  if (metadata.projectType !== "novel" && metadata.projectType !== "script" && metadata.projectType !== "storyboard") {
+    throw new Error("影视旧工作区只接受 novel、script 或 storyboard");
+  }
   await runWithProjectStorage(projectUuid, async () => {
     const current = await dbClient("o_project").where({ id: metadata.id }).first();
     if (current) {
@@ -475,21 +576,145 @@ export async function initializeWorkspaceProject(
   });
 }
 
-async function recoverDiscoveredProjectDatabases(identity: UserStorageIdentity): Promise<void> {
-  const context = runWithUserStorage(identity, () => currentUserStorage()!);
-  const projectsRoot = path.join(userStorageRoot(getPath(), identity), "projects");
-  if (!fs.existsSync(projectsRoot)) return;
-  const projectUUIDs = fs.readdirSync(projectsRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory()
-      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.name))
-    .map((entry) => entry.name)
-    .filter((projectUuid) => fs.existsSync(path.join(
-      projectDirectory(getPath(), projectUuid, context.segment),
-      "project.sqlite",
-    )));
-  for (const projectUuid of projectUUIDs) {
-    await runWithUserStorage(identity, () => prepareProjectDatabase(projectUuid));
+async function recoverDiscoveredProjectDatabases(_identity: UserStorageIdentity): Promise<void> {
+  // 中文注释：扫描恢复只确认项目目录存在；路径由监督器按需短开短关，禁止把全部项目装进 projectHandles。
+}
+
+export async function acquireProjectDatabaseLease(
+  projectUuid: string,
+  holder: ProjectDatabaseLeaseHolder,
+): Promise<Knex> {
+  const context = currentUserStorage();
+  if (!context) throw new Error("缺少中央用户存储上下文");
+  const key = `${context.segment}:${projectUuid}`;
+  try {
+    await prepareProjectDatabase(projectUuid);
+    bumpProjectDatabaseLease(key, holder);
+    const handle = projectHandles.get(key);
+    if (!handle) throw new Error("项目数据库句柄缺失");
+    return handle.client;
+  } catch (error) {
+    if (projectDatabaseLeaseTotal(key) === 0) {
+      await destroyProjectDatabaseHandleIfNoLeases(context.segment, projectUuid).catch(() => undefined);
+    }
+    throw error;
   }
+}
+
+export async function releaseProjectDatabaseLease(
+  projectUuid: string,
+  holder: ProjectDatabaseLeaseHolder,
+): Promise<void> {
+  const context = currentUserStorage();
+  if (!context) return;
+  const key = `${context.segment}:${projectUuid}`;
+  dropProjectDatabaseLease(key, holder);
+  if (projectDatabaseLeaseTotal(key) > 0) return;
+  await destroyProjectDatabaseHandleIfNoLeases(context.segment, projectUuid);
+}
+
+export function projectDatabaseLeaseSnapshot(projectUuid: string): ProjectHandleLeaseCounts {
+  const context = currentUserStorage();
+  if (!context) return { ui: 0, supervisor: 0, scheduler: 0 };
+  const counts = projectHandleLeases.get(`${context.segment}:${projectUuid}`);
+  return counts ? { ...counts } : { ui: 0, supervisor: 0, scheduler: 0 };
+}
+
+export async function releaseProjectDatabaseHandleIfIdle(projectUuid: string): Promise<void> {
+  const context = currentUserStorage();
+  if (!context) return;
+  const key = `${context.segment}:${projectUuid}`;
+  if (projectDatabaseLeaseTotal(key) > 0) return;
+  await destroyProjectDatabaseHandleIfNoLeases(context.segment, projectUuid);
+}
+
+async function destroyProjectDatabaseHandleIfNoLeases(
+  userSegment: string,
+  projectUuid: string,
+): Promise<void> {
+  const key = `${userSegment}:${projectUuid}`;
+  const handle = projectHandles.get(key);
+  if (!handle) return;
+  projectHandlesDestroying.add(key);
+  try {
+    let readyError: unknown;
+    try {
+      await handle.ready;
+    } catch (error) {
+      readyError = error;
+    }
+    if (projectDatabaseLeaseTotal(key) > 0) {
+      if (readyError) throw readyError;
+      return;
+    }
+    try {
+      await handle.client.raw("PRAGMA wal_checkpoint(TRUNCATE)");
+    } catch {
+      // ignore
+    }
+    await handle.client.destroy();
+    if (projectHandles.get(key) === handle) projectHandles.delete(key);
+    if (readyError) throw readyError;
+  } finally {
+    projectHandlesDestroying.delete(key);
+  }
+}
+
+function bumpProjectDatabaseLease(key: string, holder: ProjectDatabaseLeaseHolder): void {
+  const current = projectHandleLeases.get(key) ?? { ui: 0, supervisor: 0, scheduler: 0 };
+  current[holder] += 1;
+  projectHandleLeases.set(key, current);
+}
+
+function dropProjectDatabaseLease(key: string, holder: ProjectDatabaseLeaseHolder): void {
+  const current = projectHandleLeases.get(key);
+  if (!current) return;
+  current[holder] = Math.max(0, current[holder] - 1);
+  if (projectDatabaseLeaseTotal(key) === 0) projectHandleLeases.delete(key);
+  else projectHandleLeases.set(key, current);
+}
+
+function projectDatabaseLeaseTotal(key: string): number {
+  const current = projectHandleLeases.get(key);
+  if (!current) return 0;
+  return current.ui + current.supervisor + current.scheduler;
+}
+
+function listBackgroundTaskSources(
+  identity: UserStorageIdentity,
+  segment: string,
+): SupervisorProjectSource[] {
+  const sources: SupervisorProjectSource[] = [];
+  const seen = new Set<string>();
+  const projectsRoot = path.join(userStorageRoot(getPath(), identity), "projects");
+  if (!fs.existsSync(projectsRoot)) return sources;
+  for (const entry of fs.readdirSync(projectsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[0-9a-f-]{36}$/i.test(entry.name)) continue;
+    const projectUuid = entry.name.toLowerCase();
+    if (seen.has(projectUuid)) continue;
+    const databasePath = path.join(
+      projectDirectory(getPath(), projectUuid, segment),
+      "project.sqlite",
+    );
+    if (!fs.existsSync(databasePath)) continue;
+    try {
+      assertSafeProjectDatabasePath(getPath(), databasePath);
+    } catch {
+      continue;
+    }
+    seen.add(projectUuid);
+    const retainedKey = `${segment}:${projectUuid}`;
+    if (projectHandles.has(retainedKey) && projectDatabaseLeaseTotal(retainedKey) > 0) {
+      sources.push({
+        projectUuid,
+        database: projectHandles.get(retainedKey)!.client,
+        databasePath,
+      });
+    } else {
+      sources.push({ projectUuid, databasePath });
+    }
+  }
+  return sources;
 }
 
 async function recoverAllCurrentUserGenerationTasks(

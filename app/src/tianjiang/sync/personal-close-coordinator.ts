@@ -98,6 +98,7 @@ export const PERSONAL_CLOSE_PENDING_MESSAGE =
 
 /**
  * 耐久入队：ensure + 回读确认 projectUuid / task_type / status / sessionExpiresAt。
+ * 画布关闭与个人项目共用同一 flush：超时进入 durable queue，不得直接销毁未同步库。
  * 仅允许尚未过期的 sessionExpiresAt；session_expired 不得冒充可交接成功。
  * 任一步失败抛错，调用方不得 dispose。
  */

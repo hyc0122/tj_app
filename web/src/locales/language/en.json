@@ -742,6 +742,7 @@
       "jumpGithub": "Jump to Github",
       "feedbackQuestions": "Feedback question",
       "team": "Team",
+      "infiniteCanvas": "Infinite Canvas",
       "navAria": "Main navigation"
     },
     "project": {
@@ -2158,5 +2159,60 @@
   "syncProgress.phase.releasing": "Releasing team lock",
   "syncProgress.phase.release_lock": "Releasing team lock",
   "syncProgress.phase.completed": "Completed",
-  "syncProgress.phase.failed": "Failed"
+  "syncProgress.phase.failed": "Failed",
+  "infiniteCanvas": {
+    "menu": "Infinite Canvas",
+    "home": {
+      "greeting": "Hello, {name}",
+      "create": "New canvas",
+      "search": "Search canvases",
+      "empty": "No canvases yet"
+    },
+    "editor": {
+      "save": "Save",
+      "undo": "Undo",
+      "redo": "Redo",
+      "layout": "Auto layout",
+      "importExport": "Import / Export",
+      "assets": "Assets",
+      "history": "History",
+      "accepted": "Accepted"
+    },
+    "starter": {
+      "novel": "Upload novel",
+      "storyboard": "Storyboard guide",
+      "textToImage": "Text to image",
+      "firstFrameToVideo": "First frame to video"
+    },
+    "a11y": {
+      "liveStatus": "Canvas save status",
+      "resizeHandle": "Resize canvas panel"
+    },
+    "ai": {
+      "greeting": "Hello, {name}",
+      "newChat": "New chat",
+      "history": "History",
+      "collapse": "Collapse",
+      "fullscreen": "Fullscreen",
+      "restore": "Restore",
+      "placeholder": "Describe your canvas in one sentence",
+      "send": "Send",
+      "voice": "Voice input",
+      "skill": "Creative mode",
+      "model": "Text model",
+      "applyPlan": "Apply to canvas",
+      "waitingOrigin": "Cancel on the origin device",
+      "cancelOnOrigin": "Cancel on the origin device"
+    },
+    "execution": {
+      "desk": "Execution desk",
+      "confirm": "Confirm",
+      "preview": "Execution preview",
+      "fee": "Fee notice",
+      "failure": "Failure details",
+      "waitingForOriginDevice": "Waiting for the origin device queue",
+      "queued": "Queued",
+      "running": "Running"
+    }
+  }
 }

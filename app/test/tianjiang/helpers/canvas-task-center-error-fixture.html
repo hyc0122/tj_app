@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>任务中心失败原因</title>
+    <style>
+      .reasonText { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .reasonDialog { display: none; }
+      .reasonDialog.is-open { display: block; }
+      .reasonDialogContent { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <button type="button" class="reasonText" aria-label="查看完整失败原因">供应商拒绝：余额不足 [REDACTED_SECRET]…</button>
+    <div class="reasonDialogBackdrop">
+      <section class="reasonDialog" role="dialog" aria-modal="true" aria-label="完整失败原因">
+        <pre class="reasonDialogContent"></pre>
+      </section>
+    </div>
+    <script>
+      const SAFE = "供应商拒绝：余额不足 [REDACTED_SECRET]。详细诊断码 VENDOR_BALANCE_EMPTY_42。";
+      document.querySelector(".reasonText").addEventListener("click", () => {
+        document.querySelector(".reasonDialog").classList.add("is-open");
+        document.querySelector(".reasonDialogContent").textContent = SAFE;
+      });
+    </script>
+  </body>
+</html>

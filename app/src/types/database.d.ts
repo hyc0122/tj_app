@@ -199,6 +199,7 @@ export interface o_tasks {
   'reason'?: string | null;
   'recoveryAttemptedAt'?: number | null;
   'relatedObjects'?: string | null;
+  'resultLocator'?: string | null;
   'remoteStatusHint'?: string | null;
   'remoteTaskId'?: string | null;
   'requestDigest'?: string | null;

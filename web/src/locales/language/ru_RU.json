@@ -741,6 +741,7 @@
       "jumpGithub": "Перейти на Гитхаб",
       "feedbackQuestions": "Вопрос обратной связи",
       "team": "Команда",
+      "infiniteCanvas": "Бесконечный холст",
       "navAria": "Основная навигация"
     },
     "project": {
@@ -2156,5 +2157,60 @@
   "syncProgress.phase.releasing": "Снятие командной блокировки",
   "syncProgress.phase.release_lock": "Снятие командной блокировки",
   "syncProgress.phase.completed": "Завершено",
-  "syncProgress.phase.failed": "Ошибка"
+  "syncProgress.phase.failed": "Ошибка",
+  "infiniteCanvas": {
+    "menu": "Бесконечный холст",
+    "home": {
+      "greeting": "Здравствуйте, {name}",
+      "create": "Создать холст",
+      "search": "Искать холсты",
+      "empty": "Холстов пока нет"
+    },
+    "editor": {
+      "save": "Сохранить",
+      "undo": "Отменить",
+      "redo": "Повторить",
+      "layout": "Автоматическая раскладка",
+      "importExport": "Импорт / экспорт",
+      "assets": "Материалы",
+      "history": "История",
+      "accepted": "Принято"
+    },
+    "starter": {
+      "novel": "Загрузить роман",
+      "storyboard": "Гид раскадровки",
+      "textToImage": "Текст в изображение",
+      "firstFrameToVideo": "Первый кадр в видео"
+    },
+    "a11y": {
+      "liveStatus": "Состояние сохранения холста",
+      "resizeHandle": "Изменить размер панели холста"
+    },
+    "ai": {
+      "greeting": "Здравствуйте, {name}",
+      "newChat": "Новый диалог",
+      "history": "История",
+      "collapse": "Свернуть",
+      "fullscreen": "На весь экран",
+      "restore": "Восстановить",
+      "placeholder": "Опишите холст одним предложением",
+      "send": "Отправить",
+      "voice": "Голосовой ввод",
+      "skill": "Режим творчества",
+      "model": "Текстовая модель",
+      "applyPlan": "Применить к холсту",
+      "waitingOrigin": "Отмените на исходном устройстве",
+      "cancelOnOrigin": "Отмените на исходном устройстве"
+    },
+    "execution": {
+      "desk": "Панель выполнения",
+      "confirm": "Подтвердить",
+      "preview": "Предпросмотр выполнения",
+      "fee": "Плата",
+      "failure": "Сведения об ошибке",
+      "waitingForOriginDevice": "Ожидание очереди исходного устройства",
+      "queued": "В очереди",
+      "running": "Выполняется"
+    }
+  }
 }

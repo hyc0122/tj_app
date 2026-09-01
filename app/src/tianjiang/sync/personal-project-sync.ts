@@ -150,6 +150,7 @@ export class PersonalProjectSync {
    * 失败后禁止 fallback 为 unchanged。
    */
   private closeInFlight?: Promise<PersonalSyncResult>;
+  private publishReceiptContext?: { dataRoot: string; projectUuid: string };
 
   constructor(
     private readonly local: PersonalLocal,
@@ -157,6 +158,10 @@ export class PersonalProjectSync {
     private readonly isOnline: () => boolean,
     private readonly schedule: Schedule = defaultSchedule,
   ) {}
+
+  setPublishReceiptContext(input: { dataRoot: string; projectUuid: string }): void {
+    this.publishReceiptContext = input;
+  }
 
   /** 由 SyncCoordinator 注入：idle/checkpoint 经协调器 finalize */
   setSyncExecutor(executor: PersonalSyncExecutor | undefined): void {
@@ -440,6 +445,14 @@ export class PersonalProjectSync {
       changed,
       reason,
     );
+    if (this.publishReceiptContext) {
+      const { writePersonalPublishReceipt } = await import("./personal-publish-receipt");
+      writePersonalPublishReceipt(
+        this.publishReceiptContext.dataRoot,
+        this.publishReceiptContext.projectUuid,
+        committed,
+      );
+    }
     // 已关闭：仍 install 以保持本地与远端已提交事实一致
     await this.local.install(committed, []);
     const epochAfter = this.editEpoch === epochAtStart;

@@ -51,6 +51,6 @@ test("团队手动同步必须发布后重新打开，而不是拒绝首次同�
     "utf8",
   );
   assert.doesNotMatch(source, /团队项目只允许在关闭时持锁发布/);
-  assert.match(source, /await this\.closeProject\(session, projectUuid\)/);
+  assert.match(source, /await this\.closeProjectInternal\(session, projectUuid\)/);
   assert.match(source, /await this\.openProject\(session, projectUuid\)/);
 });

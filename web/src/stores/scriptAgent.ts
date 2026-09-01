@@ -12,6 +12,8 @@ import {
   mergePreviewDiscard,
   type PlanPreview,
 } from "@/features/tianjiang/script-agent/preview-buffer";
+import { registerProjectRuntimeReleaser } from "@/features/tianjiang/project/project-runtime-disposal";
+import { getActivePinia } from "pinia";
 
 interface PlanData {
   storySkeleton: string;
@@ -35,7 +37,7 @@ function makeScriptAgentStore(projectId: string) {
         /** 产物错误按 messageId+errorCode 去重，禁止全局时间窗压掉父消息 */
         const productErrorSeen = new Map<string, number>();
 
-        const { connected, messages, chat, stopGenerate, socket, status, disconnect, connect, reconnect } = useChat({
+        const { connected, messages, chat, stopGenerate, socket, status, disconnect, connect, reconnect, disposeUiSocket } = useChat({
           url: `${settingStore().baseUrl}/socket/scriptAgent`,
           auth: () => {
             // HTTP/Socket 边界必须发 JSON number；Project.id 仍可为字符串
@@ -169,6 +171,18 @@ function makeScriptAgentStore(projectId: string) {
           }
         }
 
+        function releaseRuntime() {
+          disposeUiSocket();
+          messages.value = [];
+          planData.value = {
+            storySkeleton: "",
+            adaptationStrategy: "",
+            script: [],
+          };
+          previewByMessageId.value = clearAllPreviews();
+          productErrorSeen.clear();
+        }
+
         return {
           connected,
           messages,
@@ -182,6 +196,8 @@ function makeScriptAgentStore(projectId: string) {
           loadPlanDataFromServer,
           connect,
           disconnect,
+          disposeUiSocket,
+          releaseRuntime,
           reconnect,
           thinkLevel,
           updateThinkConfig,
@@ -203,3 +219,34 @@ export default function useScriptAgentStore() {
   if (!id) throw new Error("No project selected");
   return createScriptAgentStore(id)();
 }
+
+export function releaseScriptAgentStore(projectId: string): void {
+  const key = String(projectId ?? "").trim();
+  if (!key) return;
+  const factory = storeMap.get(key);
+  if (!factory) return;
+  try {
+    const store = factory();
+    const storeId = store.$id;
+    store.releaseRuntime?.();
+    store.$dispose();
+    // 中文注释：避免切换项目后只剩不可见的 Pinia state 壳持续累积。
+    const pinia = getActivePinia();
+    if (pinia?.state.value) delete pinia.state.value[storeId];
+  } catch {
+    // 已销毁或尚未挂到当前 Pinia
+  }
+  storeMap.delete(key);
+}
+
+export function getScriptAgentStoreCount(): number {
+  return storeMap.size;
+}
+
+export function hasScriptAgentStore(projectId: string): boolean {
+  return storeMap.has(String(projectId ?? "").trim());
+}
+
+registerProjectRuntimeReleaser("scriptAgent", (projectId) => {
+  releaseScriptAgentStore(projectId);
+});

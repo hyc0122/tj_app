@@ -69,7 +69,7 @@ test("账号迁移链必须在角色标记后追加即梦与佳速升级迁移�
   assert.ok(roleMarker, "账号角色标记不得消失");
   assert.ok(dreamina, "账号链必须追加 dreamina-cli-account-v1");
   assert.equal(dreamina!.version, roleMarker!.version + 1);
-  assert.deepEqual(account.slice(-7).map((item) => item.name), [
+  assert.deepEqual(account.slice(-9).map((item) => item.name), [
     "dreamina-cli-account-v1",
     "dreamina-cli-runtime-state-v1",
     "dreamina-dispatch-enqueue-idempotency-v1",
@@ -77,6 +77,8 @@ test("账号迁移链必须在角色标记后追加即梦与佳速升级迁移�
     "dreamina-cli-pause-reason-v1",
     "dreamina-cli-poll-seconds-v1",
     "jiasu-provider-model-catalog-v4-4",
+    "generation-task-result-locator-v1",
+    "canvas-import-staging-reservations-v1",
   ]);
   assert.ok(!project.some((item) => item.name.includes("dreamina")));
   assert.ok(!account.some((item) => item.name === "storyboard-project-schema-v1"));

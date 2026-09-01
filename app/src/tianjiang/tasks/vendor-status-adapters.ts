@@ -10,6 +10,10 @@ import {
   type GenerationTaskIdentity,
   type RemoteGenerationResult,
 } from "./generation-task-recovery";
+import {
+  inferArtifactMediaType,
+  type NormalizedGenerationArtifact,
+} from "./generation-task-artifacts";
 
 type TrustedFetch = typeof fetch;
 
@@ -177,12 +181,15 @@ export function normalizeRemoteState(payload: unknown): RemoteGenerationResult {
   if (typeof record.state === "string" && [
     "pending", "completed", "failed", "not_found", "temporary_error",
   ].includes(record.state)) {
-    return { state: record.state as RemoteGenerationResult["state"], reason: stringReason(record) };
+    return withArtifact({
+      state: record.state as RemoteGenerationResult["state"],
+      reason: stringReason(record),
+    }, record);
   }
   if (record.completed === true) {
     return record.error
       ? { state: "failed", reason: String(record.error) }
-      : { state: "completed" };
+      : withArtifact({ state: "completed" }, record);
   }
   if (record.completed === false && record.error) {
     return { state: "temporary_error", reason: String(record.error) };
@@ -203,7 +210,7 @@ export function normalizeRemoteState(payload: unknown): RemoteGenerationResult {
     ?? "",
   ).toLowerCase();
   if (["succeed", "succeeded", "success", "completed", "done", "active"].includes(raw)) {
-    return { state: "completed" };
+    return withArtifact({ state: "completed" }, record);
   }
   if (["failed", "failure", "error", "expired", "cancelled", "canceled"].includes(raw)) {
     return { state: "failed", reason: stringReason(data) || stringReason(record) };
@@ -233,6 +240,63 @@ function joinHTTPS(baseUrl: string, suffix: string): string {
   parsed.search = "";
   parsed.hash = "";
   return `${parsed.toString().replace(/\/+$/, "")}/${suffix.replace(/^\/+/, "")}`;
+}
+
+function withArtifact(
+  result: RemoteGenerationResult,
+  record: Record<string, any>,
+): RemoteGenerationResult {
+  if (result.state !== "completed") return result;
+  const artifact = extractNormalizedArtifact(record);
+  return artifact ? { ...result, artifact } : result;
+}
+
+function extractNormalizedArtifact(record: Record<string, any>): NormalizedGenerationArtifact | undefined {
+  const nested = record.data && typeof record.data === "object" ? record.data : record;
+  // 中文注释：网络响应里的 localPath/filePath 一律不可信，只接受 HTTPS 定位信息。
+  const url = firstHttpsUrl(
+    nested.url,
+    nested.video_url,
+    nested.image_url,
+    nested.audio_url,
+    nested.file_url,
+    nested.result_url,
+    nested.output?.url,
+    nested.result?.url,
+    nested.output,
+    nested.result,
+    record.url,
+    record.output?.url,
+    record.artifact?.remoteUrl,
+    record.artifact?.url,
+  );
+  if (url) {
+    return {
+      mediaType: inferArtifactMediaType(url, nested.content_type ?? record.content_type ?? record.artifact?.contentType),
+      sourceKind: "remote_url",
+      remoteUrl: url,
+      contentType: nested.content_type ?? record.content_type,
+    };
+  }
+  if (record.artifact && typeof record.artifact === "object") {
+    const artifact = record.artifact as NormalizedGenerationArtifact;
+    if (artifact.sourceKind === "remote_url" && artifact.remoteUrl && /^https:\/\//i.test(artifact.remoteUrl)) {
+      return {
+        ...artifact,
+        sourceKind: "remote_url",
+        remoteUrl: artifact.remoteUrl,
+        mediaType: inferArtifactMediaType(artifact.remoteUrl, artifact.contentType),
+      };
+    }
+  }
+  return undefined;
+}
+
+function firstHttpsUrl(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && /^https:\/\//i.test(value.trim())) return value.trim();
+  }
+  return undefined;
 }
 
 function stringReason(record: Record<string, any>): string | undefined {

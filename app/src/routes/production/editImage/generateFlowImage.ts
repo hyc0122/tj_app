@@ -4,8 +4,24 @@ import { z } from "zod";
 import { error, success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { currentUserStorage } from "@/tianjiang/runtime/user-storage-context";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "@/tianjiang/tasks/generation-completion-contract";
+import { toProjectLogicalPath } from "@/utils/oss";
 import axios from "axios";
 const router = express.Router();
+
+export function buildWorkflowImageCompletionContract(input: {
+  imageId: number;
+  savePath: string;
+  projectId: number;
+}): string {
+  return stringifyGenerationCompletionContract(createGenerationCompletionContract({
+    kind: "workflow-image",
+    mediaType: "image",
+    relativePath: toProjectLogicalPath(input.savePath),
+    imageId: input.imageId,
+    projectId: input.projectId,
+  }));
+}
 
 /**
  * 从画布返回的受保护 runtime URL 中提取当前项目内的文件路径。
@@ -66,6 +82,13 @@ export default router.post(
   async (req, res) => {
     const { model, references = [], quality, ratio, prompt, projectId } = req.body;
     try {
+      const savePath = `${projectId}/workFlow/${u.uuid()}.jpg`;
+      const [imageId] = await u.db("o_image").insert({
+        type: "workflow",
+        state: "生成中",
+        model: String(model).split(/:(.+)/)[1] ?? String(model),
+        filePath: savePath,
+      });
       const imageClass = await u.Ai.Image(model).run(
         {
           prompt: prompt,
@@ -82,11 +105,14 @@ export default router.post(
         {
           taskClass: "工作流图片生成",
           describe: "工作流图片生成",
-          relatedObjects: JSON.stringify(req.body),
+          relatedObjects: buildWorkflowImageCompletionContract({
+            imageId,
+            savePath,
+            projectId,
+          }),
           projectId: projectId,
         },
       );
-      const savePath = `${projectId}/workFlow/${u.uuid()}.jpg`;
       await imageClass.save(savePath);
 
       const url = await u.oss.getSmallImageUrl(savePath);

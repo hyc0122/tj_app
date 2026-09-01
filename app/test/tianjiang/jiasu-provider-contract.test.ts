@@ -466,7 +466,9 @@ test("queryTask 重启恢复只查询原视频任务 ID", async () => {
   try {
     const runtime = loadTemplate(fixture.baseUrl);
     const result = await runtime.queryTask("video-task-1");
-    assert.deepEqual(result, { state: "completed" });
+    assert.equal(result.state, "completed");
+    assert.equal(result.url, "https://media.example/generated.mp4");
+    assert.equal((result.output as { url?: string } | undefined)?.url, "https://media.example/generated.mp4");
     assert.deepEqual(
       fixture.requests.map((request) => `${request.method} ${request.path}`),
       ["GET /v1/video/generations/video-task-1"],

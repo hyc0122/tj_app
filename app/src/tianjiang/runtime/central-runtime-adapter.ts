@@ -19,6 +19,7 @@ import { hashFileStreaming } from "../media/project-file-inventory";
 import { buildProjectDownloadPlan } from "../sync/project-download-plan";
 import { buildAPIPath } from "../contracts";
 import type { DownloadedProjectSnapshot } from "./project-runtime-local";
+// 中文注释：画布个人同步复用本适配器的 upload session / manifest commit / readback，不另开 OSS 协议。
 import { reportSyncProgress, syncProgressStore } from "./sync-progress";
 import { createSafeVendorStagingError } from "../storyboard/vendor-generation-safety";
 
@@ -36,7 +37,7 @@ export interface RuntimeProjectCatalogItem {
   lockStatus: "none" | "active" | "expired" | "revoked";
   lockHolderName: string;
   openMode: "editable" | "readonly";
-  businessType: "novel" | "script" | "storyboard";
+  businessType: "novel" | "script" | "storyboard" | "canvas";
   assetSourceProjectUuid?: string;
   lockId?: string;
   fencingToken?: number;
@@ -210,8 +211,16 @@ export class CentralRuntimeAdapter {
         row.businessType !== "novel"
         && row.businessType !== "script"
         && row.businessType !== "storyboard"
+        && row.businessType !== "canvas"
       ) {
-        throw new Error("项目业务类型无效");
+        const error = new Error("项目业务类型无效") as Error & { errorCode: string };
+        error.errorCode = "PROJECT_BUSINESS_TYPE_INVALID";
+        throw error;
+      }
+      if (row.businessType === "canvas" && row.kind === "team") {
+        const error = new Error("无限画布首期不支持团队归属") as Error & { errorCode: string };
+        error.errorCode = "CANVAS_TEAM_SCOPE_NOT_SUPPORTED";
+        throw error;
       }
       const lockStatus = (
         row.lockStatus === "active"

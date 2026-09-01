@@ -90,6 +90,9 @@ export default async function taskRecord(
       });
   };
   done.remoteAttached = Boolean(generation?.remoteTaskId);
+  done.remoteTaskId = generation?.remoteTaskId;
+  done.provider = generation?.provider;
+  done.projectUuid = generation?.projectUuid;
   done.attachRemote = async (metadata: {
     provider: string;
     remoteTaskId: string;
@@ -116,6 +119,17 @@ export default async function taskRecord(
       });
     });
     done.remoteAttached = true;
+    done.remoteTaskId = metadata.remoteTaskId;
+    done.provider = metadata.provider;
+    done.projectUuid = metadata.projectUuid;
+  };
+  done.markPendingFinalize = async () => {
+    await db("o_tasks").where("id", id).update({
+      state: "进行中",
+      generationStatus: "pending_finalize",
+      lastPollAt: Date.now(),
+      reason: null,
+    });
   };
   done.markTemporaryFailure = async (reason: string) => {
     if (!done.remoteAttached) throw new Error("未绑定远端任务，不能标记临时轮询失败");

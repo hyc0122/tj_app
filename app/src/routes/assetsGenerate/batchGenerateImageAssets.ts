@@ -5,6 +5,8 @@ import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { error, success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "@/tianjiang/tasks/generation-completion-contract";
+import { toProjectLogicalPath } from "@/utils/oss";
 
 const router = express.Router();
 
@@ -110,7 +112,14 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
       const imagePath = `/${projectId}/${cfg.dir}/${uuidv4()}.jpg`;
       const userPrompt = buildPrompt(cfg, project.artStyle ?? "", item.name, item.prompt);
       const describe = `生成${cfg.label}图，名称：${item.name}，提示词：${item.prompt}`;
-      const relatedObjects = { id: item.id, projectId, type: cfg.label };
+      const relatedObjects = stringifyGenerationCompletionContract(createGenerationCompletionContract({
+        kind: "asset-image",
+        mediaType: "image",
+        relativePath: toProjectLogicalPath(imagePath),
+        imageId,
+        assetsId: item.id,
+        projectId,
+      }));
       try {
         const aiImage = u.Ai.Image(model);
         await aiImage.run(
@@ -124,7 +133,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
             taskClass: cfg.taskClass,
             describe,
             projectId,
-            relatedObjects: JSON.stringify(relatedObjects),
+            relatedObjects,
           },
         );
         aiImage.save(imagePath);

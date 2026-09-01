@@ -52,11 +52,13 @@
                 <t-tag size="small">{{ $t(`projectCatalog.role.${item.myRole}`) }}</t-tag>
                 <t-tag size="small">
                   {{
-                    item.businessType === "storyboard"
-                      ? $t("workbench.project.type.storyboard")
-                      : item.businessType === "script"
-                        ? $t("workbench.project.type.script")
-                        : $t("workbench.project.type.novel")
+                    item.businessType === "canvas"
+                      ? "无限画布"
+                      : item.businessType === "storyboard"
+                        ? $t("workbench.project.type.storyboard")
+                        : item.businessType === "script"
+                          ? $t("workbench.project.type.script")
+                          : $t("workbench.project.type.novel")
                   }}
                 </t-tag>
               </div>
@@ -226,6 +228,7 @@ async function handleOpen(item: CatalogProject): Promise<void> {
       mode: opened.accessMode,
       reason: opened.readonlyReason ?? "",
       lockHolder: opened.lockHolder ?? "",
+      runtimeGeneration: opened.runtimeGeneration,
     });
     if (openMode === "readonly" || item.myRole === "viewer") {
       MessagePlugin.warning(

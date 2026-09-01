@@ -32,6 +32,16 @@ const router = createRouter({
           component: () => import("@/views/team/index.vue"),
         },
         {
+          path: "/infinite-canvas",
+          meta: { canvasHome: true },
+          component: () => import("@/views/infiniteCanvas/index.vue"),
+        },
+        {
+          path: "/infinite-canvas/:projectUuid",
+          meta: { canvasEditor: true },
+          component: () => import("@/views/infiniteCanvas/editor.vue"),
+        },
+        {
           path: "/settings",
           component: () => import("@/views/settings/index.vue"),
         },
@@ -93,6 +103,10 @@ router.beforeEach(async (to, from, next) => {
         "/novel", "/script", "/storyboard-project", "/scriptAgent", "/cornerScape", "/production",
         "/assets", "/project-recovery",
       ]);
+      if (to.path.startsWith("/infinite-canvas/") && to.params.projectUuid) {
+        next();
+        return;
+      }
       if (projectPaths.has(to.path)) {
         const { default: useProjectStore } = await import("@/stores/project");
         if (!useProjectStore().project) {

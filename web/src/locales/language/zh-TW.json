@@ -748,6 +748,7 @@
       "jumpGithub": "跳轉Github",
       "feedbackQuestions": "回饋問題",
       "team": "團隊",
+      "infiniteCanvas": "無限畫布",
       "navAria": "主導覽"
     },
     "project": {
@@ -2160,5 +2161,60 @@
   "syncProgress.phase.releasing": "正在釋放團隊鎖",
   "syncProgress.phase.release_lock": "正在釋放團隊鎖",
   "syncProgress.phase.completed": "已完成",
-  "syncProgress.phase.failed": "失敗"
+  "syncProgress.phase.failed": "失敗",
+  "infiniteCanvas": {
+    "menu": "無限畫布",
+    "home": {
+      "greeting": "你好，{name}",
+      "create": "新建畫布",
+      "search": "搜尋畫布",
+      "empty": "還沒有畫布"
+    },
+    "editor": {
+      "save": "儲存",
+      "undo": "復原",
+      "redo": "重做",
+      "layout": "一鍵整理",
+      "importExport": "匯入匯出",
+      "assets": "素材",
+      "history": "歷史",
+      "accepted": "已受理"
+    },
+    "starter": {
+      "novel": "上傳小說",
+      "storyboard": "故事板生成引導",
+      "textToImage": "一句話出圖",
+      "firstFrameToVideo": "首幀轉影片"
+    },
+    "a11y": {
+      "liveStatus": "畫布儲存狀態",
+      "resizeHandle": "調整畫布面板"
+    },
+    "ai": {
+      "greeting": "你好，{name}",
+      "newChat": "新對話",
+      "history": "歷史",
+      "collapse": "收合",
+      "fullscreen": "全螢幕",
+      "restore": "恢復",
+      "placeholder": "輸入一句話，把想法變成畫布",
+      "send": "傳送",
+      "voice": "語音輸入",
+      "skill": "創作模式",
+      "model": "文字模型",
+      "applyPlan": "套用到畫布",
+      "waitingOrigin": "請在原裝置取消",
+      "cancelOnOrigin": "請在原裝置取消"
+    },
+    "execution": {
+      "desk": "執行台",
+      "confirm": "確認執行",
+      "preview": "執行預覽",
+      "fee": "費用提示",
+      "failure": "失敗詳情",
+      "waitingForOriginDevice": "等待原裝置進入任務佇列",
+      "queued": "已入隊",
+      "running": "產生中"
+    }
+  }
 }

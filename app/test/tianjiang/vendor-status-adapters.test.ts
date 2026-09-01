@@ -157,6 +157,69 @@ test("同一供应商的状态适配器按当前用户和项目隔离，不被�
   assert.equal(second.reason, "second-project");
 });
 
+test("重启后未打开项目必须通过生产适配器 + 项目 ALS 查询，禁止依赖裸 adapter", async () => {
+  const identity = { issuer: "https://central.example", userId: 9 };
+  const unopened = "33333333-3333-4333-a333-333333333333";
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tj-vendor-unopened-"));
+  const database = knex({
+    client: "better-sqlite3",
+    connection: { filename: path.join(root, "db.sqlite") },
+    useNullAsDefault: true,
+  });
+  try {
+    await database.schema.createTable("o_tasks", (table) => {
+      table.string("state");
+      table.string("provider");
+    });
+    await database.schema.createTable("o_vendorConfig", (table) => {
+      table.string("id").primary();
+      table.integer("enable");
+      table.text("inputValues");
+    });
+    await database("o_vendorConfig").insert({
+      id: "atlascloud",
+      enable: 1,
+      inputValues: JSON.stringify({
+        mediaBaseUrl: "https://provider.example",
+        apiKey: "backend-only",
+      }),
+    });
+    const requested: string[] = [];
+    await runWithUserStorage(identity, () =>
+      registerProductionGenerationStatusAdapters(database, {
+        accountConfigDatabase: database,
+        codeLoader: () => "",
+        trustedFetch: (async (input) => {
+          requested.push(String(input));
+          return new Response(JSON.stringify({
+            status: "succeeded",
+            url: "https://cdn.example/result.mp4",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }) as typeof fetch,
+      }));
+    const result = await runWithUserStorage(identity, () => runWithProjectStorage(
+      unopened,
+      () => registeredGenerationTaskPoller.poll({
+        provider: "atlascloud",
+        remoteTaskId: "remote-unopened-1",
+        projectUuid: unopened,
+        requestDigest: "d".repeat(64),
+      }),
+    ));
+    assert.equal(result.state, "completed");
+    assert.equal(result.artifact?.remoteUrl, "https://cdn.example/result.mp4");
+    assert.deepEqual(requested, [
+      "https://provider.example/model/prediction/remote-unopened-1",
+    ]);
+  } finally {
+    await database.destroy();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("账号库解析失败时禁止回退项目 database（失败关闭）", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "tj-vendor-failclosed-"));
   const projectDb = knex({

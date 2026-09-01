@@ -1261,17 +1261,29 @@ test("旧安装流发现较新的合法完整绑定时必须采用而不得覆�
     fs.writeFileSync(newerAbsolutePath, newerBytes);
 
     setAfterDreaminaResultValidatedForTests(() => {
-      const Database = require("better-sqlite3") as new (filename: string) => {
+      const Database = require("better-sqlite3") as new (filename: string, options?: { timeout?: number }) => {
         prepare: (sql: string) => { run: (...params: unknown[]) => unknown };
         close: () => void;
       };
-      const direct = new Database(path.join(projectRoot, "project.sqlite"));
-      try {
-        direct.prepare("UPDATE o_video SET state = ?, filePath = ? WHERE generationTaskUuid = ?")
-          .run("生成成功", newerRelativePath, taskUuid);
-      } finally {
-        direct.close();
+      const sqlitePath = path.join(projectRoot, "project.sqlite");
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        try {
+          const direct = new Database(sqlitePath, { timeout: 5000 });
+          try {
+            direct.prepare("UPDATE o_video SET state = ?, filePath = ? WHERE generationTaskUuid = ?")
+              .run("生成成功", newerRelativePath, taskUuid);
+          } finally {
+            direct.close();
+          }
+          lastError = undefined;
+          break;
+        } catch (error) {
+          lastError = error;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+        }
       }
+      if (lastError) throw lastError;
     });
     const installed = await installDreaminaResult({
       projectUuid: PROJECT,

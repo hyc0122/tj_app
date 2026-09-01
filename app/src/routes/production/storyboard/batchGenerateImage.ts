@@ -6,6 +6,8 @@ import { error, success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { Output, tool } from "ai";
 import { assetItemSchema } from "@/agents/productionAgent/tools";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "@/tianjiang/tasks/generation-completion-contract";
+import { toProjectLogicalPath } from "@/utils/oss";
 const router = express.Router();
 export type AssetData = z.infer<typeof assetItemSchema>;
 
@@ -97,6 +99,7 @@ export default router.post(
         size: projectSettingData?.imageQuality as "1K" | "2K" | "4K",
         aspectRatio: projectSettingData?.videoRatio as `${number}:${number}`,
       };
+      const savePath = `/${projectId}/assets/${scriptId}/${u.uuid()}.jpg`;
       try {
         const imageCls = await u.Ai.Image(projectSettingData?.imageModel as `${string}:${string}`).run(
           {
@@ -106,11 +109,17 @@ export default router.post(
           {
             taskClass: "生成分镜图片",
             describe: "分镜图片生成",
-            relatedObjects: JSON.stringify(repeloadObj),
+            relatedObjects: stringifyGenerationCompletionContract(createGenerationCompletionContract({
+              kind: "storyboard-image",
+              mediaType: "image",
+              relativePath: toProjectLogicalPath(savePath),
+              storyboardId: item.id!,
+              projectId,
+              scriptId,
+            })),
             projectId: projectId,
           },
         );
-        const savePath = `/${projectId}/assets/${scriptId}/${u.uuid()}.jpg`;
         await imageCls.save(savePath);
         await u.db("o_storyboard").where("id", item.id).update({
           filePath: savePath,

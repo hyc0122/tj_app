@@ -5,6 +5,8 @@ import sharp from "sharp";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { Output } from "ai";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "@/tianjiang/tasks/generation-completion-contract";
+import { toProjectLogicalPath } from "@/utils/oss";
 const router = express.Router();
 
 export default router.post(
@@ -91,6 +93,15 @@ export default router.post(
           size: projectSettingData?.imageQuality as "1K" | "2K" | "4K",
           aspectRatio: "16:9" as `${number}:${number}`,
         };
+        const savePath = `/${projectId}/assets/${scriptId}/${item.type}/${u.uuid()}.jpg`;
+        const relatedObjects = stringifyGenerationCompletionContract(createGenerationCompletionContract({
+          kind: "asset-image",
+          mediaType: "image",
+          relativePath: toProjectLogicalPath(savePath),
+          imageId,
+          assetsId: item.id,
+          projectId,
+        }));
         const imageCls = await u.Ai.Image(projectSettingData?.imageModel as `${string}:${string}`).run(
           {
             referenceList: imageBase64 ? [{ type: "image", base64: imageBase64 }] : [],
@@ -99,12 +110,10 @@ export default router.post(
           {
             taskClass: "生成图片",
             describe: "资产图片生成",
-            relatedObjects: JSON.stringify(repeloadObj),
+            relatedObjects,
             projectId: projectId,
           },
         );
-        const savePath = `/${projectId}/assets/${scriptId}/${item.type}/${u.uuid()}.jpg`;
-        await imageCls.save(savePath);
         await u.db("o_image").where({ id: imageId }).update({ state: "已完成", filePath: savePath });
         return {
           id: item.id!,

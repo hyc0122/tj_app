@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { CentralAuthGateway, CentralSession } from "../auth/central-session";
+void import("@/tianjiang/canvas/canvas-execution-runtime");
 import { getStableDeviceUUID } from "../auth/device";
 import {
   OfflineGrantStore,
@@ -43,7 +44,8 @@ import {
   userStorageSegment,
   type UserStorageIdentity,
 } from "./user-storage-context";
-import { initializeWorkspaceProject, prepareUserDatabase } from "@/utils/db";
+import { initializeCanvasWorkspace, initializeWorkspaceProject, prepareUserDatabase, releaseProjectDatabaseLease } from "@/utils/db";
+import { ProjectRuntimeActivationGate } from "./project-runtime-activation";
 import {
   configureModelMediaResolver,
   type ModelMediaResolver,
@@ -124,10 +126,22 @@ interface ClosableProjectRuntime {
 
 export class RuntimePermissionError extends Error {
   readonly status = 403;
+  readonly errorCode?: string;
+
+  constructor(message: string, errorCode?: string) {
+    super(message);
+    this.errorCode = errorCode;
+  }
 }
 
 export class RuntimeNotFoundError extends Error {
   readonly status = 404;
+  readonly errorCode?: string;
+
+  constructor(message: string, errorCode?: string) {
+    super(message);
+    this.errorCode = errorCode;
+  }
 }
 
 export interface ProfileRuntimeFailure {
@@ -216,6 +230,7 @@ export class SyncCoordinator {
   private catalog = new Map<string, RuntimeProjectCatalogItem>();
   private localProjectIds = new Map<string, number>();
   private readonly projects = new Map<string, OpenProjectRuntime>();
+  private readonly activationGate = new ProjectRuntimeActivationGate();
   private readonly deviceUuid: string;
   private readonly offlineGrantStore: OfflineGrantStore;
   private offlineCache?: OfflineRuntimeCache;
@@ -536,6 +551,10 @@ export class SyncCoordinator {
     return { issuer: cache.issuer, userId: cache.userId };
   }
 
+  activationSnapshot(): { generations: number; tails: number; nextToken: number } {
+    return this.activationGate.snapshot();
+  }
+
   peekProject(projectUuid: string): RuntimeProjectCatalogItem | undefined {
     return this.catalog.get(projectUuid) ?? this.catalog.get(projectUuid.toLowerCase());
   }
@@ -568,7 +587,7 @@ export class SyncCoordinator {
       // 已打开则先关闭句柄，再删目录。
       if (this.projects.has(normalized)) {
         try {
-          await this.closeProject(active, normalized);
+          await this.closeProjectInternal(active, normalized);
         } catch {
           // 关闭失败仍尝试强制清理，避免永久卡死。
           const runtime = this.projects.get(normalized);
@@ -774,6 +793,15 @@ export class SyncCoordinator {
   }
 
   async openProject(session: CentralSession | undefined, projectUuid: string): Promise<Record<string, unknown>> {
+    return this.activationGate.serialize(projectUuid, async () => {
+      const opened = await this.openProjectBody(session, projectUuid);
+      if (!this.projects.get(projectUuid)) return opened;
+      const runtimeGeneration = this.activationGate.issueOpenGeneration(projectUuid);
+      return { ...opened, runtimeGeneration };
+    });
+  }
+
+  private async openProjectBody(session: CentralSession | undefined, projectUuid: string): Promise<Record<string, unknown>> {
     const offline = this.assertAccess(session);
     // 中文注释：校准与项目打开同时启动，但不让不相关的设置网络请求阻塞本地项目首屏。
     const profileCalibration = this.profileSync?.reconcile("project_open") ?? null;
@@ -789,6 +817,9 @@ export class SyncCoordinator {
     }
     const catalogItem = this.catalog.get(projectUuid);
     if (!catalogItem) throw new RuntimePermissionError("项目不存在或不可见");
+    if (catalogItem.businessType === "canvas" && catalogItem.kind !== "personal") {
+      throw new RuntimePermissionError("无限画布首期不支持团队归属", "CANVAS_TEAM_SCOPE_NOT_SUPPORTED");
+    }
 
     const identity = offline
       ? this.offlineStorageIdentity()
@@ -823,6 +854,7 @@ export class SyncCoordinator {
         () => this.online,
       );
       sync.setProtectPendingLocal(protect, { failClosed });
+      sync.setPublishReceiptContext({ dataRoot: this.dataRoot, projectUuid });
       // 中文注释：idle/checkpoint 经协调器 finalize，禁止绕开
       sync.setSyncExecutor((reason) => this.runPersonalSyncAndFinalize(projectUuid, reason));
       sync.open();
@@ -834,7 +866,7 @@ export class SyncCoordinator {
       this.projects.set(projectUuid, runtime);
       // 中文注释：journal-only 必须在 workspace 初始化前恢复 dirty，避免初始化失败丢恢复
       if (protect) this.reapplyPendingLegacyMutation(projectUuid);
-      await this.initializeLegacyWorkspace(projectUuid, catalogItem);
+      await this.initializeOpenedWorkspace(projectUuid, catalogItem);
       this.bindProfileCalibration(projectUuid, profileCalibration);
       return this.projectState(projectUuid, runtime);
     }
@@ -1437,7 +1469,53 @@ export class SyncCoordinator {
     return listPendingLegacyMutationIntents(this.dataRoot, userStorageSegment(identity));
   }
 
+  async closeProjectInternal(
+    session: CentralSession | undefined,
+    projectUuid: string,
+  ): Promise<Record<string, unknown>> {
+    return this.closeProject(session, projectUuid);
+  }
+
   async closeProject(
+    session: CentralSession | undefined,
+    projectUuid: string,
+    requestedGeneration?: number,
+  ): Promise<Record<string, unknown>> {
+    let expectedGeneration = this.activationGate.captureCloseGeneration(projectUuid, requestedGeneration);
+    if (
+      requestedGeneration === undefined
+      && expectedGeneration <= 0
+      && this.projects.has(projectUuid)
+    ) {
+      // 中文注释：HTTP 外部关闭必须携带代次；进程内恢复/退出链可能接管旧运行时，
+      // 此时为已存在的运行时补发一次代次，避免把真实关闭误判为 stale_close。
+      expectedGeneration = this.activationGate.issueOpenGeneration(projectUuid);
+    }
+    return this.activationGate.serialize(projectUuid, async () => {
+      const decision = this.activationGate.decideClose(projectUuid, expectedGeneration);
+      if (decision.stale) {
+        return {
+          projectUuid,
+          state: "stale_close",
+          ignored: true,
+          runtimeGeneration: decision.runtimeGeneration,
+        };
+      }
+      const result = await this.closeProjectAfterActivation(session, projectUuid);
+      this.activationGate.releaseAfterClose(projectUuid);
+      try {
+        const identity = this.currentStorageIdentity();
+        if (identity) {
+          await runWithUserStorage(identity, () => releaseProjectDatabaseLease(projectUuid, "ui"));
+        }
+      } catch {
+        // 句柄释放失败不得伪装 close 失败；下次 idle 回收。
+      }
+      return { ...result, runtimeGeneration: 0 };
+    });
+  }
+
+  private async closeProjectAfterActivation(
     session: CentralSession | undefined,
     projectUuid: string,
   ): Promise<Record<string, unknown>> {
@@ -1449,10 +1527,10 @@ export class SyncCoordinator {
     // 关闭前重放 pending，避免 dirty=false 漏同步
     this.reapplyPendingLegacyMutation(projectUuid);
     const operationId = `close-${projectUuid}-${Date.now()}`;
-    const { pauseGenerationRuntime, resumeGenerationRuntime } = await import("@/tianjiang/tasks/generation-runtime-participants");
-    await pauseGenerationRuntime();
-    try {
-      return await runWithSyncProgress(
+    const { withGenerationRuntimePaused } = await import("@/tianjiang/tasks/generation-runtime-participants");
+    // 中文注释：关闭项目只短暂排空提交关键区；无论成功或失败都必须恢复账号级后台任务。
+    return withGenerationRuntimePaused(() =>
+      runWithSyncProgress(
         {
           operationId,
           intent: "close_project",
@@ -1463,11 +1541,8 @@ export class SyncCoordinator {
           projectKind: catalogItem.kind,
         },
         async () => this.closeProjectBody(session, projectUuid, runtime, catalogItem, offline, operationId),
-      );
-    } catch (error) {
-      await resumeGenerationRuntime();
-      throw error;
-    }
+      ),
+    );
   }
 
   private async closeProjectBody(
@@ -1682,7 +1757,7 @@ export class SyncCoordinator {
       // Team 仍沿用既有 close 发布状态机；成功后立即重新获取锁并恢复工作区。
       let closed: Record<string, unknown>;
       try {
-        closed = await this.closeProject(session, projectUuid);
+        closed = await this.closeProjectInternal(session, projectUuid);
       } catch (error) {
         // close 失败会释放旧 runtime；尽力重开以便用户修复后直接重试，原错误仍向上返回。
         try {
@@ -3074,6 +3149,7 @@ export class SyncCoordinator {
       projectUuid,
       project: workspaceProjectDTO(catalogItem, this.localProjectId(projectUuid)),
       recoveryRequired,
+      runtimeGeneration: this.activationGate.currentGeneration(projectUuid),
     };
     if (runtime.kind === "personal") {
       return {
@@ -3104,10 +3180,28 @@ export class SyncCoordinator {
     return runtime;
   }
 
+  private async initializeOpenedWorkspace(
+    projectUuid: string,
+    catalogItem: RuntimeProjectCatalogItem,
+  ): Promise<void> {
+    if (catalogItem.businessType === "canvas") {
+      await initializeCanvasWorkspace(projectUuid);
+      const { canvasExecutionRuntime } = await import("../canvas/canvas-execution-runtime");
+      canvasExecutionRuntime.wake(projectUuid);
+      const { resumeCanvasImportJobs } = await import("../canvas/canvas-import-export-service");
+      await resumeCanvasImportJobs(projectUuid);
+      return;
+    }
+    await this.initializeLegacyWorkspace(projectUuid, catalogItem);
+  }
+
   private async initializeLegacyWorkspace(
     projectUuid: string,
     catalogItem: RuntimeProjectCatalogItem,
   ): Promise<void> {
+    if (catalogItem.businessType !== "novel" && catalogItem.businessType !== "script" && catalogItem.businessType !== "storyboard") {
+      throw new RuntimePermissionError("影视旧工作区只接受 novel、script 或 storyboard");
+    }
     await initializeWorkspaceProject(projectUuid, {
       id: this.localProjectId(projectUuid),
       name: catalogItem.name,
@@ -3707,6 +3801,9 @@ function workspaceProjectDTO(
 }
 
 function sanitizeCachedCatalogItem(item: RuntimeProjectCatalogItem): RuntimeProjectCatalogItem {
+  if (item.businessType === "canvas" && item.kind === "team") {
+    throw new RuntimePermissionError("无限画布首期不支持团队归属", "CANVAS_TEAM_SCOPE_NOT_SUPPORTED");
+  }
   return {
     projectUuid: item.projectUuid,
     name: item.name,

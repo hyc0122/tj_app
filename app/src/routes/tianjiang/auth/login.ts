@@ -12,6 +12,8 @@ import {
 } from "@/tianjiang/auth/central-session";
 import { syncCoordinator } from "@/tianjiang/runtime/runtime";
 import { activateUserDatabase } from "@/utils/db";
+import { canvasExecutionRuntime } from "@/tianjiang/canvas/canvas-execution-runtime";
+import { resumeRawInboxConsumer } from "@/tianjiang/canvas/canvas-provider-raw-inbox";
 import { disconnectSocketsExceptSession } from "@/tianjiang/auth/socket-session";
 import {
   centralServiceUnavailableResponse,
@@ -64,6 +66,8 @@ export default router.post(
         const loginRuntime = await syncCoordinator.onLogin(session);
         // 新账号同步材料已完整校验后，才关闭旧句柄并原子替换唯一活动数据库目录。
         await activateUserDatabase({ issuer: session.serverUrl, userId: session.user.id });
+        await canvasExecutionRuntime.resume();
+        resumeRawInboxConsumer();
         // 单用户桌面运行时只允许最新成功登录会话继续访问，旧 Cookie 立即失效。
         centralSessionStore.deleteAllExcept(session.id);
         disconnectSocketsExceptSession(session.id);

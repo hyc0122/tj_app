@@ -2,11 +2,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import type { CentralSession } from "../auth/central-session";
 import { getStableDeviceUUID } from "../auth/device";
-import { prepareProjectDatabase } from "@/utils/db";
+import { acquireProjectDatabaseLease, releaseProjectDatabaseLease } from "@/utils/db";
 import getPath from "@/utils/getPath";
 import { runWithProjectStorage, runWithUserStorage } from "./user-storage-context";
 import { RuntimePermissionError } from "./sync-coordinator";
-import { syncCoordinator } from "./runtime";
 
 export type ProjectAccessMode = "read" | "write";
 
@@ -81,14 +80,36 @@ export class ProjectOperationPort {
     }
     const identity = { issuer: session.serverUrl, userId: session.user.id };
     return runWithUserStorage(identity, async () => {
-      const contexts = new Map<string, ProjectOperationContext>();
-      for (const projectUuid of unique) {
-        const access = accessByProjectUuid.get(projectUuid) ?? "read";
-        await this.assertAccess(session, projectUuid, access);
-        await prepareProjectDatabase(projectUuid);
-        contexts.set(projectUuid, { projectUuid, access, session });
+      const leased: string[] = [];
+      let operationError: unknown;
+      try {
+        const contexts = new Map<string, ProjectOperationContext>();
+        for (const projectUuid of unique) {
+          const access = accessByProjectUuid.get(projectUuid) ?? "read";
+          await this.assertAccess(session, projectUuid, access);
+          await acquireProjectDatabaseLease(projectUuid, "scheduler");
+          leased.push(projectUuid);
+          contexts.set(projectUuid, { projectUuid, access, session });
+        }
+        return await operation(contexts);
+      } catch (error) {
+        operationError = error;
+        throw error;
+      } finally {
+        const releaseErrors: unknown[] = [];
+        for (const projectUuid of leased.reverse()) {
+          try {
+            await releaseLeasedProject(projectUuid);
+          } catch (releaseError) {
+            releaseErrors.push(releaseError);
+          }
+        }
+        if (releaseErrors.length > 0 && operationError === undefined) {
+          throw releaseErrors.length === 1
+            ? releaseErrors[0]
+            : new AggregateError(releaseErrors, "释放项目数据库租约失败");
+        }
       }
-      return operation(contexts);
     });
   }
 
@@ -97,6 +118,7 @@ export class ProjectOperationPort {
     projectUuid: string,
     access: ProjectAccessMode,
   ): Promise<void> {
+    const { syncCoordinator } = await import("./runtime");
     const catalog = syncCoordinator.listProjects(session);
     const item = catalog.find((row: { projectUuid: string }) => row.projectUuid === projectUuid);
     if (!item) {
@@ -128,3 +150,83 @@ export class ProjectOperationPort {
 }
 
 export const projectOperationPort = new ProjectOperationPort();
+
+type LeaseReleaser = (projectUuid: string, holder: "scheduler") => Promise<void>;
+
+let testLeaseReleaser: LeaseReleaser | undefined;
+
+export function setProjectOperationPortLeaseReleaseForTests(
+  releaser: LeaseReleaser | null,
+): void {
+  if (!process.env.NODE_TEST_CONTEXT) return;
+  testLeaseReleaser = releaser ?? undefined;
+}
+
+async function releaseLeasedProject(projectUuid: string): Promise<void> {
+  if (testLeaseReleaser) {
+    await testLeaseReleaser(projectUuid, "scheduler");
+    return;
+  }
+  await releaseProjectDatabaseLease(projectUuid, "scheduler");
+}
+
+export interface OpenPersonalCanvasContext {
+  projectUuid: string;
+  mode: "read" | "write";
+  session: CentralSession;
+}
+
+function canvasPermissionDenied(): never {
+  throw new RuntimePermissionError("项目不存在或不可见", "PERMISSION_DENIED");
+}
+
+/** 只读取 SyncCoordinator 的权威打开表，不得因 UUID 自动 prepare 项目库。 */
+async function loadSyncCoordinator() {
+  return (await import("./runtime")).syncCoordinator;
+}
+
+function isCanvasProjectOpened(projectUuid: string, coordinator: object): boolean {
+  const candidate = coordinator as {
+    isProjectOpened?: (uuid: string) => boolean;
+    projects?: Map<string, unknown>;
+  };
+  if (typeof candidate.isProjectOpened === "function") {
+    return Boolean(candidate.isProjectOpened(projectUuid));
+  }
+  const opened = candidate.projects;
+  return Boolean(opened?.has(projectUuid) || opened?.has(projectUuid.toLowerCase()));
+}
+
+/** 个人画布唯一授权边界：必须已打开、personal/canvas、当前账号 owner。 */
+export async function withOpenPersonalCanvasProject<T>(
+  projectUuid: string,
+  mode: "read" | "write",
+  handler: (context: OpenPersonalCanvasContext) => Promise<T>,
+  session?: CentralSession,
+): Promise<T> {
+  if (!session?.user?.id || !session.serverUrl) canvasPermissionDenied();
+  const syncCoordinator = await loadSyncCoordinator();
+  let catalog: ReturnType<typeof syncCoordinator.listProjects> = [];
+  try {
+    catalog = syncCoordinator.listProjects(session);
+  } catch {
+    // 中文注释：登录未完成或会话不匹配时统一 403，禁止泄露项目是否存在。
+    canvasPermissionDenied();
+  }
+  const item = catalog.find((row) => row.projectUuid === projectUuid);
+  if (!item) canvasPermissionDenied();
+  if (item.kind !== "personal" || item.businessType !== "canvas") canvasPermissionDenied();
+  if (Number(item.ownerUserId) !== Number(session.user.id) && item.myRole !== "owner") {
+    canvasPermissionDenied();
+  }
+  if (!isCanvasProjectOpened(projectUuid, syncCoordinator)) canvasPermissionDenied();
+  if (mode === "write" && (item.openMode === "readonly" || item.myRole === "viewer")) {
+    canvasPermissionDenied();
+  }
+  const identity = { issuer: session.serverUrl, userId: session.user.id };
+  return runWithUserStorage(identity, () => runWithProjectStorage(projectUuid, () => handler({
+    projectUuid,
+    mode,
+    session,
+  })));
+}

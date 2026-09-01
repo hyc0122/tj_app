@@ -96,7 +96,7 @@ watch(
 
 watch(testMode, () => {
   imageFile.value = null;
-  imagePreview.value = "";
+  revokeImagePreview();
   resultUrl.value = "";
 });
 
@@ -106,6 +106,20 @@ const imagePreview = ref("");
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const loading = ref(false);
 const resultUrl = ref("");
+
+function revokeImagePreview(): void {
+  if (!imagePreview.value) return;
+  try {
+    URL.revokeObjectURL(imagePreview.value);
+  } catch {
+    // ignore
+  }
+  imagePreview.value = "";
+}
+
+onBeforeUnmount(() => {
+  revokeImagePreview();
+});
 
 const canSubmit = computed(() => {
   if (loading.value) return false;
@@ -122,6 +136,7 @@ function handleImageChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   imageFile.value = file;
+  revokeImagePreview();
   imagePreview.value = URL.createObjectURL(file);
   (e.target as HTMLInputElement).value = "";
 }
@@ -130,6 +145,7 @@ function handleDrop(e: DragEvent) {
   const file = e.dataTransfer?.files?.[0];
   if (file && file.type.startsWith("image/")) {
     imageFile.value = file;
+    revokeImagePreview();
     imagePreview.value = URL.createObjectURL(file);
   }
 }
@@ -167,7 +183,7 @@ async function handleTest() {
 function handleClose() {
   prompt.value = "";
   imageFile.value = null;
-  imagePreview.value = "";
+  revokeImagePreview();
   resultUrl.value = "";
   loading.value = false;
 }

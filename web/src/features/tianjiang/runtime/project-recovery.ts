@@ -30,7 +30,9 @@ export function recoverActiveProjectAfterRuntimeRestart(
       mode: opened.accessMode,
       reason: opened.readonlyReason ?? "",
       lockHolder: opened.lockHolder ?? "",
+      runtimeGeneration: opened.runtimeGeneration,
     });
+    // 中文注释：画布恢复必须回到原 UUID 编辑器，不得落到影视旧工作区。
     return opened;
   });
   let tracked!: Promise<OpenProjectResult>;

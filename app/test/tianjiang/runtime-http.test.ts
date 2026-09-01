@@ -523,7 +523,9 @@ test("个人项目通过 HTTP 打开才下载、编辑后关闭完成最终发�
     value: { title: "关闭前最终写入" },
   })).response.status, 200);
 
-  const closed = await request("POST", `/api/tianjiang/runtime/projects/${projectUUID}/close`);
+  const closed = await request("POST", `/api/tianjiang/runtime/projects/${projectUUID}/close`, {
+    runtimeGeneration: (opened.body.data as { runtimeGeneration: number }).runtimeGeneration,
+  });
   assert.equal(closed.response.status, 200);
   assert.equal(
     centralRequests.some(
@@ -721,7 +723,9 @@ test("团队关闭发布本地编辑后的 SQLite 摘要且成功后才释放锁
     value: { title: "必须进入团队发布" },
   })).response.status, 200);
   const before = centralRequests.length;
-  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${projectUUID}/close`)).response.status, 200);
+  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${projectUUID}/close`, {
+    runtimeGeneration: (teamOpen.body.data as { runtimeGeneration: number }).runtimeGeneration,
+  })).response.status, 200);
   const closeCalls = centralRequests.slice(before);
   const commit = closeCalls.find(
     (item) => item.pathname === `/api/tianjiang/v1/upload-sessions/${UPLOAD_SESSION_UUID}/commit`,
@@ -881,7 +885,9 @@ test("旧 UI 路由写入项目 SQLite，跨项目子资源和 Socket 枚举被�
   teamDatabase.close();
 
   const beforeClose = centralRequests.length;
-  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${teamUUID}/close`)).response.status, 200);
+  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${teamUUID}/close`, {
+    runtimeGeneration: (openedTeam.body.data as { runtimeGeneration: number }).runtimeGeneration,
+  })).response.status, 200);
   const commit = centralRequests.slice(beforeClose)
     .find((item) => item.pathname === `/api/tianjiang/v1/upload-sessions/${UPLOAD_SESSION_UUID}/commit`);
   const committedMD5 = (commit?.body.manifest as {
@@ -911,7 +917,7 @@ test("旧 UI 路由写入项目 SQLite，跨项目子资源和 Socket 枚举被�
   publishedDatabase.close();
 });
 
-test("真实生成路由可读取当前项目参考图，绑定远端 ID 后保留临时失败并在重启后恢复", async () => {
+test("真实生成路由可读取当前项目参考图；远端 completed 缺少规范产物时重启后仍不得完成", async () => {
   const loggedIn = await login("alice");
   assert.equal(loggedIn.response.status, 200);
   sessionCookie = loggedIn.cookie;
@@ -1047,14 +1053,16 @@ exports.queryTask = async function (remoteTaskId) {
     "SELECT state, remoteTaskId, generationStatus FROM o_tasks WHERE provider = ? ORDER BY id DESC LIMIT 1",
   ).get("synthetic") as typeof task;
   inspection.close();
+  // 中文注释：远端仅报告 completed 而没有 HTTPS 产物定位时，恢复链必须失败关闭，
+  // 不能把没有文件、没有业务落库事务的任务伪装成“已完成”。
   assert.deepEqual({
     state: task?.state,
     remoteTaskId: task?.remoteTaskId,
     generationStatus: task?.generationStatus,
   }, {
-    state: "已完成",
+    state: "进行中",
     remoteTaskId: "route-created-remote-task",
-    generationStatus: "completed",
+    generationStatus: "temporary_failure",
   });
 });
 
@@ -1204,8 +1212,11 @@ test("有效离线授权持久化后重启仍只允许本人个人项目写入�
   assert.equal(loggedIn.response.status, 200);
   sessionCookie = loggedIn.cookie;
   const personalUUID = "11111111-1111-4111-a111-111111111111";
-  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${personalUUID}/open`)).response.status, 200);
-  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${personalUUID}/close`)).response.status, 200);
+  const personalOpen = await request("POST", `/api/tianjiang/runtime/projects/${personalUUID}/open`);
+  assert.equal(personalOpen.response.status, 200);
+  assert.equal((await request("POST", `/api/tianjiang/runtime/projects/${personalUUID}/close`, {
+    runtimeGeneration: (personalOpen.body.data as { runtimeGeneration: number }).runtimeGeneration,
+  })).response.status, 200);
   assert.equal((await request("POST", "/api/tianjiang/runtime/network", { online: false })).response.status, 200);
 
   await restartApp();
@@ -1461,8 +1472,8 @@ test("单活动账号切换会原子覆盖 active 数据，旧账号仅进入 re
   bobDatabase.close();
   assert.deepEqual(
     bobMigrationVersions.map((row) => row.version),
-    Array.from({ length: 43 }, (_unused, index) => index + 1),
-    "账号切换只允许把完整迁移链应用到 Bob 目标库（含即梦启用、暂停原因、轮询间隔与佳速模型目录迁移）",
+    Array.from({ length: 45 }, (_unused, index) => index + 1),
+    "账号切换只允许把完整迁移链应用到 Bob 目标库（含即梦启用、暂停原因、轮询间隔、佳速模型目录与画布 staging 预留迁移）",
   );
 
   assert.equal(fs.existsSync(recoveryRoot), true);

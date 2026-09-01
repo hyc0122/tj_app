@@ -1,0 +1,104 @@
+.canvas-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas-surface, #111418);
+  color: var(--canvas-fg, #f4f6f8);
+}
+
+.canvas-editor .vue-flow {
+  flex: 1;
+  min-height: 0;
+}
+
+.canvas-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  z-index: 3;
+}
+
+.canvas-toolbar--top {
+  justify-content: space-between;
+  border-bottom: 1px solid color-mix(in srgb, var(--canvas-fg, #fff) 12%, transparent);
+}
+
+.canvas-toolbar--bottom {
+  justify-content: center;
+  border-top: 1px solid color-mix(in srgb, var(--canvas-fg, #fff) 12%, transparent);
+}
+
+.canvas-context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 160px;
+  padding: 6px;
+  background: var(--canvas-surface, #1b2026);
+  border: 1px solid color-mix(in srgb, var(--canvas-fg, #fff) 16%, transparent);
+}
+
+.canvas-node-frame {
+  min-width: 160px;
+  min-height: 72px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--canvas-fg, #fff) 20%, transparent);
+  background: color-mix(in srgb, var(--canvas-surface, #111418) 88%, #000);
+}
+
+.canvas-node-frame img,
+.canvas-node-frame video {
+  display: block;
+  max-width: 220px;
+  max-height: 140px;
+}
+
+html[theme-mode="light"] .canvas-editor {
+  --canvas-surface: #f6f7f9;
+  --canvas-fg: #1a1d24;
+}
+
+html[theme-mode="dark"] .canvas-editor,
+html.dark .canvas-editor {
+  --canvas-surface: #111418;
+  --canvas-fg: #f4f6f8;
+}
+
+html[data-theme="cyberpunk"] .canvas-editor,
+.cyberpunk .canvas-editor {
+  --canvas-surface: #07060f;
+  --canvas-fg: #7df9ff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-editor * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.canvas-editor :focus-visible {
+  outline: 2px solid var(--canvas-focus, #5b8def);
+  outline-offset: 2px;
+}
+
+.canvas-editor [aria-live] {
+  min-height: 1.25em;
+}
+
+.canvas-editor [role="separator"] {
+  cursor: row-resize;
+}
+
+.canvas-editor,
+.canvas-toolbar,
+.canvas-node-frame,
+.canvas-context-menu,
+.canvas-drawer {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}

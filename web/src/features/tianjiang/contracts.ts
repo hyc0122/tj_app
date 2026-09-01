@@ -1,7 +1,460 @@
 /** 此文件由 scripts/generate-contracts.mjs 自动生成，请勿手工修改。 */
 export const CONTRACT_SCHEMA_VERSION = 1 as const;
-export const CONTRACT_SOURCE_SHA256 = "10a1c854297fe4ff034df7076c66999f702d1395148c0912a5aa23b45f1d5a52" as const;
+export const CONTRACT_SOURCE_SHA256 = "0ba34aacda540f77c1654c6343007526d4be5d49604e6eb2c4806b1017a7e641" as const;
 export const BUSINESS_USERNAME_PATTERN = "^[a-z0-9][a-z0-9_.-]{2,31}$" as const;
+
+export const CANVAS_IMPORTER_SCHEMA_VERSION = 1 as const;
+export const CANVAS_PORTABLE_FORMAT_VERSION = 1 as const;
+export const MAX_CANVAS_NODES = 2000 as const;
+export const MAX_CANVAS_EDGES = 4000 as const;
+export const MAX_CANVAS_GROUP_DEPTH = 8 as const;
+export const MAX_CANVAS_MUTATION_OPERATIONS = 500 as const;
+export const MAX_CANVAS_IMPORT_BYTES = 25165824 as const;
+export const MAX_CANVAS_GRAPH_JSON_BYTES = 20971520 as const;
+export const MAX_CANVAS_DOCUMENT_JSON_BYTES = 25165824 as const;
+export const MAX_CANVAS_REVISION_TOTAL_BYTES = 536870912 as const;
+export const MAX_CANVAS_NODE_TEXT_CHARS = 200000 as const;
+export const MAX_CANVAS_CHAT_ATTACHMENTS = 20 as const;
+export const MAX_CANVAS_HOME_PROMPT_CHARS = 20000 as const;
+export const MAX_CANVAS_CHAT_PROMPT_CHARS = 200000 as const;
+export const MAX_PROVIDER_FAILURE_BYTES = 1048576 as const;
+export const MAX_CANVAS_JSON_BODY_BYTES = 33554432 as const;
+export const MAX_CANVAS_MULTIPART_FILE_BYTES = 2147483648 as const;
+export const MAX_CANVAS_MULTIPART_TOTAL_BYTES = 4294967296 as const;
+export const MAX_CANVAS_MULTIPART_PARTS = 64 as const;
+export const MAX_CANVAS_REMOTE_MEDIA_BYTES = 2147483648 as const;
+export const MAX_CANVAS_DECOMPRESSED_BODY_BYTES = 33554432 as const;
+export const MAX_CANVAS_COMPRESSION_RATIO = 100 as const;
+export const MAX_CANVAS_RAW_PROVIDER_INBOX_BYTES = 1073741824 as const;
+export const MAX_CANVAS_ARCHIVE_ENTRIES = 4096 as const;
+export const MAX_CANVAS_ARCHIVE_UNCOMPRESSED_BYTES = 4294967296 as const;
+export const MAX_CANVAS_ARCHIVE_ENTRY_BYTES = 2147483648 as const;
+export const MAX_CANVAS_ARCHIVE_PATH_BYTES = 1024 as const;
+export const MAX_CANVAS_ARCHIVE_XML_DEPTH = 64 as const;
+export const MAX_CANVAS_ARCHIVE_PATH_DEPTH = 16 as const;
+export const MAX_CANVAS_JSON_DEPTH = 64 as const;
+export const MAX_CANVAS_ACCOUNT_STAGING_BYTES = 8589934592 as const;
+export const MIN_CANVAS_STAGING_FREE_BYTES = 2147483648 as const;
+export const CANVAS_IMPORT_REUPLOAD_TTL_MS = 86400000 as const;
+
+export const CANVAS_LIMITS = Object.freeze({
+  "MAX_CANVAS_NODES": 2000,
+  "MAX_CANVAS_EDGES": 4000,
+  "MAX_CANVAS_GROUP_DEPTH": 8,
+  "MAX_CANVAS_MUTATION_OPERATIONS": 500,
+  "MAX_CANVAS_IMPORT_BYTES": 25165824,
+  "MAX_CANVAS_GRAPH_JSON_BYTES": 20971520,
+  "MAX_CANVAS_DOCUMENT_JSON_BYTES": 25165824,
+  "MAX_CANVAS_REVISION_TOTAL_BYTES": 536870912,
+  "MAX_CANVAS_NODE_TEXT_CHARS": 200000,
+  "MAX_CANVAS_CHAT_ATTACHMENTS": 20,
+  "MAX_CANVAS_HOME_PROMPT_CHARS": 20000,
+  "MAX_CANVAS_CHAT_PROMPT_CHARS": 200000,
+  "MAX_PROVIDER_FAILURE_BYTES": 1048576,
+  "MAX_CANVAS_JSON_BODY_BYTES": 33554432,
+  "MAX_CANVAS_MULTIPART_FILE_BYTES": 2147483648,
+  "MAX_CANVAS_MULTIPART_TOTAL_BYTES": 4294967296,
+  "MAX_CANVAS_MULTIPART_PARTS": 64,
+  "MAX_CANVAS_REMOTE_MEDIA_BYTES": 2147483648,
+  "MAX_CANVAS_DECOMPRESSED_BODY_BYTES": 33554432,
+  "MAX_CANVAS_COMPRESSION_RATIO": 100,
+  "MAX_CANVAS_RAW_PROVIDER_INBOX_BYTES": 1073741824,
+  "MAX_CANVAS_ARCHIVE_ENTRIES": 4096,
+  "MAX_CANVAS_ARCHIVE_UNCOMPRESSED_BYTES": 4294967296,
+  "MAX_CANVAS_ARCHIVE_ENTRY_BYTES": 2147483648,
+  "MAX_CANVAS_ARCHIVE_PATH_BYTES": 1024,
+  "MAX_CANVAS_ARCHIVE_XML_DEPTH": 64,
+  "MAX_CANVAS_ARCHIVE_PATH_DEPTH": 16,
+  "MAX_CANVAS_JSON_DEPTH": 64,
+  "MAX_CANVAS_ACCOUNT_STAGING_BYTES": 8589934592,
+  "MIN_CANVAS_STAGING_FREE_BYTES": 2147483648,
+  "CANVAS_IMPORT_REUPLOAD_TTL_MS": 86400000
+} as const);
+export const PROJECT_BUSINESS_RULES = Object.freeze({
+  "novel": {
+    "allowedScopes": [
+      "personal",
+      "team"
+    ],
+    "requiresClientCreateRequestId": false
+  },
+  "script": {
+    "allowedScopes": [
+      "personal",
+      "team"
+    ],
+    "requiresClientCreateRequestId": false
+  },
+  "storyboard": {
+    "allowedScopes": [
+      "personal",
+      "team"
+    ],
+    "requiresClientCreateRequestId": false
+  },
+  "canvas": {
+    "allowedScopes": [
+      "personal"
+    ],
+    "requiresClientCreateRequestId": true
+  }
+} as const);
+export const PROJECT_CREATE_IDEMPOTENCY = Object.freeze({
+  "canvasRequired": true,
+  "nonCanvasMustBeAbsent": true,
+  "nonCanvasPresentError": "PROJECT_CREATE_IDEMPOTENCY_FIELD_NOT_ALLOWED"
+} as const);
+export const CANVAS_CAPABILITY_CONSTRAINTS = Object.freeze({
+  "chargedRequiresConfirmation": true,
+  "noneForbidsFeeAndQuote": true,
+  "chargedRequiresExecutableQuote": true,
+  "confirmationExpiryNotAfterQuoteExpiry": true,
+  "alwaysChargeRequiresAmountMinorCurrencyAndMinorUnit": true,
+  "potentialChargeRequiresMaximumAmountMinor": true,
+  "amountMinorCanonicalPattern": "^(0|[1-9][0-9]{0,17})$",
+  "currencyUsesIso4217UppercaseAllowlist": true,
+  "minorUnitMatchesCurrencyMetadata": true,
+  "canonicalTimestampFormat": "YYYY-MM-DDTHH:mm:ss.SSSZ"
+} as const);
+export const CANVAS_PORTABLE_MANIFEST = Object.freeze({
+  "documentEntryName": "document.json",
+  "manifestEntryName": "manifest.json",
+  "assetEntryNamePrefix": "assets/sha256/",
+  "canonicalization": "RFC8785-JCS-UTF8",
+  "sourceAssetKeyPattern": "^asset/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+} as const);
+export const CANVAS_STRICT_DTOS = Object.freeze({
+  "CanvasHomePlanInput": {
+    "additionalProperties": false,
+    "allowedFields": [
+      "prompt",
+      "modelId",
+      "attachmentAssetUuids",
+      "baseRevision",
+      "clientChatRequestId",
+      "requestDigest"
+    ]
+  },
+  "CanvasChatInput": {
+    "additionalProperties": false,
+    "allowedFields": [
+      "conversationUuid",
+      "prompt",
+      "modelId",
+      "skillId",
+      "attachmentAssetUuids",
+      "referencedNodeUuids",
+      "baseRevision",
+      "clientChatRequestId",
+      "requestDigest"
+    ]
+  },
+  "CanvasExecutionPreviewInput": {
+    "additionalProperties": false,
+    "allowedFields": [
+      "baseRevision",
+      "nodeUuids"
+    ]
+  },
+  "CanvasExecutionConfirmInput": {
+    "additionalProperties": false,
+    "allowedFields": [
+      "confirmationUuid",
+      "requestDigest",
+      "baseRevision",
+      "clientRequestId"
+    ]
+  },
+  "CanvasExecutionCancelInput": {
+    "additionalProperties": false,
+    "allowedFields": [
+      "clientActionId",
+      "requestDigest"
+    ]
+  },
+  "CanvasPortableImportActionInput": {
+    "additionalProperties": false,
+    "allowedFields": [
+      "clientActionId",
+      "requestDigest"
+    ]
+  }
+} as const);
+export const CANVAS_PARSER_ALLOWLISTS = Object.freeze({
+  "CanvasNode": [
+    "nodeUuid",
+    "kind",
+    "position",
+    "size",
+    "parentNodeUuid",
+    "zIndex",
+    "collapsed",
+    "data"
+  ],
+  "CanvasEdge": [
+    "edgeUuid",
+    "kind",
+    "sourceNodeUuid",
+    "targetNodeUuid",
+    "sourceHandle",
+    "targetHandle",
+    "label"
+  ],
+  "CanvasNodePatch": [
+    "position",
+    "size",
+    "parentNodeUuid",
+    "zIndex",
+    "collapsed",
+    "data"
+  ]
+} as const);
+export const CANVAS_DTO_FIELDS = Object.freeze({
+  "CanvasPosition": [
+    "x",
+    "y"
+  ],
+  "CanvasSize": [
+    "width",
+    "height"
+  ],
+  "CanvasNodeData": [
+    "title",
+    "text",
+    "prompt",
+    "assetUuid",
+    "modelId",
+    "parameters",
+    "storyboard"
+  ],
+  "CanvasNode": [
+    "nodeUuid",
+    "kind",
+    "position",
+    "size",
+    "parentNodeUuid",
+    "zIndex",
+    "collapsed",
+    "data"
+  ],
+  "CanvasNodeDraft": [
+    "nodeUuid",
+    "kind",
+    "position",
+    "size",
+    "parentNodeUuid",
+    "zIndex",
+    "collapsed",
+    "data"
+  ],
+  "CanvasNodePatch": [
+    "position",
+    "size",
+    "parentNodeUuid",
+    "zIndex",
+    "collapsed",
+    "data"
+  ],
+  "CanvasEdge": [
+    "edgeUuid",
+    "kind",
+    "sourceNodeUuid",
+    "targetNodeUuid",
+    "sourceHandle",
+    "targetHandle",
+    "label"
+  ],
+  "CanvasEdgeDraft": [
+    "edgeUuid",
+    "kind",
+    "sourceNodeUuid",
+    "targetNodeUuid",
+    "sourceHandle",
+    "targetHandle",
+    "label"
+  ],
+  "CanvasExecutionCandidate": [
+    "nodeUuid",
+    "capabilityId",
+    "modelId"
+  ],
+  "CanvasToolStep": [
+    "stepUuid",
+    "name",
+    "state",
+    "summary",
+    "startedAt",
+    "completedAt"
+  ],
+  "CanvasFailureDetail": [
+    "code",
+    "message",
+    "retryable",
+    "providerMessage"
+  ],
+  "CanvasHomePlanInput": [
+    "prompt",
+    "modelId",
+    "attachmentAssetUuids",
+    "baseRevision",
+    "clientChatRequestId",
+    "requestDigest"
+  ],
+  "CanvasChatInput": [
+    "conversationUuid",
+    "prompt",
+    "modelId",
+    "skillId",
+    "attachmentAssetUuids",
+    "referencedNodeUuids",
+    "baseRevision",
+    "clientChatRequestId",
+    "requestDigest"
+  ],
+  "CanvasMutationPlan": [
+    "schemaVersion",
+    "planUuid",
+    "projectUuid",
+    "baseRevision",
+    "source",
+    "digest",
+    "expiresAt",
+    "title",
+    "summary",
+    "operations",
+    "executionCandidates"
+  ],
+  "CanvasExecutionCapability": [
+    "capabilityId",
+    "nodeType",
+    "requiresConfirmation",
+    "billingPolicy",
+    "supportedModels",
+    "parameterSchemaVersion"
+  ],
+  "CanvasExecutionPreviewInput": [
+    "baseRevision",
+    "nodeUuids"
+  ],
+  "CanvasExecutionPreviewItem": [
+    "nodeUuid",
+    "capabilityId",
+    "nodeType",
+    "modelId",
+    "providerId",
+    "deploymentKey",
+    "credentialSlotId",
+    "quoteId",
+    "quoteExpiresAt",
+    "parameterSchemaVersion",
+    "normalizedParameters",
+    "inputAssetUuids",
+    "itemRequestDigest",
+    "requiresConfirmation",
+    "billingPolicy",
+    "fee"
+  ],
+  "CanvasExecutionPreview": [
+    "confirmationUuid",
+    "projectUuid",
+    "originDeviceUuid",
+    "documentRevision",
+    "requestDigest",
+    "capabilityRegistryVersion",
+    "modelCatalogVersion",
+    "expiresAt",
+    "paidItemCount",
+    "items"
+  ],
+  "CanvasExecutionConfirmInput": [
+    "confirmationUuid",
+    "requestDigest",
+    "baseRevision",
+    "clientRequestId"
+  ],
+  "CanvasExecutionConfirmReceipt": [
+    "receiptUuid",
+    "projectUuid",
+    "batchUuid",
+    "confirmationUuid",
+    "clientRequestId",
+    "requestDigest",
+    "acceptedAt",
+    "runs"
+  ],
+  "CanvasExecutionCancelInput": [
+    "clientActionId",
+    "requestDigest"
+  ],
+  "CanvasExecutionCancelReceipt": [
+    "runUuid",
+    "clientActionId",
+    "requestDigest",
+    "state",
+    "createdAt"
+  ],
+  "CanvasPortableExportManifest": [
+    "formatVersion",
+    "importerSchemaVersion",
+    "documentEntryName",
+    "documentSha256",
+    "assets"
+  ],
+  "CanvasPortableAssetEntry": [
+    "sourceAssetUuid",
+    "sourceAssetKey",
+    "entryName",
+    "mimeType",
+    "sizeBytes",
+    "sha256"
+  ],
+  "CanvasPortableImportAcceptedReceipt": [
+    "importUuid",
+    "projectUuid",
+    "clientMutationId",
+    "requestDigest",
+    "state",
+    "acceptedAt"
+  ],
+  "CanvasPortableImportStatus": [
+    "importUuid",
+    "projectUuid",
+    "clientMutationId",
+    "requestDigest",
+    "state",
+    "acceptedAt",
+    "receivedBytes",
+    "expandedBytes",
+    "totalItems",
+    "validatedItems",
+    "movedItems",
+    "attempt",
+    "appliedRevision",
+    "terminalResponse",
+    "failureCode",
+    "userAction",
+    "updatedAt"
+  ],
+  "CanvasPortableImportTerminalResponse": [
+    "documentRevision",
+    "importedNodeCount",
+    "importedEdgeCount",
+    "importedAssetCount"
+  ],
+  "CanvasPortableImportActionInput": [
+    "clientActionId",
+    "requestDigest"
+  ],
+  "CanvasPortableImportActionReceipt": [
+    "importUuid",
+    "actionType",
+    "clientActionId",
+    "requestDigest",
+    "state",
+    "response",
+    "createdAt"
+  ]
+} as const);
 
 export const TEAM_ROLE_VALUES = ["owner","editor","viewer"] as const;
 export type TeamRole = (typeof TEAM_ROLE_VALUES)[number];
@@ -12,7 +465,7 @@ export type TeamInvitationStatus = (typeof TEAM_INVITATION_STATUS_VALUES)[number
 export const PROJECT_KIND_VALUES = ["personal","team"] as const;
 export type ProjectKind = (typeof PROJECT_KIND_VALUES)[number];
 
-export const PROJECT_BUSINESS_TYPE_VALUES = ["novel","script","storyboard"] as const;
+export const PROJECT_BUSINESS_TYPE_VALUES = ["novel","script","storyboard","canvas"] as const;
 export type ProjectBusinessType = (typeof PROJECT_BUSINESS_TYPE_VALUES)[number];
 
 export const PROJECT_OPEN_MODE_VALUES = ["editable","readonly"] as const;
@@ -26,6 +479,33 @@ export type LockStatus = (typeof LOCK_STATUS_VALUES)[number];
 
 export const MEDIA_TYPE_VALUES = ["image","video","audio","text","binary"] as const;
 export type MediaType = (typeof MEDIA_TYPE_VALUES)[number];
+
+export const CANVAS_NODE_KIND_VALUES = ["text","image","video","audio","file","storyboard","image_generation","video_generation","group"] as const;
+export type CanvasNodeKind = (typeof CANVAS_NODE_KIND_VALUES)[number];
+
+export const CANVAS_EDGE_KIND_VALUES = ["default"] as const;
+export type CanvasEdgeKind = (typeof CANVAS_EDGE_KIND_VALUES)[number];
+
+export const CANVAS_LAYOUT_MODE_VALUES = ["grid","vertical","flow","all"] as const;
+export type CanvasLayoutMode = (typeof CANVAS_LAYOUT_MODE_VALUES)[number];
+
+export const CANVAS_RUN_STATE_VALUES = ["draft","awaiting_confirmation","waiting_for_origin_device","queued","leased","submitting","submitted","running","succeeded","failed","canceled","outcome_unknown","result_ready_conflict"] as const;
+export type CanvasRunState = (typeof CANVAS_RUN_STATE_VALUES)[number];
+
+export const CANVAS_HOME_INITIALIZATION_STATE_VALUES = ["pending","consumed","disabled"] as const;
+export type CanvasHomeInitializationState = (typeof CANVAS_HOME_INITIALIZATION_STATE_VALUES)[number];
+
+export const CANVAS_REVISION_SNAPSHOT_KIND_VALUES = ["automatic","manual","restore"] as const;
+export type CanvasRevisionSnapshotKind = (typeof CANVAS_REVISION_SNAPSHOT_KIND_VALUES)[number];
+
+export const CANVAS_PORTABLE_IMPORT_STATE_VALUES = ["receiving","awaiting_reupload","queued","validating","staged","applying","committed","aborting","aborted","failed","recovery_required"] as const;
+export type CanvasPortableImportState = (typeof CANVAS_PORTABLE_IMPORT_STATE_VALUES)[number];
+
+export const CANVAS_PORTABLE_IMPORT_USER_ACTION_VALUES = ["none","reupload","cancel","reconcile","start_new"] as const;
+export type CanvasPortableImportUserAction = (typeof CANVAS_PORTABLE_IMPORT_USER_ACTION_VALUES)[number];
+
+export const CANVAS_BILLING_POLICY_VALUES = ["none","potential_charge","always_charge"] as const;
+export type CanvasBillingPolicy = (typeof CANVAS_BILLING_POLICY_VALUES)[number];
 
 export type JSONPrimitive = string | number | boolean | null;
 export type JSONValue = JSONPrimitive | { readonly [key: string]: JSONValue } | readonly JSONValue[];
@@ -107,6 +587,7 @@ export interface ProjectDetail {
   openMode: ProjectOpenMode;
   currentVersion: number;
   objects: readonly ProjectObject[];
+  businessType: ProjectBusinessType;
 }
 
 export interface LockView {
@@ -213,6 +694,279 @@ export interface ClientConfigUpdatePolicy {
 
 export interface ClientConfigSupport {
   feedbackUrl: string;
+}
+
+export interface CanvasPosition {
+  x: number;
+  y: number;
+}
+
+export interface CanvasSize {
+  width: number;
+  height: number;
+}
+
+export interface CanvasNodeData {
+  title: string;
+  text?: string;
+  prompt?: string;
+  assetUuid?: string;
+  modelId?: string;
+  parameters?: JSONValue;
+  storyboard?: JSONValue;
+}
+
+export interface CanvasNode {
+  nodeUuid: string;
+  kind: CanvasNodeKind;
+  position: CanvasPosition;
+  size?: CanvasSize;
+  parentNodeUuid?: string;
+  zIndex: number;
+  collapsed: boolean;
+  data: CanvasNodeData;
+}
+
+export interface CanvasNodeDraft {
+  nodeUuid: string;
+  kind: CanvasNodeKind;
+  position: CanvasPosition;
+  size?: CanvasSize;
+  parentNodeUuid?: string;
+  zIndex?: number;
+  collapsed?: boolean;
+  data: CanvasNodeData;
+}
+
+export interface CanvasNodePatch {
+  position?: CanvasPosition;
+  size?: CanvasSize;
+  parentNodeUuid?: string;
+  zIndex?: number;
+  collapsed?: boolean;
+  data?: CanvasNodeData;
+}
+
+export interface CanvasEdge {
+  edgeUuid: string;
+  kind: CanvasEdgeKind;
+  sourceNodeUuid: string;
+  targetNodeUuid: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  label?: string;
+}
+
+export interface CanvasEdgeDraft {
+  edgeUuid: string;
+  kind: CanvasEdgeKind;
+  sourceNodeUuid: string;
+  targetNodeUuid: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  label?: string;
+}
+
+export interface CanvasExecutionCandidate {
+  nodeUuid: string;
+  capabilityId: string;
+  modelId: string;
+}
+
+export interface CanvasToolStep {
+  stepUuid: string;
+  name: string;
+  state: string;
+  summary?: string;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface CanvasFailureDetail {
+  code: string;
+  message: string;
+  retryable: boolean;
+  providerMessage?: string;
+}
+
+export interface CanvasHomePlanInput {
+  prompt: string;
+  modelId?: string;
+  attachmentAssetUuids: readonly string[];
+  baseRevision: number;
+  clientChatRequestId: string;
+  requestDigest: string;
+}
+
+export interface CanvasChatInput {
+  conversationUuid: string;
+  prompt: string;
+  modelId?: string;
+  skillId?: string;
+  attachmentAssetUuids: readonly string[];
+  referencedNodeUuids: readonly string[];
+  baseRevision: number;
+  clientChatRequestId: string;
+  requestDigest: string;
+}
+
+export interface CanvasMutationPlan {
+  schemaVersion: number;
+  planUuid: string;
+  projectUuid: string;
+  baseRevision: number;
+  source: string;
+  digest: string;
+  expiresAt: number;
+  title?: string;
+  summary: string;
+  operations: JSONValue;
+  executionCandidates: readonly CanvasExecutionCandidate[];
+}
+
+export interface CanvasExecutionCapability {
+  capabilityId: string;
+  nodeType: string;
+  requiresConfirmation: boolean;
+  billingPolicy: CanvasBillingPolicy;
+  supportedModels: readonly string[];
+  parameterSchemaVersion: number;
+}
+
+export interface CanvasExecutionPreviewInput {
+  baseRevision: number;
+  nodeUuids: readonly string[];
+}
+
+export interface CanvasExecutionPreviewItem {
+  nodeUuid: string;
+  capabilityId: string;
+  nodeType: string;
+  modelId: string;
+  providerId: string;
+  deploymentKey: string;
+  credentialSlotId: string;
+  quoteId?: string;
+  quoteExpiresAt?: string;
+  parameterSchemaVersion: number;
+  normalizedParameters: JSONValue;
+  inputAssetUuids: readonly string[];
+  itemRequestDigest: string;
+  requiresConfirmation: boolean;
+  billingPolicy: CanvasBillingPolicy;
+  fee?: JSONValue;
+}
+
+export interface CanvasExecutionPreview {
+  confirmationUuid: string;
+  projectUuid: string;
+  originDeviceUuid: string;
+  documentRevision: number;
+  requestDigest: string;
+  capabilityRegistryVersion: string;
+  modelCatalogVersion: string;
+  expiresAt: string;
+  paidItemCount: number;
+  items: readonly CanvasExecutionPreviewItem[];
+}
+
+export interface CanvasExecutionConfirmInput {
+  confirmationUuid: string;
+  requestDigest: string;
+  baseRevision: number;
+  clientRequestId: string;
+}
+
+export interface CanvasExecutionConfirmReceipt {
+  receiptUuid: string;
+  projectUuid: string;
+  batchUuid: string;
+  confirmationUuid: string;
+  clientRequestId: string;
+  requestDigest: string;
+  acceptedAt: string;
+  runs: JSONValue;
+}
+
+export interface CanvasExecutionCancelInput {
+  clientActionId: string;
+  requestDigest: string;
+}
+
+export interface CanvasExecutionCancelReceipt {
+  runUuid: string;
+  clientActionId: string;
+  requestDigest: string;
+  state: CanvasRunState;
+  createdAt: string;
+}
+
+export interface CanvasPortableExportManifest {
+  formatVersion: number;
+  importerSchemaVersion: number;
+  documentEntryName: string;
+  documentSha256: string;
+  assets: readonly CanvasPortableAssetEntry[];
+}
+
+export interface CanvasPortableAssetEntry {
+  sourceAssetUuid: string;
+  sourceAssetKey: string;
+  entryName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+export interface CanvasPortableImportAcceptedReceipt {
+  importUuid: string;
+  projectUuid: string;
+  clientMutationId: string;
+  requestDigest: string;
+  state: CanvasPortableImportState;
+  acceptedAt: string;
+}
+
+export interface CanvasPortableImportStatus {
+  importUuid: string;
+  projectUuid: string;
+  clientMutationId: string;
+  requestDigest: string;
+  state: CanvasPortableImportState;
+  acceptedAt: string;
+  receivedBytes: number;
+  expandedBytes: number;
+  totalItems: number;
+  validatedItems: number;
+  movedItems: number;
+  attempt: number;
+  appliedRevision?: number;
+  terminalResponse?: CanvasPortableImportTerminalResponse;
+  failureCode?: string;
+  userAction: CanvasPortableImportUserAction;
+  updatedAt: string;
+}
+
+export interface CanvasPortableImportTerminalResponse {
+  documentRevision: number;
+  importedNodeCount: number;
+  importedEdgeCount: number;
+  importedAssetCount: number;
+}
+
+export interface CanvasPortableImportActionInput {
+  clientActionId: string;
+  requestDigest: string;
+}
+
+export interface CanvasPortableImportActionReceipt {
+  importUuid: string;
+  actionType: string;
+  clientActionId: string;
+  requestDigest: string;
+  state: CanvasPortableImportState;
+  response: JSONValue;
+  createdAt: string;
 }
 
 export interface PublicClientConfigRequest {
@@ -436,6 +1190,7 @@ export interface CreateProjectRequest {
   aspectRatio?: string;
   defaultLanguage?: string;
   assetSourceProjectUuid?: string;
+  clientCreateRequestId?: string;
 }
 
 export interface CreateProjectResponseData {
@@ -444,7 +1199,7 @@ export interface CreateProjectResponseData {
   kind: ProjectKind;
   teamUuid?: string;
   teamName?: string;
-  businessType?: ProjectBusinessType;
+  businessType: ProjectBusinessType;
 }
 
 export interface GetProjectRequest {
@@ -459,11 +1214,12 @@ export interface GetProjectResponseData {
   openMode: ProjectOpenMode;
   currentVersion: number;
   objects: readonly ProjectObject[];
+  businessType: ProjectBusinessType;
 }
 
 export interface UpdateProjectRequest {
   name: string;
-  businessType: ProjectBusinessType;
+  businessType?: ProjectBusinessType;
   description?: string;
   artStyle?: string;
   aspectRatio?: string;
@@ -988,6 +1744,240 @@ export const ERROR_DEFINITIONS = [
     "httpStatus": 403,
     "retryable": false,
     "message": "无权创建团队项目"
+  },
+  {
+    "code": "CANVAS_TEAM_SCOPE_NOT_SUPPORTED",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "无限画布首期不支持团队归属"
+  },
+  {
+    "code": "PROJECT_CREATE_IDEMPOTENCY_FIELD_NOT_ALLOWED",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "该项目类型不得携带创建幂等字段"
+  },
+  {
+    "code": "PROJECT_CREATE_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同创建请求 ID 的参数与首次请求不一致"
+  },
+  {
+    "code": "PROJECT_BUSINESS_TYPE_IMMUTABLE",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "项目业务类型创建后不可变更"
+  },
+  {
+    "code": "CANVAS_MUTATION_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同文档变更 ID 的摘要与首次请求不一致"
+  },
+  {
+    "code": "CANVAS_ASSET_MUTATION_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同素材变更 ID 的摘要与首次请求不一致"
+  },
+  {
+    "code": "CANVAS_CHAT_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同聊天请求 ID 的摘要与首次请求不一致"
+  },
+  {
+    "code": "CANVAS_PLAN_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同计划 ID 的摘要与首次请求不一致"
+  },
+  {
+    "code": "CANVAS_CONFIRM_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同确认请求 ID 的摘要与首次请求不一致"
+  },
+  {
+    "code": "CANVAS_EXECUTION_PREVIEW_REQUEST_INVALID",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "执行预览请求不合法"
+  },
+  {
+    "code": "CANVAS_EXECUTION_CAPABILITY_INVALID",
+    "httpStatus": 503,
+    "retryable": false,
+    "message": "画布执行能力注册表无效"
+  },
+  {
+    "code": "CANVAS_EXECUTION_CANCEL_REQUEST_INVALID",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "取消执行请求不合法"
+  },
+  {
+    "code": "CANVAS_EXECUTION_CANCEL_IDEMPOTENCY_CONFLICT",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "相同取消动作 ID 的摘要与首次请求不一致"
+  },
+  {
+    "code": "CANVAS_EXECUTION_NOT_CANCELABLE",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "当前执行状态不允许取消"
+  },
+  {
+    "code": "CANVAS_EXECUTION_CANCEL_ORIGIN_DEVICE_MISMATCH",
+    "httpStatus": 403,
+    "retryable": false,
+    "message": "只能在原设备取消收费执行"
+  },
+  {
+    "code": "CANVAS_HOME_PLAN_REQUEST_INVALID",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "首页规划请求不合法"
+  },
+  {
+    "code": "CANVAS_CHAT_REQUEST_INVALID",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "画布对话请求不合法"
+  },
+  {
+    "code": "CANVAS_PROMPT_TOO_LONG",
+    "httpStatus": 413,
+    "retryable": false,
+    "message": "提示词超过入口长度限制"
+  },
+  {
+    "code": "CANVAS_HOME_PLAN_NOT_ELIGIBLE",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "当前画布不再允许自动应用首页规划"
+  },
+  {
+    "code": "CANVAS_HOME_PLANNER_UNAVAILABLE",
+    "httpStatus": 503,
+    "retryable": true,
+    "message": "首页规划器暂时不可用"
+  },
+  {
+    "code": "CANVAS_HOME_PLAN_INVALID_OUTPUT",
+    "httpStatus": 502,
+    "retryable": true,
+    "message": "首页规划输出无法形成合法计划"
+  },
+  {
+    "code": "CANVAS_IMPORT_REQUEST_INVALID",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "便携画布导入请求不合法"
+  },
+  {
+    "code": "CANVAS_IMPORT_IN_PROGRESS",
+    "httpStatus": 409,
+    "retryable": true,
+    "message": "当前项目已有未收敛的便携导入"
+  },
+  {
+    "code": "CANVAS_IMPORT_NOT_FOUND",
+    "httpStatus": 404,
+    "retryable": false,
+    "message": "导入任务不存在或不可见"
+  },
+  {
+    "code": "CANVAS_IMPORT_ACTION_INVALID_STATE",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "当前导入状态不允许该操作"
+  },
+  {
+    "code": "CANVAS_STAGING_STORAGE_LIMIT",
+    "httpStatus": 507,
+    "retryable": true,
+    "message": "账号暂存配额或磁盘余量不足"
+  },
+  {
+    "code": "CANVAS_REVISION_CONFLICT",
+    "httpStatus": 409,
+    "retryable": true,
+    "message": "画布文档版本已变化"
+  },
+  {
+    "code": "CANVAS_PLAN_EXPIRED",
+    "httpStatus": 409,
+    "retryable": true,
+    "message": "画布计划已过期"
+  },
+  {
+    "code": "CANVAS_PLAN_STALE",
+    "httpStatus": 409,
+    "retryable": true,
+    "message": "画布计划基线已过期"
+  },
+  {
+    "code": "CANVAS_CONFIRMATION_EXPIRED",
+    "httpStatus": 409,
+    "retryable": true,
+    "message": "执行确认已过期"
+  },
+  {
+    "code": "CANVAS_CONFIRMATION_ALREADY_CONSUMED",
+    "httpStatus": 409,
+    "retryable": false,
+    "message": "执行确认已被消费"
+  },
+  {
+    "code": "CANVAS_CONFIRMATION_STALE",
+    "httpStatus": 409,
+    "retryable": true,
+    "message": "执行确认快照已过期"
+  },
+  {
+    "code": "CANVAS_CONFIRMATION_ORIGIN_DEVICE_MISMATCH",
+    "httpStatus": 403,
+    "retryable": false,
+    "message": "只能在原设备确认收费执行"
+  },
+  {
+    "code": "CANVAS_CONFIRM_REQUEST_INVALID",
+    "httpStatus": 422,
+    "retryable": false,
+    "message": "执行确认请求不合法"
+  },
+  {
+    "code": "CANVAS_CONFIRMATION_NOT_FOUND",
+    "httpStatus": 404,
+    "retryable": false,
+    "message": "执行确认不存在或不可见"
+  },
+  {
+    "code": "CANVAS_REVISION_STORAGE_LIMIT",
+    "httpStatus": 507,
+    "retryable": false,
+    "message": "画布历史占用已达到硬上限"
+  },
+  {
+    "code": "CANVAS_BODY_TOO_LARGE",
+    "httpStatus": 413,
+    "retryable": false,
+    "message": "请求体超过画布上限"
+  },
+  {
+    "code": "CANVAS_MULTIPART_LIMIT_EXCEEDED",
+    "httpStatus": 413,
+    "retryable": false,
+    "message": "multipart 超过画布上限"
+  },
+  {
+    "code": "CANVAS_COMPRESSION_LIMIT_EXCEEDED",
+    "httpStatus": 413,
+    "retryable": false,
+    "message": "压缩请求超过画布解压上限"
   }
 ] as const;
 export type ErrorCode = (typeof ERROR_DEFINITIONS)[number]["code"];
@@ -1182,7 +2172,8 @@ export const API_CONTRACT = Object.freeze({
         "myRole",
         "openMode",
         "currentVersion",
-        "objects"
+        "objects",
+        "businessType"
       ],
       "fields": {
         "projectUuid": "UUID",
@@ -1191,7 +2182,8 @@ export const API_CONTRACT = Object.freeze({
         "myRole": "TeamRole",
         "openMode": "ProjectOpenMode",
         "currentVersion": "UInt",
-        "objects": "ProjectObject[]"
+        "objects": "ProjectObject[]",
+        "businessType": "ProjectBusinessType"
       }
     },
     "LockView": {
@@ -2029,7 +3021,8 @@ export const API_CONTRACT = Object.freeze({
         "artStyle",
         "aspectRatio",
         "defaultLanguage",
-        "assetSourceProjectUuid"
+        "assetSourceProjectUuid",
+        "clientCreateRequestId"
       ],
       "responseFields": [
         "projectUuid",
@@ -2048,7 +3041,8 @@ export const API_CONTRACT = Object.freeze({
         "artStyle": "String",
         "aspectRatio": "String",
         "defaultLanguage": "String",
-        "assetSourceProjectUuid": "UUID"
+        "assetSourceProjectUuid": "UUID",
+        "clientCreateRequestId": "UUID"
       },
       "requestRequired": [
         "name",
@@ -2065,13 +3059,15 @@ export const API_CONTRACT = Object.freeze({
       "responseRequired": [
         "projectUuid",
         "name",
-        "kind"
+        "kind",
+        "businessType"
       ],
       "statuses": [
         200,
         401,
         403,
-        422
+        422,
+        409
       ]
     },
     "getProject": {
@@ -2085,7 +3081,8 @@ export const API_CONTRACT = Object.freeze({
         "myRole",
         "openMode",
         "currentVersion",
-        "objects"
+        "objects",
+        "businessType"
       ],
       "requestTypes": {},
       "requestRequired": [],
@@ -2096,7 +3093,8 @@ export const API_CONTRACT = Object.freeze({
         "myRole": "TeamRole",
         "openMode": "ProjectOpenMode",
         "currentVersion": "UInt",
-        "objects": "ProjectObject[]"
+        "objects": "ProjectObject[]",
+        "businessType": "ProjectBusinessType"
       },
       "responseRequired": [
         "projectUuid",
@@ -2105,7 +3103,8 @@ export const API_CONTRACT = Object.freeze({
         "myRole",
         "openMode",
         "currentVersion",
-        "objects"
+        "objects",
+        "businessType"
       ],
       "statuses": [
         200,
@@ -2156,8 +3155,7 @@ export const API_CONTRACT = Object.freeze({
         "defaultLanguage": "String"
       },
       "requestRequired": [
-        "name",
-        "businessType"
+        "name"
       ],
       "responseTypes": {
         "projectUuid": "UUID",

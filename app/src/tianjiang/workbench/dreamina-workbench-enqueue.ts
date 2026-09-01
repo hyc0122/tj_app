@@ -5,7 +5,7 @@
 import crypto from "node:crypto";
 import type { Response } from "express";
 
-import { db as activeDb, prepareProjectDatabase } from "@/utils/db";
+import { db as activeDb, acquireProjectDatabaseLease, releaseProjectDatabaseLease } from "@/utils/db";
 import { readDreaminaCapabilityCache } from "@/tianjiang/model-providers/dreamina-cli/capability-cache";
 import {
   DreaminaEnqueueError,
@@ -106,10 +106,14 @@ export async function resolveWorkbenchProjectUuid(
   }
   const current = currentUserStorage()?.projectUuid;
   if (current) {
-    await prepareProjectDatabase(current);
-    const row = await runWithProjectStorage(current, () =>
-      activeDb("o_project").where({ id: projectId }).first());
-    if (row) return current;
+    await acquireProjectDatabaseLease(current, "scheduler");
+    try {
+      const row = await runWithProjectStorage(current, () =>
+        activeDb("o_project").where({ id: projectId }).first());
+      if (row) return current;
+    } finally {
+      await releaseProjectDatabaseLease(current, "scheduler");
+    }
   }
   const catalog = syncCoordinator.listProjects(session as never);
   for (const item of catalog) {
@@ -118,10 +122,14 @@ export async function resolveWorkbenchProjectUuid(
       continue;
     }
     try {
-      await prepareProjectDatabase(uuid);
-      const row = await runWithProjectStorage(uuid, () =>
-        activeDb("o_project").where({ id: projectId }).first());
-      if (row) return uuid;
+      await acquireProjectDatabaseLease(uuid, "scheduler");
+      try {
+        const row = await runWithProjectStorage(uuid, () =>
+          activeDb("o_project").where({ id: projectId }).first());
+        if (row) return uuid;
+      } finally {
+        await releaseProjectDatabaseLease(uuid, "scheduler");
+      }
     } catch {
       continue;
     }
@@ -437,7 +445,28 @@ async function bindWorkbenchVideosAtomic(input: {
   });
 }
 
+export async function withWorkbenchSchedulerLease<T>(
+  projectUuid: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  await acquireProjectDatabaseLease(projectUuid, "scheduler");
+  try {
+    return await run();
+  } finally {
+    await releaseProjectDatabaseLease(projectUuid, "scheduler");
+  }
+}
+
 export async function enqueueWorkbenchDreaminaVideos(input: {
+  projectUuid: string;
+  items: WorkbenchDreaminaItemInput[];
+  paidBatchConfirmed: boolean;
+  clientOperationId?: string;
+}): Promise<Array<{ videoId: number; trackId: number; taskId: string }>> {
+  return withWorkbenchSchedulerLease(input.projectUuid, () => enqueueWorkbenchDreaminaVideosBody(input));
+}
+
+async function enqueueWorkbenchDreaminaVideosBody(input: {
   projectUuid: string;
   items: WorkbenchDreaminaItemInput[];
   paidBatchConfirmed: boolean;

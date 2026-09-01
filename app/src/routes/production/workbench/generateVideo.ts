@@ -6,14 +6,33 @@ import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { ReferenceList } from "@/utils/ai";
 import { prepareProjectDatabase } from "@/utils/db";
+import { stringifyGenerationCompletionContract, createGenerationCompletionContract } from "@/tianjiang/tasks/generation-completion-contract";
+import { toProjectLogicalPath } from "@/utils/oss";
 import { runWithProjectStorage } from "@/tianjiang/runtime/user-storage-context";
 import {
   enqueueWorkbenchDreaminaVideos,
   isDreaminaCliModel,
   resolveWorkbenchProjectUuid,
+  withWorkbenchSchedulerLease,
   writeWorkbenchDreaminaError,
 } from "@/tianjiang/workbench/dreamina-workbench-enqueue";
 const router = express.Router();
+
+export function buildWorkbenchVideoCompletionContract(input: {
+  videoId: number;
+  videoPath: string;
+  projectId: number;
+  scriptId: number;
+}): string {
+  return stringifyGenerationCompletionContract(createGenerationCompletionContract({
+    kind: "video",
+    mediaType: "video",
+    relativePath: toProjectLogicalPath(input.videoPath),
+    videoId: input.videoId,
+    projectId: input.projectId,
+    scriptId: input.scriptId,
+  }));
+}
 
 type Type = "imageReference" | "startImage" | "endImage" | "videoReference" | "audioReference";
 interface UploadItem {
@@ -54,26 +73,28 @@ export default router.post(
           projectId,
           (req as { centralSession?: unknown }).centralSession,
         );
-        await prepareProjectDatabase(projectUuid);
-        await runWithProjectStorage(projectUuid, async () => {
-          const bound = await enqueueWorkbenchDreaminaVideos({
-            projectUuid,
-            paidBatchConfirmed: false,
-            clientOperationId,
-            items: [{
-              projectId,
-              scriptId,
-              trackId,
-              prompt,
-              model,
-              mode,
-              resolution,
-              duration,
-              audio,
-              uploadData,
-            }],
+        await withWorkbenchSchedulerLease(projectUuid, async () => {
+          await prepareProjectDatabase(projectUuid);
+          await runWithProjectStorage(projectUuid, async () => {
+            const bound = await enqueueWorkbenchDreaminaVideos({
+              projectUuid,
+              paidBatchConfirmed: false,
+              clientOperationId,
+              items: [{
+                projectId,
+                scriptId,
+                trackId,
+                prompt,
+                model,
+                mode,
+                resolution,
+                duration,
+                audio,
+                uploadData,
+              }],
+            });
+            res.status(200).send(success(bound[0]?.videoId ?? null));
           });
-          res.status(200).send(success(bound[0]?.videoId ?? null));
         });
       } catch (error) {
         writeWorkbenchDreaminaError(res, error);
@@ -123,12 +144,12 @@ export default router.post(
           videoTrackId: trackId,
         });
         res.status(200).send(success(videoId));
-        const relatedObjects = {
-          projectId,
+        const relatedObjects = buildWorkbenchVideoCompletionContract({
           videoId,
+          videoPath,
+          projectId,
           scriptId,
-          type: "视频",
-        };
+        });
         const aiVideo = u.Ai.Video(model);
         aiVideo
           .run(
@@ -145,7 +166,7 @@ export default router.post(
               projectId,
               taskClass: "视频生成",
               describe: "根据提示词生成视频",
-              relatedObjects: JSON.stringify(relatedObjects),
+              relatedObjects,
             },
           )
           .then(async () => await aiVideo.save(videoPath))

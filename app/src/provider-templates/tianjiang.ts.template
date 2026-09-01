@@ -408,8 +408,21 @@ async function queryTask(remoteTaskId: string): Promise<Record<string, unknown>>
     if (status === 410) return { state: "failed", reason: "视频任务已结束或媒体已过保留期" };
     throw error;
   }
+  const polled = videoPollResult(task);
+  if (polled.error && !polled.completed) {
+    const status = stringValue(task.status).toLowerCase();
+    if (["failed", "cancelled", "canceled"].includes(status) || polled.error.includes("缺少视频 URL")) {
+      return { state: "failed", reason: polled.error };
+    }
+  }
+  if (polled.completed && polled.data) {
+    return {
+      state: "completed",
+      url: polled.data,
+      output: { url: polled.data },
+    };
+  }
   const status = stringValue(task.status).toLowerCase();
-  if (["completed", "succeeded", "success"].includes(status)) return { state: "completed" };
   if (["failed", "cancelled", "canceled"].includes(status)) {
     return {
       state: "failed",

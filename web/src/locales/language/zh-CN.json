@@ -739,6 +739,7 @@
       "jumpGithub": "跳转Github",
       "feedbackQuestions": "反馈问题",
       "team": "团队",
+      "infiniteCanvas": "无限画布",
       "navAria": "主导航"
     },
     "project": {
@@ -2143,5 +2144,60 @@
   "syncProgress.phase.releasing": "正在释放团队锁",
   "syncProgress.phase.release_lock": "正在释放团队锁",
   "syncProgress.phase.completed": "已完成",
-  "syncProgress.phase.failed": "失败"
+  "syncProgress.phase.failed": "失败",
+  "infiniteCanvas": {
+    "menu": "无限画布",
+    "home": {
+      "greeting": "你好，{name}",
+      "create": "新建画布",
+      "search": "搜索画布",
+      "empty": "还没有画布"
+    },
+    "editor": {
+      "save": "保存",
+      "undo": "撤销",
+      "redo": "重做",
+      "layout": "一键整理",
+      "importExport": "导入导出",
+      "assets": "素材",
+      "history": "历史",
+      "accepted": "已受理"
+    },
+    "starter": {
+      "novel": "上传小说",
+      "storyboard": "故事板生成引导",
+      "textToImage": "一句话出图",
+      "firstFrameToVideo": "首帧转视频"
+    },
+    "a11y": {
+      "liveStatus": "画布保存状态",
+      "resizeHandle": "调整画布面板"
+    },
+    "ai": {
+      "greeting": "你好，{name}",
+      "newChat": "新对话",
+      "history": "历史",
+      "collapse": "收起",
+      "fullscreen": "全屏",
+      "restore": "恢复",
+      "placeholder": "输入一句话，把想法变成画布",
+      "send": "发送",
+      "voice": "语音输入",
+      "skill": "创作模式",
+      "model": "文本模型",
+      "applyPlan": "应用到画布",
+      "waitingOrigin": "请在原设备取消",
+      "cancelOnOrigin": "请在原设备取消"
+    },
+    "execution": {
+      "desk": "执行台",
+      "confirm": "确认执行",
+      "preview": "执行预览",
+      "fee": "费用提示",
+      "failure": "失败详情",
+      "waitingForOriginDevice": "等待原设备进入任务队列",
+      "queued": "已入队",
+      "running": "生成中"
+    }
+  }
 }

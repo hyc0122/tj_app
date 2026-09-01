@@ -741,6 +741,7 @@
       "jumpGithub": "ข้ามไปที่ Github",
       "feedbackQuestions": "คำถามคำติชม",
       "team": "ทีม",
+      "infiniteCanvas": "แคนวาสไร้ขอบเขต",
       "navAria": "การนำทางหลัก"
     },
     "project": {
@@ -2156,5 +2157,60 @@
   "syncProgress.phase.releasing": "กำลังปลดล็อกทีม",
   "syncProgress.phase.release_lock": "กำลังปลดล็อกทีม",
   "syncProgress.phase.completed": "เสร็จสิ้น",
-  "syncProgress.phase.failed": "ล้มเหลว"
+  "syncProgress.phase.failed": "ล้มเหลว",
+  "infiniteCanvas": {
+    "menu": "แคนวาสไร้ขอบ",
+    "home": {
+      "greeting": "สวัสดี {name}",
+      "create": "สร้างแคนวาส",
+      "search": "ค้นหาแคนวาส",
+      "empty": "ยังไม่มีแคนวาส"
+    },
+    "editor": {
+      "save": "บันทึก",
+      "undo": "เลิกทำ",
+      "redo": "ทำซ้ำ",
+      "layout": "จัดวางอัตโนมัติ",
+      "importExport": "นำเข้า/ส่งออก",
+      "assets": "สื่อ",
+      "history": "ประวัติ",
+      "accepted": "รับเรื่องแล้ว"
+    },
+    "starter": {
+      "novel": "อัปโหลดนิยาย",
+      "storyboard": "คู่มือสตอรี่บอร์ด",
+      "textToImage": "ข้อความเป็นภาพ",
+      "firstFrameToVideo": "เฟรมแรกเป็นวิดีโอ"
+    },
+    "a11y": {
+      "liveStatus": "สถานะการบันทึกแคนวาส",
+      "resizeHandle": "ปรับขนาดแผงแคนวาส"
+    },
+    "ai": {
+      "greeting": "สวัสดี {name}",
+      "newChat": "แชทใหม่",
+      "history": "ประวัติ",
+      "collapse": "ย่อ",
+      "fullscreen": "เต็มจอ",
+      "restore": "คืนค่า",
+      "placeholder": "บรรยายแคนวาสเป็นประโยคเดียว",
+      "send": "ส่ง",
+      "voice": "ป้อนด้วยเสียง",
+      "skill": "โหมดสร้างสรรค์",
+      "model": "โมเดลข้อความ",
+      "applyPlan": "นำไปใช้กับแคนวาส",
+      "waitingOrigin": "ยกเลิกที่อุปกรณ์ต้นทาง",
+      "cancelOnOrigin": "ยกเลิกที่อุปกรณ์ต้นทาง"
+    },
+    "execution": {
+      "desk": "โต๊ะทำงาน",
+      "confirm": "ยืนยัน",
+      "preview": "ตัวอย่างการทำงาน",
+      "fee": "ค่าธรรมเนียม",
+      "failure": "รายละเอียดความล้มเหลว",
+      "waitingForOriginDevice": "รอคิวอุปกรณ์ต้นทาง",
+      "queued": "เข้าคิวแล้ว",
+      "running": "กำลังสร้าง"
+    }
+  }
 }

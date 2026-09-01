@@ -144,6 +144,7 @@ async function openCatalogEdit(item: CatalogProject): Promise<void> {
       mode: opened.accessMode,
       reason: opened.readonlyReason ?? "",
       lockHolder: opened.lockHolder ?? "",
+      runtimeGeneration: opened.runtimeGeneration,
     });
     if (opened.accessMode !== "readwrite") {
       window.$message.warning($t("projectCatalog.readonly"));
@@ -206,7 +207,12 @@ async function openProject(projectId: string | undefined) {
     return openEdit(item);
   }
 
-  project.value = item;
+  // 中文注释：所有入口统一走激活器，确保旧项目运行态在切换前被销毁。
+  store.activateProject(item, {
+    mode: "readwrite",
+    reason: "legacy_local",
+    lockHolder: "",
+  });
   try {
     router.push(projectCapabilities(item.projectType).route);
   } catch {

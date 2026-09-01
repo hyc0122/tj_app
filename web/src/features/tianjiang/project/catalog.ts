@@ -18,7 +18,7 @@ export interface CatalogProject {
   lockStatus: "none" | "active" | "expired" | "revoked";
   lockHolderName: string;
   openMode: "editable" | "readonly";
-  businessType: "novel" | "script" | "storyboard";
+  businessType: "novel" | "script" | "storyboard" | "canvas";
   description?: string;
   artStyle?: string;
   aspectRatio?: string;
@@ -35,20 +35,45 @@ export interface OpenProjectResult {
   recoveryRequired: boolean;
   accessMode: ProjectAccessMode;
   project: Project;
+  runtimeGeneration?: number;
 }
 
 const runtimeEndpoint = "/tianjiang/runtime/projects";
 
 /** 非法归属类型必须阻断整批目录，错误只携带安全诊断字段。 */
+function normalizeCatalogBusinessType(
+  value: unknown,
+  kind: unknown,
+  projectUuid: string,
+  rowIndex: number,
+): CatalogProject["businessType"] {
+  if (value === "canvas" && kind === "team") {
+    throw new ProjectCatalogContractError(projectUuid, rowIndex, "CANVAS_TEAM_SCOPE_NOT_SUPPORTED");
+  }
+  if (value === "script" || value === "storyboard" || value === "novel" || value === "canvas") {
+    return value;
+  }
+  if (value == null || value === "") return "novel";
+  throw new ProjectCatalogContractError(projectUuid, rowIndex, "PROJECT_BUSINESS_TYPE_INVALID");
+}
+
 export class ProjectCatalogContractError extends Error {
-  readonly code = "PROJECT_KIND_INVALID";
+  readonly code: string;
 
   constructor(
     readonly projectUuid: string,
     readonly rowIndex: number,
+    code = "PROJECT_KIND_INVALID",
   ) {
-    super(`项目目录归属类型无效（第 ${rowIndex + 1} 项，projectUuid=${projectUuid}）`);
+    super(
+      code === "CANVAS_TEAM_SCOPE_NOT_SUPPORTED"
+        ? "无限画布首期不支持团队归属"
+        : code === "PROJECT_BUSINESS_TYPE_INVALID"
+          ? "PROJECT_BUSINESS_TYPE_INVALID"
+          : `项目目录归属类型无效（第 ${rowIndex + 1} 项，projectUuid=${projectUuid}）`,
+    );
     this.name = "ProjectCatalogContractError";
+    this.code = code;
   }
 }
 
@@ -79,9 +104,7 @@ export function projectCatalogItem(value: unknown, rowIndex = 0): CatalogProject
     openMode:
       row.openMode ??
       (row.myRole === "viewer" || row.role === "viewer" ? "readonly" : "editable"),
-    businessType: row.businessType === "script" || row.businessType === "storyboard"
-      ? row.businessType
-      : "novel",
+    businessType: normalizeCatalogBusinessType(row.businessType, row.kind, row.projectUuid, rowIndex),
     description: row.description ? String(row.description) : undefined,
     artStyle: row.artStyle ? String(row.artStyle) : undefined,
     aspectRatio: row.aspectRatio ? String(row.aspectRatio) : undefined,
@@ -104,7 +127,37 @@ export async function fetchProjectCatalog(): Promise<CatalogProject[]> {
 
 export async function openCatalogProject(projectUuid: string): Promise<OpenProjectResult> {
   const response = await axios.post(`${runtimeEndpoint}/${encodeURIComponent(projectUuid)}/open`);
-  return response.data;
+  return unwrapOpenProjectResult(response);
+}
+
+export function unwrapOpenProjectResult(payload: unknown): OpenProjectResult {
+  const row = payload && typeof payload === "object" ? payload as Record<string, any> : {};
+  const body = row.data && typeof row.data === "object" && row.projectUuid == null
+    ? row.data as Record<string, any>
+    : row;
+  return {
+    projectUuid: String(body.projectUuid ?? ""),
+    kind: body.kind === "team" ? "team" : "personal",
+    editable: Boolean(body.editable),
+    readonlyReason: body.readonlyReason ? String(body.readonlyReason) : undefined,
+    lockHolder: body.lockHolder ? String(body.lockHolder) : undefined,
+    recoveryRequired: Boolean(body.recoveryRequired),
+    accessMode: body.accessMode ?? (body.editable ? "readwrite" : "readonly"),
+    project: body.project,
+    runtimeGeneration: Number.isSafeInteger(Number(body.runtimeGeneration))
+      ? Number(body.runtimeGeneration)
+      : undefined,
+  };
+}
+
+export async function closeCatalogProject(
+  projectUuid: string,
+  runtimeGeneration?: number,
+): Promise<unknown> {
+  const body = Number.isSafeInteger(Number(runtimeGeneration)) && Number(runtimeGeneration) > 0
+    ? { runtimeGeneration: Number(runtimeGeneration) }
+    : {};
+  return axios.post(`${runtimeEndpoint}/${encodeURIComponent(projectUuid)}/close`, body);
 }
 
 /** 刷新本地 SyncCoordinator 目录快照，供中央创建后立即 open。 */

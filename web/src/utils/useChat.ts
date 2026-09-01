@@ -636,6 +636,18 @@ export function useChat(options: UseChatOptions) {
     connecting.value = false;
   };
 
+  /** 只拆 UI Socket；禁止 emit stop，避免把项目切换误当成取消生成。 */
+  const disposeUiSocket = () => {
+    clearReconnectTimer();
+    if (socket.value) {
+      socket.value.removeAllListeners();
+      socket.value.disconnect();
+    }
+    socket.value = null;
+    connected.value = false;
+    connecting.value = false;
+  };
+
   const reconnect = () => {
     // 多次点击只保留最后一个 100ms 定时器，禁止堆积
     clearReconnectTimer();
@@ -790,6 +802,7 @@ export function useChat(options: UseChatOptions) {
     lastMessage,
     connect,
     disconnect,
+    disposeUiSocket,
     reconnect,
     emit,
     on,

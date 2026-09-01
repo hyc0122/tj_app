@@ -80,7 +80,7 @@ export function runTianjiangTests({
 
   const testFiles = readdirSync(testsRoot, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".test.ts"))
-    .map((entry) => path.join(testsRoot, entry.name))
+    .map((entry) => path.relative(appRoot, path.join(testsRoot, entry.name)))
     .sort();
 
   if (testFiles.length === 0) {

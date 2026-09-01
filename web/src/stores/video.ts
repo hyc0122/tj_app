@@ -54,6 +54,8 @@ export default defineStore(
     const currentProjectId = ref<number | null>(null);
     // 轮询定时器
     let pollingTimer: number | null = null;
+    // 项目运行时代次：旧请求返回时必须核对，避免释放后重新写入大对象。
+    let runtimeEpoch = 0;
     // 配置ID计数器
     let configIdCounter = 0;
 
@@ -82,6 +84,7 @@ export default defineStore(
 
     // 设置当前脚本ID并加载数据
     async function setCurrentScript(scriptId: number, projectId: number) {
+      runtimeEpoch += 1;
       currentScriptId.value = scriptId;
       currentProjectId.value = projectId;
       // 同时获取视频配置和视频生成结果
@@ -90,12 +93,14 @@ export default defineStore(
 
     // 从后端获取视频数据（视频生成结果）
     async function fetchVideoData(scriptId: number, specifyIds: number[] = []) {
+      const requestEpoch = runtimeEpoch;
       try {
         const reqBodyObj = {
           scriptId: scriptId,
           specifyIds: specifyIds,
         };
         const { data } = await axios.post("/video/getVideo", reqBodyObj);
+        if (requestEpoch !== runtimeEpoch) return;
 
         if (specifyIds.length > 0) {
           // 部分更新：只更新指定ID的结果状态
@@ -155,8 +160,10 @@ export default defineStore(
 
     // 从后端获取视频配置列表
     async function fetchVideoConfigs(scriptId: number) {
+      const requestEpoch = runtimeEpoch;
       try {
         const { data } = await axios.post("/video/getVideoConfigs", { scriptId });
+        if (requestEpoch !== runtimeEpoch) return;
         if (data && Array.isArray(data)) {
           // 过滤掉当前脚本的旧配置
           videoConfigs.value = [];
@@ -395,6 +402,16 @@ export default defineStore(
       stopPolling();
     }
 
+    function releaseProjectRuntime() {
+      // 中文注释：先使所有在途请求失效，再清空当前项目状态。
+      runtimeEpoch += 1;
+      stopPolling();
+      videoConfigs.value = [];
+      videoResults.value = [];
+      currentScriptId.value = null;
+      currentProjectId.value = null;
+    }
+
     return {
       // 状态
       videoConfigs,
@@ -419,6 +436,7 @@ export default defineStore(
       startPolling,
       stopPolling,
       cleanup,
+      releaseProjectRuntime,
     };
   },
   { persist: false },

@@ -137,6 +137,7 @@
 import axios from "@/utils/axios";
 import hello from "@/components/hello.vue";
 import projectStore from "@/stores/project";
+import { closeCatalogProject } from "@/features/tianjiang/project/catalog";
 import ProjectWorkspaceGate from "@/components/tianjiang/ProjectWorkspaceGate.vue";
 import { recoverActiveProjectAfterRuntimeRestart } from "@/features/tianjiang/runtime/project-recovery";
 const activeProjectStore = projectStore();
@@ -148,7 +149,8 @@ const menuList = ref([
   { type: "btn", path: "/project", labelKey: "workbench.menu.myProject", icon: "i-folder-close" },
   { type: "btn", path: "/task", labelKey: "workbench.menu.taskCenter", icon: "i-view-list" },
   { type: "btn", path: "/team", labelKey: "workbench.menu.team", icon: "i-people" },
-  // { type: "divider" },
+  { type: "btn", path: "/infinite-canvas", labelKey: "workbench.menu.infiniteCanvas", icon: "i-all-application" },
+  // canvas starters: blank novel-upload storyboard-guide text-to-image first-frame-to-video
 ]);
 
 const rightBtnList = ref([
@@ -198,7 +200,7 @@ watch(showSetting, (visible) => {
 watch(
   () => route.path,
   (newPath) => {
-    activeMenu.value = newPath;
+    activeMenu.value = newPath.startsWith("/infinite-canvas") ? "/infinite-canvas" : newPath;
   },
 );
 
@@ -392,7 +394,7 @@ watch(
   { immediate: true },
 );
 
-// 路由回到 /project 等非工作区时：先停轮询并静默关闭 runtime，再清 store。
+// 路由回到 /project 等非工作区时：立即释放前端大对象，再异步关闭后端 runtime。
 watch(
   () => route.path,
   (path, prev) => {
@@ -400,17 +402,12 @@ watch(
     if (prev && projectWorkspacePaths.has(prev)) {
       stopAccessMonitor();
       const uuid = String(access.value.projectUuid ?? "").trim();
-      const closePromise = uuid
-        ? axios
-            .post(`/tianjiang/runtime/projects/${encodeURIComponent(uuid)}/close`)
-            .catch(() => undefined)
-        : Promise.resolve();
-      void closePromise.finally(() => {
-        // 若用户又进入了工作区则不得清掉新打开的项目。
-        if (!projectWorkspacePaths.has(route.path)) {
-          activeProjectStore.clearActiveProject();
-        }
-      });
+      const runtimeGeneration = access.value.runtimeGeneration;
+      // 中文注释：不能等待网络请求，否则旧 Socket、Store 与媒体对象会继续占用内存。
+      activeProjectStore.clearActiveProject();
+      if (uuid) {
+        void closeCatalogProject(uuid, runtimeGeneration).catch(() => undefined);
+      }
     }
   },
 );

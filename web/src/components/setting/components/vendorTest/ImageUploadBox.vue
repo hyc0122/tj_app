@@ -27,13 +27,23 @@ const emit = defineEmits<{
 const inputRef = ref<HTMLInputElement | null>(null);
 const previewUrl = ref("");
 
+function revokePreview(): void {
+  if (!previewUrl.value) return;
+  URL.revokeObjectURL(previewUrl.value);
+  previewUrl.value = "";
+}
+
 watch(
   () => props.modelValue,
   (file) => {
+    revokePreview();
     if (file) previewUrl.value = URL.createObjectURL(file);
-    else previewUrl.value = "";
   },
 );
+
+onBeforeUnmount(() => {
+  revokePreview();
+});
 
 function trigger() {
   inputRef.value?.click();

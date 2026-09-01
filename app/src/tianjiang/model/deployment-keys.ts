@@ -76,6 +76,8 @@ export const RUNTIME_DEPLOYMENT_CONSUMERS: ReadonlyArray<{
       "routes/production/workbench/batchGeneratePrompt.ts",
       "routes/production/assets/batchGenerateAssetsImage.ts",
       "routes/cornerScape/batchBindAudio.ts",
+      "tianjiang/canvas/canvas-chat-service.ts#runHomePlan",
+      "tianjiang/canvas/canvas-chat-service.ts#runCanvasChat",
     ],
   },
   {

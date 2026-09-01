@@ -17,6 +17,7 @@ import { userStorageSegment } from "@/tianjiang/runtime/user-storage-context";
 import getPath from "@/utils/getPath";
 
 import storyboardRuntimeRouter from "./storyboard-runtime";
+import canvasRuntimeRouter from "./canvas-runtime";
 import { StoryboardService } from "@/tianjiang/storyboard/storyboard-service";
 import {
   projectOperationPort,
@@ -80,6 +81,7 @@ router.delete("/projects/:uuid/storyboard/shots", async (req, res) => {
 });
 
 router.use("/projects/:uuid/storyboard", storyboardRuntimeRouter);
+router.use("/projects/:uuid/canvas", canvasRuntimeRouter);
 
 router.post("/projects/:uuid/open", async (req, res) => {
   try {
@@ -144,11 +146,24 @@ router.post(
   },
 );
 
-router.post("/projects/:uuid/close", async (req, res) => {
+router.post(
+  "/projects/:uuid/close",
+  validateFields({
+    runtimeGeneration: z.number().int().positive().refine((value) => Number.isSafeInteger(value)),
+  }),
+  async (req, res) => {
   try {
     const uuid = projectUuid.parse(req.params.uuid);
-    const result = await syncCoordinator.closeProject((req as any).centralSession, uuid);
-    res.status(200).send({ code: 0, data: result, message: "项目已关闭" });
+    const result = await syncCoordinator.closeProject(
+      (req as any).centralSession,
+      uuid,
+      req.body.runtimeGeneration,
+    );
+    res.status(200).send({
+      code: 0,
+      data: result,
+      message: result && (result as { ignored?: boolean }).ignored ? "忽略过期关闭" : "项目已关闭",
+    });
   } catch (error) {
     writeRuntimeError(res, error);
   }
@@ -480,9 +495,11 @@ function writeRuntimeError(res: express.Response, error: unknown): void {
   const status = Number.isInteger(explicitStatus)
     ? explicitStatus
     : error instanceof RuntimePermissionError ? error.status : 422;
+  const errorCode = (error as { errorCode?: unknown } | null)?.errorCode;
   res.status(status).send({
     code: status,
     message: error instanceof Error ? error.message : "同步运行时请求失败",
+    ...(typeof errorCode === "string" && errorCode.length > 0 ? { errorCode } : {}),
   });
 }
 

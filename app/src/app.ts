@@ -26,6 +26,10 @@ import tianjiangRuntimeRouter from "@/routes/tianjiang/runtime";
 import tianjiangControlPlaneRouter from "@/routes/tianjiang/control-plane";
 import tianjiangStoryboardHttpRouter from "@/routes/tianjiang/storyboard-http";
 import {
+  canvasJsonBodyLimitBytes,
+  canvasJsonLimitMiddleware,
+} from "@/tianjiang/canvas/canvas-body-limits";
+import {
   describeLegacyProjectTarget,
   isGlobalLegacyDestructiveRoute,
   isLegacyProjectMutation,
@@ -166,7 +170,24 @@ export default async function startServe(randomPort: Boolean = false) {
   app.use(serveReadinessGate.middleware());
   app.use(logger("dev"));
   app.use(cors({ origin: true, credentials: true }));
-  app.use(express.json({ limit: "100mb" }));
+  const canvasJsonParser = express.json({ limit: canvasJsonBodyLimitBytes });
+  const defaultJsonParser = express.json({ limit: "100mb" });
+  const canvasBodyLimit = canvasJsonLimitMiddleware();
+  // 中文注释：画布入口必须在全局 100MiB JSON parser 之前按合同限额截断；multipart 保持原流给素材/导入入口。
+  app.use((req, res, next) => {
+    if (!/^\/api\/tianjiang\/runtime\/projects\/[^/]+\/canvas(?:\/|$)/.test(req.path)) {
+      return defaultJsonParser(req, res, next);
+    }
+    const contentType = String(req.headers["content-type"] ?? "");
+    if (contentType.toLowerCase().includes("multipart/form-data")) {
+      return canvasBodyLimit(req, res, next);
+    }
+    return canvasBodyLimit(req, res, (error?: unknown) => {
+      if (error) return next(error as Error);
+      if (res.headersSent) return;
+      canvasJsonParser(req, res, next);
+    });
+  });
   app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
   // assets 静态资源

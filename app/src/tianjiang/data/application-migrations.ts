@@ -29,6 +29,8 @@ import {
   migrateStoryboardProjectSchema,
   migrateStoryboardVideoPromptTemplateSettings,
 } from "./storyboard-project-migration";
+import { migrateCanvasProjectSchema } from "./canvas-project-migration";
+import { migrateCanvasAccountStagingReservations } from "../canvas/canvas-import-staging-reservation-store";
 import {
   migrateDreaminaCliAccountSchema,
   migrateDreaminaCliEnabled,
@@ -285,6 +287,44 @@ export function buildApplicationMigrations(
             checksumSource: "unique o_video.generationTaskUuid where not null v1",
             up: migrateOVideoGenerationTaskUuidUnique,
           } satisfies SqliteMigration,
+          {
+            version: tableMigrations.length + 19,
+            name: "generation-task-result-locator-v1",
+            checksumSource: "o_tasks resultLocator pending_finalize artifact v1",
+            up: async (database) => {
+              if (await database.schema.hasColumn("o_tasks", "resultLocator")) return;
+              await database.schema.alterTable("o_tasks", (table) => {
+                table.text("resultLocator");
+              });
+            },
+          } satisfies SqliteMigration,
+          {
+            // 中文注释：运行时 resultLocator 与画布表都是同一未发布基线后的新迁移，必须使用不同的递增版本。
+            version: tableMigrations.length + 20,
+            name: "canvas-project-schema-v1",
+            checksumSource: "personal canvas project sqlite schema v1",
+            up: migrateCanvasProjectSchema,
+          } satisfies SqliteMigration,
+          {
+            // 中文注释：计划必须耐久保存；独立迁移确保已安装 canvas-project-schema-v1 的项目也能升级。
+            version: tableMigrations.length + 21,
+            name: "canvas-durable-plans-v1",
+            checksumSource: "durable canvas AI mutation plans v1",
+            up: async (database) => {
+              await database.raw(`
+                CREATE TABLE IF NOT EXISTS canvas_plans (
+                  plan_uuid TEXT PRIMARY KEY,
+                  project_uuid TEXT NOT NULL,
+                  base_revision INTEGER NOT NULL,
+                  source TEXT NOT NULL CHECK (source IN ('home','chat')),
+                  digest TEXT NOT NULL,
+                  plan_json TEXT NOT NULL,
+                  expires_at TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                )
+              `);
+            },
+          } satisfies SqliteMigration,
         ]
       : [
           {
@@ -343,6 +383,25 @@ export function buildApplicationMigrations(
                 writeInstalledSource: (source) => u.vendor.writeCode("tianjiang", source),
               });
             },
+          } satisfies SqliteMigration,
+          {
+            version: tableMigrations.length + 18,
+            name: "generation-task-result-locator-v1",
+            checksumSource: "o_tasks resultLocator pending_finalize artifact v1",
+            up: async (database) => {
+              if (!(await database.schema.hasTable("o_tasks"))) return;
+              if (await database.schema.hasColumn("o_tasks", "resultLocator")) return;
+              await database.schema.alterTable("o_tasks", (table) => {
+                table.text("resultLocator");
+              });
+            },
+          } satisfies SqliteMigration,
+          {
+            // 中文注释：账号级画布导入预留表排在 resultLocator 之后，避免复用同一迁移版本。
+            version: tableMigrations.length + 19,
+            name: "canvas-import-staging-reservations-v1",
+            checksumSource: "account local canvas import staging reservations not in project snapshot v1",
+            up: migrateCanvasAccountStagingReservations,
           } satisfies SqliteMigration,
         ]),
   ];

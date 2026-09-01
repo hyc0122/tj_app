@@ -1,6 +1,7 @@
 /**
  * 项目创建：personal 无 teamUuid；team 必须选 owner/editor 团队。
  */
+import { v4 as uuidv4 } from "uuid";
 import axios from "@/utils/axios";
 import {
   buildClientAPIPath,
@@ -8,11 +9,12 @@ import {
 } from "@/features/tianjiang/contracts";
 
 export type CreateScope = "personal" | "team";
-export type ProjectBusinessType = "novel" | "script" | "storyboard";
+export type ProjectBusinessType = "novel" | "script" | "storyboard" | "canvas";
 
 export interface ProjectCapabilitySet {
-  route: "/novel" | "/script" | "/storyboard-project";
-  modules: readonly ("source" | "script" | "storyboard" | "assets" | "settings")[];
+  route: "/novel" | "/script" | "/storyboard-project" | "/infinite-canvas";
+  modules: readonly ("source" | "script" | "storyboard" | "assets" | "settings" | "canvas")[];
+  workspacePath?: (projectUuid: string) => string;
 }
 
 export interface CreateProjectBody {
@@ -25,6 +27,7 @@ export interface CreateProjectBody {
   aspectRatio: string;
   defaultLanguage: string;
   assetSourceProjectUuid?: string;
+  clientCreateRequestId?: string;
 }
 
 export interface CreatableTeamOption {
@@ -33,11 +36,16 @@ export interface CreatableTeamOption {
   myRole: TeamRole;
 }
 
-const CAPABILITIES: Record<ProjectBusinessType, ProjectCapabilitySet> = {
+const CAPABILITIES = {
   novel: { route: "/novel", modules: ["source", "script", "assets", "settings"] },
   script: { route: "/script", modules: ["script", "assets", "settings"] },
   storyboard: { route: "/storyboard-project", modules: ["storyboard", "assets", "settings"] },
-};
+  canvas: {
+    route: "/infinite-canvas",
+    modules: ["canvas"],
+    workspacePath: (projectUuid: string) => `/infinite-canvas/${encodeURIComponent(projectUuid)}`,
+  },
+} as const satisfies Readonly<Record<ProjectBusinessType, ProjectCapabilitySet>>;
 
 /** 路由和模块显示的唯一权威，禁止再使用“不是 script 就是 novel”。 */
 export function projectCapabilities(type: string): ProjectCapabilitySet {
@@ -46,7 +54,7 @@ export function projectCapabilities(type: string): ProjectCapabilitySet {
 }
 
 export function normalizeProjectBusinessType(value: unknown): ProjectBusinessType {
-  if (value === "script" || value === "storyboard" || value === "novel") return value;
+  if (value === "script" || value === "storyboard" || value === "novel" || value === "canvas") return value;
   if (value == null || value === "") return "novel";
   throw new Error("PROJECT_BUSINESS_TYPE_INVALID");
 }
@@ -70,6 +78,7 @@ export function buildCreateProjectBody(input: {
   aspectRatio?: string;
   defaultLanguage?: string;
   assetSourceProjectUuid?: string;
+  clientCreateRequestId?: string;
 }): CreateProjectBody {
   const name = input.name.trim();
   if (!name) throw new Error("PROJECT_NAME_REQUIRED");
@@ -78,16 +87,22 @@ export function buildCreateProjectBody(input: {
   if (sourceUuid && businessType !== "storyboard") {
     throw new Error("只有分镜项目可以指定资产来源");
   }
+  if (businessType === "canvas" && input.scope === "team") {
+    throw new Error("CANVAS_TEAM_SCOPE_NOT_SUPPORTED");
+  }
   const body: CreateProjectBody = {
     name,
-    scope: input.scope === "team" ? "team" : "personal",
+    scope: businessType === "canvas" ? "personal" : input.scope === "team" ? "team" : "personal",
     businessType,
     description: String(input.description ?? "").trim(),
     artStyle: String(input.artStyle ?? "").trim(),
     aspectRatio: String(input.aspectRatio ?? "").trim(),
     defaultLanguage: String(input.defaultLanguage ?? "").trim(),
   };
-  if (input.scope === "personal") {
+  if (businessType === "canvas") {
+    body.clientCreateRequestId = String(input.clientCreateRequestId ?? "").trim() || uuidv4();
+  }
+  if (body.scope === "personal") {
     if (sourceUuid) body.assetSourceProjectUuid = sourceUuid;
     return body;
   }
@@ -109,6 +124,7 @@ export async function createScopedProject(input: {
   aspectRatio?: string;
   defaultLanguage?: string;
   assetSourceProjectUuid?: string;
+  clientCreateRequestId?: string;
 }): Promise<unknown> {
   const body = buildCreateProjectBody(input);
   const response = await axios.post(buildClientAPIPath("createProject"), body);
