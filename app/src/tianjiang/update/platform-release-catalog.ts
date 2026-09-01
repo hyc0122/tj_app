@@ -9,8 +9,8 @@ import {
 export type PlatformUpdateChannel = "stable" | "beta";
 
 export const PLATFORM_CATALOG_ENDPOINTS = {
-  stable: "https://api.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
-  beta: "https://api.j11.com.cn/desktop/beta/windows/x64/catalog/latest.json",
+  stable: "https://cdn.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
+  beta: "https://cdn.j11.com.cn/desktop/beta/windows/x64/catalog/latest.json",
 } as const;
 
 export interface PlatformReleaseEntry {
@@ -34,7 +34,7 @@ export interface PlatformReleaseCatalogClientOptions {
 const DEFAULT_MAX_BYTES = 256 * 1024;
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_REDIRECTS = 4;
-const ORIGIN = "https://api.j11.com.cn";
+const ORIGIN = "https://cdn.j11.com.cn";
 
 const systemClock: PlatformCatalogClock = {
   setTimeout: (handler, delayMs) => setTimeout(handler, delayMs),

@@ -121,7 +121,7 @@ jobs:
         working-directory: app
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/${{ inputs.channel }}/windows/x64
+          TIANJIANG_UPDATE_FEED_URL: https://cdn.j11.com.cn/desktop/${{ inputs.channel }}/windows/x64
           TIANJIANG_SIGNING_MODE: ${{ secrets.WINDOWS_CSC_LINK != '' && secrets.WINDOWS_CSC_KEY_PASSWORD != '' && 'signed' || 'unsigned' }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.WINDOWS_CSC_LINK != '' && 'true' || 'false' }}
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
@@ -205,7 +205,7 @@ jobs:
         working-directory: app
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/${{ inputs.channel }}/linux/x64
+          TIANJIANG_UPDATE_FEED_URL: https://cdn.j11.com.cn/desktop/${{ inputs.channel }}/linux/x64
           TIANJIANG_SIGNING_MODE: unsigned
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: yarn dist:linux:x64
@@ -282,7 +282,7 @@ jobs:
         working-directory: app
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-          TIANJIANG_UPDATE_FEED_URL: https://api.j11.com.cn/desktop/${{ inputs.channel }}/macos/${{ steps.platform.outputs.arch }}
+          TIANJIANG_UPDATE_FEED_URL: https://cdn.j11.com.cn/desktop/${{ inputs.channel }}/macos/${{ steps.platform.outputs.arch }}
           TIANJIANG_SIGNING_MODE: ${{ secrets.MACOS_CSC_LINK != '' && secrets.MACOS_CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'signed' || 'unsigned' }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MACOS_CSC_LINK != '' && 'true' || 'false' }}
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}

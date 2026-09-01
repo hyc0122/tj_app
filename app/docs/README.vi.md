@@ -30,7 +30,7 @@ Tianjiang là ứng dụng Windows để sản xuất manga drama bằng AI, bao
 - Không đưa bí mật vào nhật ký, đồng bộ nhóm hoặc thư mục của tài khoản khác.
 - Kiểm tra riêng nhà cung cấp văn bản, hình ảnh và video.
 - Ứng dụng kiểm tra cả Stable và Beta. Stable mới là bắt buộc khi đăng nhập; Beta là bản thử nghiệm tùy chọn do người dùng chọn.
-- Danh mục Windows x64 dùng `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`; giao diện không nhận URL cập nhật tùy ý.
+- Danh mục Windows x64 dùng `https://cdn.j11.com.cn/desktop/{stable|beta}/windows/x64`; giao diện không nhận URL cập nhật tùy ý.
 
 ## Di chuyển dữ liệu
 

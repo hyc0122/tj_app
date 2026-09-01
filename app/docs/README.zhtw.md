@@ -30,7 +30,7 @@
 - 私密資料不得寫入日誌、團隊同步或其他帳號目錄。
 - 請分別驗證文字、圖片及影片供應商。
 - 客戶端同時檢查 Stable 與 Beta；新版 Stable 在登入時強制更新，Beta 則由使用者選擇是否安裝測試版。
-- Windows x64 固定目錄為 `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`，前端不能提交任意更新網址。
+- Windows x64 固定目錄為 `https://cdn.j11.com.cn/desktop/{stable|beta}/windows/x64`，前端不能提交任意更新網址。
 
 ## 資料遷移
 

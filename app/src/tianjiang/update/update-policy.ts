@@ -14,7 +14,7 @@ export function resolveDesktopUpdateFeed(
         : undefined;
   if (!target) throw new Error("不支持的更新平台或架构");
   if (channel !== "stable" && channel !== "beta") throw new Error("更新通道无效");
-  return `https://api.j11.com.cn/desktop/${channel}/${target}`;
+  return `https://cdn.j11.com.cn/desktop/${channel}/${target}`;
 }
 
 /** 新双通道 Catalog 当前只批准 Windows x64，原生 updater feed 复用同一固定目标。 */

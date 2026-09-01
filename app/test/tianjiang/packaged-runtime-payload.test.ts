@@ -181,7 +181,7 @@ test("实包更新源必须落在版本化 native metadata 发布目录", async 
     "https://updates.example.test/desktop/beta/linux/x64",
   );
   assert.throws(
-    () => parsePackagedUpdateFeedURL("provider: generic\nurl: https://api.j11.com.cn/client-updates\n"),
+    () => parsePackagedUpdateFeedURL("provider: generic\nurl: https://cdn.j11.com.cn/client-updates\n"),
     /desktop\/(?:stable|beta)\/windows\/x64|发布目录/,
   );
   assert.throws(

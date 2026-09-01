@@ -140,7 +140,7 @@ assert.ok(
 );
 
 const expectedCurrentFeed = (channel: "stable" | "beta") =>
-  `https://api.j11.com.cn/desktop/${channel}/${currentFeedTarget}`;
+  `https://cdn.j11.com.cn/desktop/${channel}/${currentFeedTarget}`;
 
 test("桌面 updater 装配从固定 client-config 客户端读取严格策略", async () => {
   const requested: string[] = [];
@@ -338,19 +338,19 @@ test("主进程 updatePolicy 禁用时阻止 check/download/install 且 channel 
   assert.equal(resolveDesktopUpdateFeed("beta"), expectedCurrentFeed("beta"));
   assert.equal(
     resolveDesktopUpdateFeed("stable", "win32", "x64"),
-    "https://api.j11.com.cn/desktop/stable/windows/x64",
+    "https://cdn.j11.com.cn/desktop/stable/windows/x64",
   );
   assert.equal(
     resolveDesktopUpdateFeed("beta", "win32", "x64"),
-    "https://api.j11.com.cn/desktop/beta/windows/x64",
+    "https://cdn.j11.com.cn/desktop/beta/windows/x64",
   );
   assert.equal(
     resolveDesktopUpdateFeed("beta", "darwin", "arm64"),
-    "https://api.j11.com.cn/desktop/beta/macos/arm64",
+    "https://cdn.j11.com.cn/desktop/beta/macos/arm64",
   );
   assert.equal(
     resolveDesktopUpdateFeed("stable", "linux", "x64"),
-    "https://api.j11.com.cn/desktop/stable/linux/x64",
+    "https://cdn.j11.com.cn/desktop/stable/linux/x64",
   );
   assert.throws(
     () => resolveDesktopUpdateFeed("beta", "win32", "arm64"),

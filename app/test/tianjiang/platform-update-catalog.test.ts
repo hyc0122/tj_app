@@ -64,9 +64,9 @@ function createCatalogFetch(
   const beta = documents("beta");
   const responses = new Map<string, Response>([
     [PLATFORM_CATALOG_ENDPOINTS.stable, Response.json(stable.latest)],
-    [`https://api.j11.com.cn/${stable.latest.release}`, Response.json(stable.release)],
+    [`https://cdn.j11.com.cn/${stable.latest.release}`, Response.json(stable.release)],
     [PLATFORM_CATALOG_ENDPOINTS.beta, Response.json(beta.latest)],
-    [`https://api.j11.com.cn/${beta.latest.release}`, Response.json(beta.release)],
+    [`https://cdn.j11.com.cn/${beta.latest.release}`, Response.json(beta.release)],
   ]);
   for (const [url, response] of Object.entries(overrides)) {
     if (response) responses.set(url, response);
@@ -80,10 +80,10 @@ function createCatalogFetch(
   };
 }
 
-test("客户端端点只允许 api.j11.com.cn 的 Stable/Beta Windows x64 latest", () => {
+test("客户端端点只允许 cdn.j11.com.cn 的 Stable/Beta Windows x64 latest", () => {
   assert.deepEqual(PLATFORM_CATALOG_ENDPOINTS, {
-    stable: "https://api.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
-    beta: "https://api.j11.com.cn/desktop/beta/windows/x64/catalog/latest.json",
+    stable: "https://cdn.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
+    beta: "https://cdn.j11.com.cn/desktop/beta/windows/x64/catalog/latest.json",
   });
 });
 
@@ -131,10 +131,10 @@ test("Catalog 拒绝非法 Schema、平台架构和未知字段", async (t) => {
 test("Catalog 拒绝跨域、协议降级、userinfo、端口和通道路径越界重定向", async (t) => {
   const locations = [
     "https://evil.example/desktop/stable/windows/x64/catalog/latest.json",
-    "http://api.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
-    "https://user@api.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
-    "https://api.j11.com.cn:8443/desktop/stable/windows/x64/catalog/latest.json",
-    "https://api.j11.com.cn/desktop/beta/windows/x64/catalog/latest.json",
+    "http://cdn.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
+    "https://user@cdn.j11.com.cn/desktop/stable/windows/x64/catalog/latest.json",
+    "https://cdn.j11.com.cn:8443/desktop/stable/windows/x64/catalog/latest.json",
+    "https://cdn.j11.com.cn/desktop/beta/windows/x64/catalog/latest.json",
   ];
   for (const location of locations) {
     await t.test(location, async () => {
@@ -167,7 +167,7 @@ test("release 和 artifact 路径不能注入 URL，且必须具备唯一安装�
     await t.test(name, async () => {
       const override = name === "release-url"
         ? { [PLATFORM_CATALOG_ENDPOINTS.stable]: Response.json(raw) }
-        : { [`https://api.j11.com.cn/${stable.latest.release}`]: Response.json(raw) };
+        : { [`https://cdn.j11.com.cn/${stable.latest.release}`]: Response.json(raw) };
       const client = new PlatformReleaseCatalogClient({ fetcher: createCatalogFetch(override) as typeof fetch });
       await assert.rejects(() => client.fetchChannel("stable"), /release|artifact|安装包|blockmap|路径/);
     });
@@ -198,7 +198,7 @@ test("release 完整校验来源、版本、Tag、Commit、大小与 SHA-256", a
     await t.test(name, async () => {
       const client = new PlatformReleaseCatalogClient({
         fetcher: createCatalogFetch({
-          [`https://api.j11.com.cn/${stable.latest.release}`]: Response.json(release),
+          [`https://cdn.j11.com.cn/${stable.latest.release}`]: Response.json(release),
         }) as typeof fetch,
       });
       await assert.rejects(() => client.fetchChannel("stable"), expected);

@@ -32,7 +32,7 @@
 - 私密配置不得写入日志、团队同步或其他账号目录。
 - 请分别验证文本、图片和视频模型；某一供应商不可用不会自动代表其他供应商可用。
 - 客户端同时检查 Stable 与 Beta 平台目录。Stable 高于当前版本时在登录阶段强制更新；Beta 仅提供用户主动选择的测试版更新。
-- Windows x64 固定目录为 `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`，前端不接受自定义更新地址。
+- Windows x64 固定目录为 `https://cdn.j11.com.cn/desktop/{stable|beta}/windows/x64`，前端不接受自定义更新地址。
 
 ## 数据与迁移
 

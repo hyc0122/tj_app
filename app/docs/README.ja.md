@@ -30,7 +30,7 @@ Tianjiang は、小説整理、脚本化、キャラクター／シーン素材�
 - 秘密情報をログ、チーム同期、別アカウントの領域へ入れてはいけません。
 - 文章・画像・動画の各プロバイダーを個別に検証してください。
 - クライアントは Stable と Beta の両方を確認します。新しい Stable はログイン時に必須、Beta は利用者が選ぶ任意のテスト更新です。
-- Windows x64 の固定先は `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64` で、画面から任意 URL は指定できません。
+- Windows x64 の固定先は `https://cdn.j11.com.cn/desktop/{stable|beta}/windows/x64` で、画面から任意 URL は指定できません。
 
 ## データ移行
 

@@ -418,7 +418,7 @@ test("没有强制 Stable 时可显式选择 Beta，原生版本、大小与 SHA
   assert.equal(downloaded.downloadedPath, "C:\\fake-downloads\\candidate.exe");
   assert.equal(updater.disableDifferentialDownload, false);
   assert.deepEqual(calls, [
-    "feed:https://api.j11.com.cn/desktop/beta/windows/x64",
+    "feed:https://cdn.j11.com.cn/desktop/beta/windows/x64",
     "native-check",
     "download",
   ]);

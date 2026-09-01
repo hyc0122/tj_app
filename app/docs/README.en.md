@@ -30,7 +30,7 @@ Tianjiang is a Windows desktop client for AI manga-drama production: story prepa
 - Secrets must not enter logs, team synchronization, or another account's directory.
 - Verify text, image, and video providers independently.
 - The client checks both Stable and Beta platform catalogs. A newer Stable release is mandatory at sign-in; Beta remains an optional test update selected by the user.
-- Windows x64 catalogs use `https://api.j11.com.cn/desktop/{stable|beta}/windows/x64`; the frontend cannot submit a custom update URL.
+- Windows x64 catalogs use `https://cdn.j11.com.cn/desktop/{stable|beta}/windows/x64`; the frontend cannot submit a custom update URL.
 
 ## Data migration
 
