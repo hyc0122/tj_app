@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@tapcanvas/agent-observability": ["tap-packages/packages/agent-observability/index.d.ts"],
+      "@tapcanvas/canvas-plan-protocol": ["tap-packages/packages/canvas-plan-protocol/index.ts"],
+      "@tapcanvas/codex-task-protocol": ["tap-packages/packages/codex-task-protocol/index.ts"],
+      "@tapcanvas/chapter-canvas-intents": ["tap-packages/packages/chapter-canvas-intents/index.ts"],
+      "@tapcanvas/canvas-edge-semantics": ["tap-packages/packages/canvas-edge-semantics/index.ts"],
+      "@tapcanvas/flow-anchor-bindings": ["tap-packages/hono/flow/flow.anchor-bindings.ts"],
+      "@tapcanvas/storyboard-director-protocol": ["tap-packages/packages/storyboard-director-protocol/index.ts"],
+      "@tapcanvas/storyboard-selection-protocol": ["tap-packages/packages/storyboard-selection-protocol/index.ts"],
+      "@tapcanvas/storyboard-adventure-protocol": ["tap-packages/packages/storyboard-adventure-protocol/index.ts"],
+      "@tapcanvas/character-bible-protocol": ["tap-packages/packages/character-bible-protocol/index.ts"],
+      "@tapcanvas/script-structure-protocol": ["tap-packages/packages/script-structure-protocol/index.ts"],
+      "@tapcanvas/shot-table-protocol": ["tap-packages/packages/shot-table-protocol/index.ts"],
+      "@tapcanvas/video-orchestrator-protocol": ["tap-packages/packages/video-orchestrator-protocol/index.ts"],
+      "@tapcanvas/workflow-kernel-protocol": ["tap-packages/packages/workflow-kernel-protocol/index.ts"],
+      "@tapcanvas/project-directory-protocol": ["tap-packages/hono/project-directory/project-directory.contract.ts"],
+      "@tapcanvas/image-prompt-spec": ["tap-packages/packages/image-prompt-spec/index.d.ts"],
+      "@tapcanvas/image-view-controls": ["tap-packages/packages/image-view-controls/index.d.ts"],
+      "@tapcanvas/image-operation-protocol": ["tap-packages/packages/image-operation-protocol/index.ts"],
+      "zod": ["node_modules/zod/index.d.cts"]
+    },
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": ["src", "vite.config.ts"],
+  "references": []
+}

@@ -49,7 +49,7 @@ describe("Vue Flow 规范图两轮 round-trip", () => {
 
   it("编辑器必须覆盖全部节点 kind 并在复制导入时清除运行身份", () => {
     const haystack = [
-      webSrc("views/infiniteCanvas/editor.vue"),
+      webSrc("views/infiniteCanvas/TapCanvasHost.vue"),
       webSrc("views/infiniteCanvas/composables/useCanvasFlow.ts"),
       webSrc("views/infiniteCanvas/components/CanvasViewport.vue"),
     ].join("\n");

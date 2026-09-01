@@ -16,9 +16,11 @@ const WORKTREE_GATE_TMP = path.resolve(__dirname, "..", "..", "..", "..", ".tmp"
 /** 在工作树 .tmp/gate 下创建本次测试独占目录。 */
 export function createUniqueWorktreeRoot(label: string): string {
   fs.mkdirSync(WORKTREE_GATE_TMP, { recursive: true });
+  // 中文注释：Windows better-sqlite3 仍受传统路径长度影响；夹具名必须给项目 UUID 与 project.sqlite 留足空间。
+  const safeLabel = label.replace(/[^a-z0-9-]/gi, "-").slice(0, 16) || "fixture";
   const root = path.join(
     WORKTREE_GATE_TMP,
-    `${label}-${process.pid}-${crypto.randomUUID()}`,
+    `${safeLabel}-${process.pid}-${crypto.randomBytes(8).toString("hex")}`,
   );
   fs.mkdirSync(root, { recursive: true });
   return root;

@@ -23,20 +23,31 @@ function webSrc(relative: string): string {
   }
 }
 
+function tapSrc(relative: string): string {
+  try {
+    return readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tapcanvas/src", relative),
+      "utf8",
+    );
+  } catch {
+    console.error(SENTINEL);
+    expect.fail(SENTINEL);
+    return "";
+  }
+}
+
 describe("画布可视渲染与卸载销毁", () => {
-  it("必须只渲染可视元素，卸载时销毁 Vue Flow 且缩放过程零保存", () => {
+  it("必须启用 React Flow 可视元素渲染，并在拖拽/视口结束后再提交状态", () => {
     const haystack = [
-      webSrc("views/infiniteCanvas/editor.vue"),
-      webSrc("views/infiniteCanvas/composables/useCanvasFlow.ts"),
-      webSrc("views/infiniteCanvas/components/CanvasViewport.vue"),
+      tapSrc("canvas/Canvas.tsx"),
+      tapSrc("canvas/CanvasVirtualizationContext.ts"),
     ].join("\n");
     const required = [
-      "only-render-visible-elements",
-      "$destroy",
-      "pointermove",
-      "drag-stop",
-      "moveend",
-      "flush",
+      "onlyRenderVisibleElements",
+      "onNodeDragStop",
+      "onMoveEnd",
+      "onCanvasMoveEnd",
+      "ReactFlowProvider",
     ];
     const missing = required.filter((token) => !haystack.includes(token));
     if (missing.length !== 0) {

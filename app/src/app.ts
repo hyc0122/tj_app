@@ -175,6 +175,10 @@ export default async function startServe(randomPort: Boolean = false) {
   const canvasBodyLimit = canvasJsonLimitMiddleware();
   // 中文注释：画布入口必须在全局 100MiB JSON parser 之前按合同限额截断；multipart 保持原流给素材/导入入口。
   app.use((req, res, next) => {
+    // 中文注释：TapCanvas 素材接口接收原始文件流，必须绕过 JSON parser，包含 JSON 文档素材。
+    if (req.path === "/api/tianjiang/tapcanvas/assets/upload") {
+      return next();
+    }
     if (!/^\/api\/tianjiang\/runtime\/projects\/[^/]+\/canvas(?:\/|$)/.test(req.path)) {
       return defaultJsonParser(req, res, next);
     }
@@ -207,6 +211,14 @@ export default async function startServe(randomPort: Boolean = false) {
     app.use(express.static(webDir, { acceptRanges: false }));
   } else {
     console.warn("静态网站目录不存在:", webDir);
+  }
+  const tapcanvasDir = path.join(webDir, "tapcanvas");
+  if (fs.existsSync(tapcanvasDir)) {
+    app.use("/tapcanvas", express.static(tapcanvasDir, { acceptRanges: false }));
+    app.get(/^\/tapcanvas\/.*/, (req, res, next) => {
+      if (path.extname(req.path)) return next();
+      res.sendFile(path.join(tapcanvasDir, "index.html"));
+    });
   }
 
   app.use(createCentralSessionMiddleware({
@@ -366,6 +378,9 @@ export default async function startServe(randomPort: Boolean = false) {
   app.use("/api/tianjiang/storyboard", tianjiangStoryboardHttpRouter);
   // 中央控制面只暴露公共契约声明的版本化路径；/admin 不是 API 前缀。
   app.use("/api/tianjiang/v1", tianjiangControlPlaneRouter);
+  const { default: tapcanvasCompatRouter } = await import("@/routes/tianjiang/tapcanvas-compat");
+  app.use("/api/tianjiang/tapcanvas", tapcanvasCompatRouter);
+  // TAPCANVAS_HIDE_TEAM：静态资源已在会话中间件前挂载。
 
   const router = await import("@/router");
   await router.default(app);

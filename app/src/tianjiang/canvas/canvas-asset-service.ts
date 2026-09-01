@@ -60,6 +60,10 @@ export async function listCanvasAssets(): Promise<Array<{
   lifecycleState: string;
   sha256: string;
   md5: string;
+  mimeType: string;
+  sizeBytes: number;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
 }>> {
   const rows = await db("canvas_assets").select(
     "asset_uuid",
@@ -67,6 +71,10 @@ export async function listCanvasAssets(): Promise<Array<{
     "lifecycle_state",
     "sha256",
     "md5",
+    "mime_type",
+    "size_bytes",
+    "metadata_json",
+    "created_at",
   );
   return rows.map((row) => ({
     assetUuid: String(row.asset_uuid),
@@ -74,6 +82,16 @@ export async function listCanvasAssets(): Promise<Array<{
     lifecycleState: String(row.lifecycle_state),
     sha256: String(row.sha256),
     md5: String(row.md5),
+    mimeType: String(row.mime_type ?? "application/octet-stream"),
+    sizeBytes: Number(row.size_bytes ?? 0),
+    metadata: (() => {
+      try {
+        return row.metadata_json ? JSON.parse(String(row.metadata_json)) as Record<string, unknown> : null;
+      } catch {
+        return null;
+      }
+    })(),
+    createdAt: String(row.created_at ?? new Date(0).toISOString()),
   }));
 }
 

@@ -11,8 +11,9 @@
   "scripts": {
     "dev": "vite --host",
     "preview": "vite preview",
-    "build": "vue-tsc --build --force && vite build",
-    "build-only": "vite build",
+    "build": "vue-tsc --build --force && vite build && yarn build:tapcanvas",
+    "build-only": "vite build && yarn build:tapcanvas",
+    "build:tapcanvas": "node scripts/build-tapcanvas.mjs",
     "type-check": "vue-tsc --build --force",
     "verify:generated-declarations": "node scripts/verify-generated-declarations.mjs",
     "test:tianjiang-ui": "vitest run test/tianjiang/vendor-secret-session.test.ts test/tianjiang/vendor-credentials-ui.test.ts test/tianjiang/vendor-catalog-state.test.ts test/tianjiang/vendor-code-editor-ui.test.ts test/tianjiang/about-update-security.render.test.ts test/tianjiang/project-state-lifecycle.test.ts test/tianjiang/cyber-ui-theme.test.ts test/tianjiang/runtime-reconnect-round7.test.ts test/tianjiang --maxWorkers=4 --minWorkers=1",

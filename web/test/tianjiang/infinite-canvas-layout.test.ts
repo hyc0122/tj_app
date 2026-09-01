@@ -13,13 +13,13 @@ afterEach(() => restore());
 describe("画布布局", () => {
   it("编辑器必须接入可取消 layout worker", () => {
     const src = readFileSync(
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../src/views/infiniteCanvas/editor.vue"),
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../src/features/tianjiang/canvas/layout.ts"),
       "utf8",
     );
-    if (!src.includes("canvas-layout.worker") || !src.includes("requestId")) {
+    if (!src.includes("createLayoutRequestId") || !src.includes("layoutCanvasNodes")) {
       console.error(SENTINEL);
-      expect(src.includes("canvas-layout.worker"), SENTINEL).toBe(true);
-      expect(src.includes("requestId"), SENTINEL).toBe(true);
+      expect(src.includes("createLayoutRequestId"), SENTINEL).toBe(true);
+      expect(src.includes("layoutCanvasNodes"), SENTINEL).toBe(true);
     }
   });
 });

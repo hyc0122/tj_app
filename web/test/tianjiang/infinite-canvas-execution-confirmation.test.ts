@@ -19,14 +19,38 @@ function webSrc(relative: string): string {
   }
 }
 
+function tapSrc(relative: string): string {
+  try {
+    return readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tapcanvas/src", relative),
+      "utf8",
+    );
+  } catch {
+    console.error(SENTINEL);
+    expect.fail(SENTINEL);
+    return "";
+  }
+}
+
+function appSrc(relative: string): string {
+  try {
+    return readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../app/src", relative),
+      "utf8",
+    );
+  } catch {
+    console.error(SENTINEL);
+    expect.fail(SENTINEL);
+    return "";
+  }
+}
+
 describe("执行确认与执行台合同", () => {
   it("必须展示权威预览、防双击 confirm、202 waiting_for_origin_device 且不得提前 queued", () => {
     const haystack = [
-      webSrc("features/tianjiang/canvas/useCanvasExecution.ts"),
-      webSrc("features/tianjiang/canvas/api.ts"),
-      webSrc("views/infiniteCanvas/components/execution/CanvasExecutionDesk.vue"),
-      webSrc("views/infiniteCanvas/components/execution/CanvasExecutionPreviewDialog.vue"),
-      webSrc("views/infiniteCanvas/editor.vue"),
+      tapSrc("api/server.ts"),
+      tapSrc("tianjiang/confirmGate.ts"),
+      appSrc("routes/tianjiang/tapcanvas-compat.ts"),
     ].join("\n");
     const required = [
       "waiting_for_origin_device",
@@ -35,13 +59,10 @@ describe("执行确认与执行台合同", () => {
       "confirmationUuid",
       "previewCanvasExecution",
       "confirmCanvasExecution",
-      "confirming",
-      "originDevice",
-      "CanvasExecutionDesk",
-      "CanvasExecutionPreviewDialog",
+      "requestTianjiangPaidConfirm",
+      "runPublicTaskWithAuth",
       "fee",
       "queued",
-      "runGeneration",
     ];
     const missing = required.filter((token) => !haystack.includes(token));
     if (missing.length !== 0) {
@@ -50,26 +71,14 @@ describe("执行确认与执行台合同", () => {
     }
   });
 
-  it("失败重试必须重新 preview 并提升 runGeneration，执行台计数包含待确认与运行中", () => {
-    const execution = webSrc("features/tianjiang/canvas/useCanvasExecution.ts");
-    const desk = webSrc("views/infiniteCanvas/components/execution/CanvasExecutionDesk.vue");
-    const editor = webSrc("views/infiniteCanvas/editor.vue");
-    const retryBody = execution.match(/async function retryExecution[\s\S]*?\n  }/)?.[0] ?? "";
-    if (
-      !execution.includes("retryExecution")
-      || !execution.includes("runGeneration")
-      || !desk.includes("pendingCount")
-      || !desk.includes("confirmation_required")
-      || !desk.includes("aria-live")
-      || retryBody.includes("confirmPreview()")
-      || !editor.includes("openExecutionPreview")
-      || !editor.includes("showPreview.value = true")
-    ) {
-      console.error(SENTINEL);
-      expect(execution.includes("retryExecution"), SENTINEL).toBe(true);
-      expect(desk.includes("pendingCount"), SENTINEL).toBe(true);
-      expect(retryBody.includes("confirmPreview()"), SENTINEL).toBe(false);
-      expect(editor.includes("openExecutionPreview"), SENTINEL).toBe(true);
-    }
+  it("确认后必须复用服务端返回的原确认单，禁止重新预览或自行伪造凭证", () => {
+    const client = tapSrc("api/server.ts");
+    const route = appSrc("routes/tianjiang/tapcanvas-compat.ts");
+    const confirmationSubmit = client.match(/async function continuePublicTaskAfterConfirmation[\s\S]*?export async function runPublicTaskWithAuth/)?.[0] ?? "";
+    expect(confirmationSubmit, SENTINEL).toContain("confirmationUuid: preview.confirmationUuid");
+    expect(confirmationSubmit, SENTINEL).toContain("requestDigest: preview.requestDigest");
+    expect(confirmationSubmit, SENTINEL).toContain("baseRevision: preview.baseRevision");
+    expect(route, SENTINEL).toContain("confirmCanvasExecution(parsed.projectUuid, parsed.confirmation!)");
+    expect(route, SENTINEL).not.toContain("FAKE_PROVIDER");
   });
 });

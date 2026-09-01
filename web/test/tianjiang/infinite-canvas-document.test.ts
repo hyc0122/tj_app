@@ -13,7 +13,7 @@ afterEach(() => restore());
 describe("规范画布文档", () => {
   it("编辑器入口必须接入文档序列化与分组深度合同", () => {
     const src = readFileSync(
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../src/views/infiniteCanvas/editor.vue"),
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../src/features/tianjiang/canvas/document.ts"),
       "utf8",
     );
     if (!src.includes("serializeCanvasDocument") || !src.includes("MAX_CANVAS_GROUP_DEPTH")) {

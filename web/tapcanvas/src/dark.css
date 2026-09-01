@@ -1,0 +1,284 @@
+:root[data-mantine-color-scheme="dark"] {
+  /* 统一「科技灰」中性暗色：所有底色 / 文字 / 强调去蓝（R≈G≈B），仅保留红/绿/黄语义色 */
+  --mantine-color-body: #0c0c0d;
+  --mantine-color-text: #ededef;
+  --mantine-color-dimmed: #aaabae;
+  --mantine-color-default: #16161a;
+  --mantine-color-default-hover: #1b1b20;
+  --mantine-color-gray-6: #8a8b8f;
+  --mantine-color-gray-7: #5e5f63;
+  --mantine-color-anchor: #d4d5d8;
+
+  --canvas-node-bg: rgba(22, 22, 24, 0.98);
+  --canvas-node-border: rgba(232, 232, 236, 0.08);
+  --canvas-node-border-selected: rgba(228, 228, 232, 0.5);
+  --canvas-node-shadow: 0 18px 40px rgba(0, 0, 0, 0.46);
+  --canvas-node-text: #ededef;
+  --canvas-node-subtext: #aaabae;
+  --canvas-node-header-bg: rgba(16, 16, 18, 0.96);
+  --canvas-node-header-border: rgba(232, 232, 236, 0.08);
+  --canvas-node-chip-bg: rgba(255, 255, 255, 0.04);
+  --canvas-node-chip-text: #e4e5e8;
+  --canvas-node-action-bg: rgba(255, 255, 255, 0.035);
+  --canvas-node-action-border: rgba(255, 255, 255, 0.08);
+  --canvas-node-action-text: #ededef;
+  --canvas-node-action-hover-bg: rgba(255, 255, 255, 0.1);
+  --canvas-node-action-primary-bg: #3a3a40;
+  --canvas-node-action-primary-hover-bg: #45454c;
+  --canvas-node-action-primary-text: #ffffff;
+  --canvas-node-action-muted-text: #9a9ba0;
+  --canvas-surface-bg: linear-gradient(180deg, #0c0c0d 0%, #0d0d0e 45%, #080809 100%);
+
+  --canvas-io-bg: rgba(22, 22, 25, 0.94);
+  --canvas-io-border: rgba(168, 170, 176, 0.26);
+  --canvas-io-border-selected: rgba(228, 228, 232, 0.62);
+  --canvas-io-text: #e4e5e8;
+  --canvas-io-handle: #c9cace;
+
+  --canvas-group-bg: rgba(170, 172, 178, 0.14);
+  --canvas-group-border: rgba(232, 232, 236, 0.68);
+  --canvas-group-border-selected: rgba(228, 228, 232, 0.96);
+  --canvas-group-shadow: 0 0 0 1px rgba(232, 232, 236, 0.12), 0 14px 28px rgba(0, 0, 0, 0.24);
+  --canvas-group-shadow-selected: 0 0 0 1px rgba(228, 228, 232, 0.34), 0 18px 34px rgba(0, 0, 0, 0.32);
+
+  --tc-run-card-bg: linear-gradient(180deg, rgba(26, 26, 29, 0.98), rgba(16, 16, 18, 0.98));
+  --tc-run-card-border: rgba(168, 170, 176, 0.12);
+  --tc-run-card-shadow: 0 24px 58px rgba(0, 0, 0, 0.42);
+  --tc-run-accent-strong: rgba(255, 255, 255, 0.14);
+  --tc-run-accent-soft: rgba(255, 255, 255, 0.08);
+  --tc-run-accent-line: rgba(228, 228, 232, 0.9);
+  --tc-run-accent-icon: #cbccd0;
+  --tc-run-code-bg: rgba(18, 18, 21, 0.92);
+  --tc-run-code-bg-strong: rgba(12, 12, 14, 0.96);
+  --tc-run-code-border: rgba(168, 170, 176, 0.14);
+  --tc-run-code-text: #e0e1e4;
+  --tc-run-error-bg: rgba(127, 29, 29, 0.24);
+  --tc-run-error-border: rgba(248, 113, 113, 0.26);
+  --tc-run-error-icon: #fca5a5;
+  --tc-run-info-bg: rgba(255, 255, 255, 0.05);
+  --tc-run-info-border: rgba(255, 255, 255, 0.14);
+
+  --tc-asset-card-bg: #262629;
+  --tc-node-toolbar-bg: rgba(20, 20, 23, 0.94);
+  --tc-node-toolbar-border: rgba(255, 255, 255, 0.08);
+  --tc-node-toolbar-shadow: 0 22px 48px rgba(0, 0, 0, 0.42);
+  --tc-node-settings-dropdown-bg: rgba(20, 20, 23, 0.96);
+  --tc-node-settings-dropdown-border: rgba(168, 170, 176, 0.16);
+  --tc-node-ref-card-bg: rgba(255, 255, 255, 0.04);
+  --tc-node-ref-card-border: rgba(168, 170, 176, 0.18);
+  --tc-node-ref-img-bg: rgba(255, 255, 255, 0.05);
+  --tc-node-ref-badge-bg: rgba(26, 26, 29, 0.82);
+  --tc-node-ref-badge-color: rgba(248, 248, 250, 0.92);
+  --tc-node-ref-add-bg: rgba(255, 255, 255, 0.04);
+  --tc-node-ref-add-color: rgba(232, 232, 236, 0.9);
+  --tc-node-settings-trigger-bg: rgba(255, 255, 255, 0.04);
+  --tc-node-settings-trigger-border: rgba(168, 170, 176, 0.12);
+  --tc-node-settings-thumb-bg: rgba(255, 255, 255, 0.05);
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-AppShell-main {
+  background: var(--mantine-color-body) !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-AppShell-header,
+:root[data-mantine-color-scheme="dark"] .mantine-AppShell-navbar,
+:root[data-mantine-color-scheme="dark"] .mantine-AppShell-aside {
+  background: rgba(14, 14, 16, 0.94) !important;
+  border: none !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+}
+
+button {
+  color: var(--mantine-color-text);
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Button-root[data-variant="outline"] {
+  border: none !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  box-shadow: none;
+}
+:root[data-mantine-color-scheme="dark"] .mantine-Button-root[data-variant="outline"]:hover {
+  border: none !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+}
+:root[data-mantine-color-scheme="dark"] .mantine-Button-root[data-variant="light"] {
+  border: none !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+:root[data-mantine-color-scheme="dark"] .mantine-Button-root[data-variant="light"]:hover {
+  border: none !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.mantine-Button-root[data-variant="subtle"] {
+  background: transparent !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Paper-root[data-with-border]:not(.template-panel-shell):not(.template-panel-card):not(.template-space):not(.template-detail) {
+  background: linear-gradient(180deg, rgba(26, 26, 29, 0.98), rgba(18, 18, 21, 0.98)) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Card-root[data-with-border] {
+  background: linear-gradient(180deg, rgba(26, 26, 29, 0.98), rgba(18, 18, 21, 0.98)) !important;
+  border-color: rgba(232, 232, 236, 0.08) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Paper-root[data-with-border],
+:root[data-mantine-color-scheme="dark"] .mantine-Card-root[data-with-border] {
+  border-color: rgba(232, 232, 236, 0.08) !important;
+  border-radius: 10px !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Button-root,
+:root[data-mantine-color-scheme="dark"] .mantine-ActionIcon-root,
+:root[data-mantine-color-scheme="dark"] .mantine-Input-input,
+:root[data-mantine-color-scheme="dark"] .mantine-Pill-root {
+  border-radius: 6px !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Badge-root,
+:root[data-mantine-color-scheme="dark"] .mantine-Avatar-root {
+  border-radius: 999px !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-SegmentedControl-root {
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-SegmentedControl-indicator {
+  border-radius: 6px !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .glass {
+  background: linear-gradient(180deg, rgba(24, 24, 27, 0.96), rgba(16, 16, 18, 0.96)) !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .mantine-Paper-root[data-with-border].workflow-history-panel-shell.glass {
+  background: linear-gradient(180deg, rgba(26, 26, 29, 0.98), rgba(18, 18, 21, 0.98)) !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .panel-arrow {
+  display: none;
+}
+
+:root[data-mantine-color-scheme="dark"] .react-flow__controls {
+  background: rgba(16, 16, 18, 0.96) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 14px 30px rgba(0,0,0,0.32);
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__controls-button {
+  background: transparent !important;
+  color: #f4f4f6 !important;
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__controls-button svg {
+  stroke: currentColor !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .react-flow__minimap {
+  /* 底色由 MiniMap 组件 bgColor 控制（中性灰），CSS 只管投影/圆角 */
+  box-shadow: 0 8px 28px rgba(0,0,0,0.50);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* Canvas perf: backdrop blur is expensive while the graph is moving underneath */
+.tc-canvas[data-dragging="true"] .glass,
+.tc-canvas[data-dragging="true"] .react-flow__controls {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__selection {
+  background: transparent !important;
+  border: 1.5px dashed rgba(224, 224, 228, 0.85) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+:root[data-mantine-color-scheme="dark"] .react-flow__handle {
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(140deg, rgba(214, 215, 219, 0.35), rgba(150, 151, 156, 0.7)) !important;
+  border: none !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.75), 0 0 0 2px rgba(8, 8, 10, 0.8);
+  z-index: 3;
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__node.selected .react-flow__handle {
+  box-shadow: 0 0 0 3px rgba(224, 224, 228, 0.25);
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__handle:hover {
+  box-shadow: 0 0 0 4px rgba(224, 224, 228, 0.18), 0 8px 20px rgba(0, 0, 0, 0.6);
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__edge-path {
+  opacity: 0.9;
+  transition: opacity 0.12s ease;
+}
+:root[data-mantine-color-scheme="dark"] .react-flow__edge:hover .react-flow__edge-path {
+  opacity: 1;
+}
+
+:root[data-mantine-color-scheme="dark"] *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+:root[data-mantine-color-scheme="dark"] *::-webkit-scrollbar-thumb {
+  background: rgba(150, 152, 158, 0.35);
+  border-radius: 8px;
+}
+:root[data-mantine-color-scheme="dark"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 152, 158, 0.55);
+}
+:root[data-mantine-color-scheme="dark"] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root[data-mantine-color-scheme="dark"] [data-ux-panel] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150, 152, 158, 0.45) transparent;
+}
+:root[data-mantine-color-scheme="dark"] [data-ux-panel] *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+:root[data-mantine-color-scheme="dark"] [data-ux-panel] *::-webkit-scrollbar-thumb {
+  background: rgba(150, 152, 158, 0.35);
+  border-radius: 8px;
+}
+:root[data-mantine-color-scheme="dark"] [data-ux-panel] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 152, 158, 0.55);
+}
+:root[data-mantine-color-scheme="dark"] [data-ux-panel] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-compact="true"] .mantine-Button-root {
+  padding: 4px 8px !important;
+}
+[data-compact="true"] .mantine-NumberInput-input,
+[data-compact="true"] .mantine-TextInput-input,
+[data-compact="true"] textarea {
+  padding: 6px 8px !important;
+}
+[data-compact="true"] .mantine-Stack-root {
+  gap: 6px !important;
+}
+[data-compact="true"] .mantine-Group-root {
+  gap: 6px !important;
+}
+
+[data-dragging="true"] .react-flow__node:not(.selected) {
+  opacity: 0.45;
+  transition: none;
+}

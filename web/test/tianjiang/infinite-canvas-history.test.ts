@@ -13,14 +13,14 @@ afterEach(() => restore());
 describe("画布历史", () => {
   it("编辑器必须接入 undo/redo 事务且历史上限 100", () => {
     const src = readFileSync(
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../src/views/infiniteCanvas/editor.vue"),
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../src/features/tianjiang/canvas/history.ts"),
       "utf8",
     );
-    if (!src.includes("undo") || !src.includes("redo") || !src.includes("100")) {
+    if (!src.includes("undo") || !src.includes("redo") || !src.includes("CANVAS_HISTORY_LIMIT")) {
       console.error(SENTINEL);
       expect(src.includes("undo"), SENTINEL).toBe(true);
       expect(src.includes("redo"), SENTINEL).toBe(true);
-      expect(src.includes("100"), SENTINEL).toBe(true);
+      expect(src.includes("CANVAS_HISTORY_LIMIT"), SENTINEL).toBe(true);
     }
   });
 });
