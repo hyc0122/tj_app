@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Node, NodeChange } from '@xyflow/react'
 import { accumulateSelectionChanges } from './accumulateSelectionChanges'
 import * as selectionChangeHelpers from './accumulateSelectionChanges'
@@ -6,6 +6,10 @@ import * as selectionChangeHelpers from './accumulateSelectionChanges'
 const select = (id: string, selected: boolean): NodeChange<Node> => ({ id, type: 'select', selected })
 
 describe('accumulateSelectionChanges', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('累积框选逐帧下发的增量批次，而不是只保留最后一批', () => {
     // React Flow 框选每帧只发本帧翻转的节点。覆盖式赋值会让 a/b 永远进不了业务 store。
     let pending: NodeChange<Node>[] = []
@@ -95,5 +99,65 @@ describe('accumulateSelectionChanges', () => {
     expect(timerRef.current).toBeNull()
     expect(pendingRef.current).toEqual([])
     expect(businessNodes[0]?.selected).toBe(true)
+  })
+
+  it('普通框选在 119ms 前不提交，并在 120ms 时批量提交', () => {
+    vi.useFakeTimers()
+    type ScheduleSelectionCommit = (input: {
+      pendingRef: { current: NodeChange<Node>[] }
+      timerRef: { current: ReturnType<typeof setTimeout> | null }
+      commit: (changes: NodeChange<Node>[]) => void
+      shouldDefer?: () => boolean
+      delayMs?: number
+    }) => void
+    const schedulePendingSelectionCommit = (
+      selectionChangeHelpers as typeof selectionChangeHelpers & {
+        schedulePendingSelectionCommit?: ScheduleSelectionCommit
+      }
+    ).schedulePendingSelectionCommit
+
+    expect(schedulePendingSelectionCommit).toBeTypeOf('function')
+    if (!schedulePendingSelectionCommit) return
+
+    const commit = vi.fn()
+    const pendingRef = { current: [select('a', true), select('b', true)] }
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null }
+
+    schedulePendingSelectionCommit({ pendingRef, timerRef, commit, delayMs: 120 })
+    vi.advanceTimersByTime(119)
+    expect(commit).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(commit).toHaveBeenCalledWith([select('a', true), select('b', true)])
+    expect(pendingRef.current).toEqual([])
+    expect(timerRef.current).toBeNull()
+  })
+
+  it('确认点击会取消尚未触发的框选定时器并立即提交', () => {
+    vi.useFakeTimers()
+    const commit = vi.fn()
+    const pendingRef = { current: [select('image-1', true)] }
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null }
+    const schedulePendingSelectionCommit = (
+      selectionChangeHelpers as typeof selectionChangeHelpers & {
+        schedulePendingSelectionCommit?: (input: {
+          pendingRef: { current: NodeChange<Node>[] }
+          timerRef: { current: ReturnType<typeof setTimeout> | null }
+          commit: (changes: NodeChange<Node>[]) => void
+        }) => void
+      }
+    ).schedulePendingSelectionCommit
+
+    expect(schedulePendingSelectionCommit).toBeTypeOf('function')
+    if (!schedulePendingSelectionCommit) return
+    schedulePendingSelectionCommit({ pendingRef, timerRef, commit })
+
+    selectionChangeHelpers.flushPendingSelectionCommit({ pendingRef, timerRef, commit })
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(commit).toHaveBeenCalledWith([select('image-1', true)])
+
+    vi.advanceTimersByTime(120)
+    expect(commit).toHaveBeenCalledTimes(1)
   })
 })

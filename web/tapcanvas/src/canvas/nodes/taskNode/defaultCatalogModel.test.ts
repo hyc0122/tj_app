@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ModelOption } from '../../../config/models'
-import { resolveDefaultCatalogModelOption } from './defaultCatalogModel'
+import {
+  resolveCatalogActionModelOption,
+  resolveDefaultCatalogModelOption,
+} from './defaultCatalogModel'
 
 const options: ModelOption[] = [
   { value: 'catalog-first', label: '目录第一项', vendor: 'first-vendor' },
@@ -48,5 +51,35 @@ describe('resolveDefaultCatalogModelOption', () => {
       loading: false,
       error: new Error('catalog unavailable'),
     })).toBeNull()
+  })
+})
+
+describe('resolveCatalogActionModelOption', () => {
+  it('uses the current live catalog model when an old action model is unavailable', () => {
+    expect(resolveCatalogActionModelOption({
+      options,
+      requestedValue: 'gpt-image-2',
+      currentValue: 'catalog-second',
+    })).toBe(options[1])
+  })
+
+  it('falls back to the first live catalog row instead of inventing a frontend model', () => {
+    expect(resolveCatalogActionModelOption({
+      options: [{
+        value: 'live-image-alias',
+        label: '模型服务唯一可用图片模型',
+        modelKey: 'provider:live-image-request-key',
+      }],
+      requestedValue: 'gemini-3.1-flash-image-preview',
+      currentValue: 'gpt-image-2',
+    })?.modelKey).toBe('provider:live-image-request-key')
+  })
+
+  it('preserves an explicitly requested action model when it is still live', () => {
+    expect(resolveCatalogActionModelOption({
+      options,
+      requestedValue: 'catalog-second',
+      currentValue: 'catalog-first',
+    })).toBe(options[1])
   })
 })

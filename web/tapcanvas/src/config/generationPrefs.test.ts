@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { UserGenerationPrefsDto } from '../api/server'
 import type { ModelOption } from './models'
 import { DEFAULT_GENERATION_PREFS } from './generationPrefs'
 import * as generationPrefs from './generationPrefs'
@@ -28,5 +29,111 @@ describe('DEFAULT_GENERATION_PREFS', () => {
       modelKey: 'atlas:gpt-image-real',
       modelAlias: 'gpt-image-real',
     })).toEqual({ imageModel: 'atlas:gpt-image-real' })
+  })
+})
+
+type GenerationPrefsRuntime = {
+  getCached: () => UserGenerationPrefsDto | null
+  load: (force?: boolean) => Promise<UserGenerationPrefsDto | null>
+  save: (prefs: UserGenerationPrefsDto) => Promise<UserGenerationPrefsDto | null>
+  updateRecent: (patch: UserGenerationPrefsDto) => Promise<UserGenerationPrefsDto | null>
+}
+
+type CreateGenerationPrefsRuntime = (input: {
+  read: () => Promise<UserGenerationPrefsDto | null>
+  write: (prefs: UserGenerationPrefsDto) => Promise<UserGenerationPrefsDto | null>
+  getScopeKey: () => string
+  onChanged?: (prefs: UserGenerationPrefsDto | null) => void
+}) => GenerationPrefsRuntime
+
+function readRuntimeFactory(): CreateGenerationPrefsRuntime | undefined {
+  return (
+    generationPrefs as typeof generationPrefs & {
+      createGenerationPrefsRuntime?: CreateGenerationPrefsRuntime
+    }
+  ).createGenerationPrefsRuntime
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
+}
+
+describe('generation preferences runtime', () => {
+  it('does not let an older GET overwrite a newer saved preference', async () => {
+    const createRuntime = readRuntimeFactory()
+    expect(createRuntime).toBeTypeOf('function')
+    if (!createRuntime) return
+
+    const pendingRead = deferred<UserGenerationPrefsDto | null>()
+    const runtime = createRuntime({
+      read: () => pendingRead.promise,
+      write: async (prefs) => prefs,
+      getScopeKey: () => 'account-a',
+    })
+
+    const loadPromise = runtime.load()
+    await expect(runtime.save({ imageModel: 'provider:new-model' })).resolves.toEqual({
+      imageModel: 'provider:new-model',
+    })
+    pendingRead.resolve({ imageModel: 'provider:old-model' })
+
+    await expect(loadPromise).resolves.toEqual({ imageModel: 'provider:new-model' })
+    expect(runtime.getCached()).toEqual({ imageModel: 'provider:new-model' })
+  })
+
+  it('serializes direct saves and recent-selection updates through one queue', async () => {
+    const createRuntime = readRuntimeFactory()
+    expect(createRuntime).toBeTypeOf('function')
+    if (!createRuntime) return
+
+    const firstWrite = deferred<UserGenerationPrefsDto | null>()
+    const write = vi.fn()
+      .mockImplementationOnce(() => firstWrite.promise)
+      .mockImplementationOnce(async (prefs: UserGenerationPrefsDto) => prefs)
+    const runtime = createRuntime({
+      read: async () => null,
+      write,
+      getScopeKey: () => 'account-a',
+    })
+
+    const first = runtime.save({ imageModel: 'provider:image-a' })
+    const second = runtime.updateRecent({ videoModel: 'provider:video-b' })
+    await Promise.resolve()
+    expect(write).toHaveBeenCalledTimes(1)
+
+    firstWrite.resolve({ imageModel: 'provider:image-a' })
+    await first
+    await second
+    expect(write).toHaveBeenNthCalledWith(2, { videoModel: 'provider:video-b' })
+    expect(runtime.getCached()).toEqual({ videoModel: 'provider:video-b' })
+  })
+
+  it('drops the previous account cache and ignores its late response after account switch', async () => {
+    const createRuntime = readRuntimeFactory()
+    expect(createRuntime).toBeTypeOf('function')
+    if (!createRuntime) return
+
+    let scope = 'account-a'
+    const accountARead = deferred<UserGenerationPrefsDto | null>()
+    const runtime = createRuntime({
+      read: () => scope === 'account-a'
+        ? accountARead.promise
+        : Promise.resolve({ imageModel: 'provider:account-b' }),
+      write: async (prefs) => prefs,
+      getScopeKey: () => scope,
+    })
+
+    const accountALoad = runtime.load()
+    scope = 'account-b'
+    expect(runtime.getCached()).toBeNull()
+    await expect(runtime.load()).resolves.toEqual({ imageModel: 'provider:account-b' })
+
+    accountARead.resolve({ imageModel: 'provider:account-a' })
+    await expect(accountALoad).resolves.toBeNull()
+    expect(runtime.getCached()).toEqual({ imageModel: 'provider:account-b' })
   })
 })
