@@ -37,6 +37,8 @@ test("TapCanvas 兼容层必须复用天将账号、真实模型路由和权威�
     "new-api-models",
     "project-directory",
     "public/agents/chat",
+    "assets/books",
+    "agents/diagnostics",
   ];
   const missing = required.filter((token) => !haystack.includes(token));
   if (missing.length !== 0) {

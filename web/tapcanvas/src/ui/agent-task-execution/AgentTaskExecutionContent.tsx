@@ -248,7 +248,7 @@ export default function AgentTaskExecutionContent(props: AgentTaskExecutionConte
         </div>
       ) : !activeRun && !trace ? (
         <div className="agent-task-execution-empty">
-          <Text className="agent-task-execution-empty-title" size="sm" fw={600}>当前画布还没有 AI 执行记录</Text>
+          <Text className="agent-task-execution-empty-title" size="sm" fw={600}>暂无执行记录</Text>
           <Text className="agent-task-execution-empty-copy" size="xs" c="dimmed">从小T发起任务后，这里会显示进度、等待原因与交付证据。</Text>
         </div>
       ) : (

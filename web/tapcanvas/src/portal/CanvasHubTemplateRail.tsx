@@ -48,8 +48,7 @@ export function CanvasHubTemplateRail({
             <span className="canvas-hub-template-card__title-skeleton tc-portal-skeleton" />
           </div>
         )) : null}
-        {error ? <div className="canvas-hub-template-state is-error" role="alert">{error}</div> : null}
-        {!loading && !error ? templates.map((template) => (
+        {!loading ? templates.map((template) => (
           <button
             className="canvas-hub-template-card"
             type="button"
@@ -71,7 +70,10 @@ export function CanvasHubTemplateRail({
             <strong className="canvas-hub-template-card__title">{template.templateTitle || template.name}</strong>
           </button>
         )) : null}
-        {!loading && !error && templates.length === 0 ? (
+        {!loading && templates.length === 0 && error ? (
+          <div className="canvas-hub-template-state is-error" role="alert">{error}</div>
+        ) : null}
+        {!loading && templates.length === 0 && !error ? (
           <div className="canvas-hub-template-state">当前暂无已配置的公开模板</div>
         ) : null}
       </div>

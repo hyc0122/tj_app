@@ -5,6 +5,11 @@ import {
   listPublicProjects,
   type ProjectDto,
 } from '../api/server'
+import {
+  cloneBuiltinCanvasTemplateGraph,
+  isBuiltinCanvasTemplateId,
+  listBuiltinCanvasTemplates,
+} from './builtinCanvasTemplates'
 import { LoginModal } from '../auth/LoginModal'
 import { useAuth } from '../auth/store'
 import {
@@ -71,8 +76,22 @@ export default function CanvasHubPage(): JSX.Element {
   const [loginOpen, setLoginOpen] = React.useState(false)
   const [idea, setIdea] = React.useState('')
   const [planning, setPlanning] = React.useState(false)
-  const [templates, setTemplates] = React.useState<ConfiguredCanvasTemplate[]>([])
-  const [templatesLoading, setTemplatesLoading] = React.useState(true)
+  const builtinTemplates = React.useMemo(
+    () => listBuiltinCanvasTemplates().map((template): ConfiguredCanvasTemplate => ({
+      id: template.id,
+      name: template.name,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt,
+      access: template.access,
+      teamShared: template.teamShared,
+      templateTitle: template.templateTitle,
+      templateDescription: template.templateDescription,
+      templateCoverUrl: template.templateCoverUrl,
+    })),
+    [],
+  )
+  const [templates, setTemplates] = React.useState<ConfiguredCanvasTemplate[]>(builtinTemplates)
+  const [templatesLoading, setTemplatesLoading] = React.useState(false)
   const [templatesError, setTemplatesError] = React.useState('')
   const previewTemplates = React.useMemo(() => {
     if (!previewSnapshot) return templates
@@ -106,23 +125,24 @@ export default function CanvasHubPage(): JSX.Element {
 
   React.useEffect(() => {
     let active = true
-    setTemplatesLoading(true)
     listPublicProjects()
       .then((items) => {
         if (!active) return
-        setTemplates(items.filter(isConfiguredCanvasTemplate).slice(0, 12))
+        const extras = items
+          .filter(isConfiguredCanvasTemplate)
+          .filter((item) => !isBuiltinCanvasTemplateId(item.id))
+          .slice(0, 12)
+        setTemplates([...builtinTemplates, ...extras])
         setTemplatesError('')
       })
-      .catch((loadError: unknown) => {
+      .catch(() => {
         if (!active) return
-        setTemplates([])
-        setTemplatesError(resolveErrorMessage(loadError, '公开模板加载失败'))
-      })
-      .finally(() => {
-        if (active) setTemplatesLoading(false)
+        // 中文注释：远端公开项目失败不得挡住六个内置模板，也不展示阻断性红色错误。
+        setTemplates(builtinTemplates)
+        setTemplatesError('')
       })
     return () => { active = false }
-  }, [])
+  }, [builtinTemplates])
 
   const directoryIndex = React.useMemo(
     () => directory.state ? buildProjectFsIndex(directory.state) : null,
@@ -269,12 +289,34 @@ export default function CanvasHubPage(): JSX.Element {
     const navigationLease = acquireRouteNavigationLease()
     setCloningTemplateId(template.id)
     void (async () => {
+      let stage = '创建项目'
       try {
+        if (isBuiltinCanvasTemplateId(template.id)) {
+          const source = listBuiltinCanvasTemplates().find((item) => item.id === template.id)
+          if (!source) throw new Error('内置模板定义缺失')
+          const graph = cloneBuiltinCanvasTemplateGraph(source)
+          stage = '创建项目'
+          const receipt = await bootstrapProjectFlow({
+            name: source.templateTitle || source.name,
+            flowName: source.templateTitle || source.name,
+            nodes: graph.nodes,
+            edges: graph.edges,
+          })
+          if (receipt.status === 'partial') {
+            registerProject(receipt.project)
+            toast(`模板保存画布失败：${receipt.error}。项目已创建，可打开后重试保存。`, 'error')
+            return
+          }
+          registerProject(receipt.project)
+          await placeCreatedProject(receipt.project, activeFolderId, navigationLease)
+          return
+        }
+        stage = '复制远端模板'
         const project = await cloneProject(template.id, template.templateTitle?.trim() || template.name)
         registerProject(project)
         await placeCreatedProject(project, activeFolderId, navigationLease)
       } catch (cloneError: unknown) {
-        toast(resolveErrorMessage(cloneError, '模板克隆失败'), 'error')
+        toast(`模板${stage}失败：${resolveErrorMessage(cloneError, '模板克隆失败')}`, 'error')
       } finally {
         setCloningTemplateId(null)
       }

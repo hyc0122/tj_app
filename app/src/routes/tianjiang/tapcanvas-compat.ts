@@ -13,6 +13,7 @@ import { listCanvasAssets } from "@/tianjiang/canvas/canvas-asset-service";
 import { confirmCanvasExecution, previewCanvasExecution } from "@/tianjiang/canvas/canvas-execution-service";
 import { listCanvasExecutions } from "@/tianjiang/canvas/canvas-execution-events";
 import { CanvasRuntimeError, readCanvasDocument, saveCanvasDocument, type CanvasDocumentEnvelope } from "@/tianjiang/canvas/canvas-document-service";
+import { db } from "@/utils/db";
 import { runHomePlan } from "@/tianjiang/canvas/canvas-chat-service";
 import { uploadTapCanvasAsset } from "@/tianjiang/canvas/tapcanvas-asset-upload";
 import {
@@ -54,6 +55,21 @@ import u from "@/utils";
 
 const router = express.Router();
 const TAPCANVAS_HIDE_TEAM = true;
+
+/** 中文注释：personal / personal_* 是前端个人作用域哨兵，不是团队 ID。 */
+function isPersonalCanvasTeamId(teamId: unknown): boolean {
+  if (teamId == null) return true;
+  const value = String(teamId).trim();
+  return value === "" || value === "personal" || value.startsWith("personal_");
+}
+
+function rejectDisabledTeamCanvas(res: express.Response, teamId: unknown): boolean {
+  if (TAPCANVAS_HIDE_TEAM && !isPersonalCanvasTeamId(teamId)) {
+    res.status(403).send({ error: "team_disabled", message: "暂不支持团队画布" });
+    return true;
+  }
+  return false;
+}
 
 type OverlayProject = {
   id: string;
@@ -179,16 +195,218 @@ async function readProjectAliases(): Promise<ProjectAliasState> {
   }));
 }
 
+function isOwnedPersonalCanvas(item: {
+  kind?: string;
+  businessType?: string;
+  ownerUserId?: number;
+  myRole?: string;
+}, session: CentralSession): boolean {
+  return item.kind === "personal"
+    && item.businessType === "canvas"
+    && Number(item.ownerUserId) === Number(session.user.id)
+    && item.myRole === "owner";
+}
+
 async function listUserProjects(session: CentralSession): Promise<OverlayProject[]> {
   const aliases = await readProjectAliases();
   const catalog = syncCoordinator.listProjects(session)
-    .filter((item) => String((item as { businessType?: string }).businessType ?? "") === "canvas")
+    .filter((item) => isOwnedPersonalCanvas(item, session))
     .map((item) => {
       const dto = projectDtoFromCatalog(item, session);
       const alias = aliases[item.projectUuid];
       return alias ? { ...dto, name: alias.name, updatedAt: alias.updatedAt } : dto;
     });
   return catalog;
+}
+
+type NovelRow = {
+  id?: number;
+  chapterIndex?: number | null;
+  chapter?: string | null;
+  chapterData?: string | null;
+  projectId?: number | null;
+  createTime?: number | null;
+};
+
+function compatBookId(projectUuid: string, novelProjectId: string): string {
+  return `tj-novel:${projectUuid}:${novelProjectId}`;
+}
+
+function parseCompatBookId(bookId: string): { projectUuid: string; novelProjectId: string } | null {
+  const match = /^tj-novel:([0-9a-f-]{36}):([0-9]+|default)$/i.exec(String(bookId ?? "").trim());
+  if (!match) return null;
+  return { projectUuid: match[1]!, novelProjectId: match[2]! };
+}
+
+function novelGroupKey(row: NovelRow): string {
+  return Number.isFinite(Number(row.projectId)) ? String(Number(row.projectId)) : "default";
+}
+
+function chapterOffsetBounds(rows: NovelRow[]): Array<{
+  chapter: number;
+  title: string;
+  startLine: number;
+  endLine: number;
+  startOffset: number;
+  endOffset: number;
+  length: number;
+}> {
+  let offset = 0;
+  let line = 1;
+  return rows.map((row, index) => {
+    const text = String(row.chapterData ?? "");
+    const length = text.length;
+    const startOffset = offset;
+    const endOffset = offset + length;
+    const lineCount = text.length === 0 ? 1 : text.split(/\r?\n/).length;
+    const startLine = line;
+    const endLine = line + lineCount - 1;
+    offset = endOffset + (index === rows.length - 1 ? 0 : 1);
+    line = endLine + 1;
+    return {
+      chapter: Number(row.chapterIndex ?? index + 1) || index + 1,
+      title: String(row.chapter ?? "").trim() || `第 ${index + 1} 章`,
+      startLine,
+      endLine,
+      startOffset,
+      endOffset,
+      length,
+    };
+  });
+}
+
+async function readProjectNovels(): Promise<NovelRow[]> {
+  return db("o_novel")
+    .select("id", "chapterIndex", "chapter", "chapterData", "projectId", "createTime")
+    .orderBy("chapterIndex", "asc") as Promise<NovelRow[]>;
+}
+
+function toBookListItems(projectUuid: string, rows: NovelRow[]): Array<{
+  bookId: string;
+  title: string;
+  chapterCount: number;
+  updatedAt: string;
+}> {
+  const groups = new Map<string, NovelRow[]>();
+  for (const row of rows) {
+    const key = novelGroupKey(row);
+    const current = groups.get(key) ?? [];
+    current.push(row);
+    groups.set(key, current);
+  }
+  return [...groups.entries()].map(([novelProjectId, chapters]) => {
+    const latest = Math.max(0, ...chapters.map((row) => Number(row.createTime ?? 0)));
+    return {
+      bookId: compatBookId(projectUuid, novelProjectId),
+      title: String(chapters[0]?.chapter ?? "").trim() || "未命名小说",
+      chapterCount: chapters.length,
+      updatedAt: latest > 0 ? new Date(latest * (latest < 1e12 ? 1000 : 1)).toISOString() : new Date(0).toISOString(),
+    };
+  });
+}
+
+function emptyExecutionHealth() {
+  return {
+    status: "healthy" as const,
+    staleAfterSeconds: 0,
+    totalTraceCount: 0,
+    runningTraceCount: 0,
+    waitingAsyncTraceCount: 0,
+    staleRunningTraceCount: 0,
+    sequenceMismatchCount: 0,
+    terminalIntegrityIssueCount: 0,
+    orphanParentTraceCount: 0,
+    persistenceDegradedTraceCount: 0,
+    totalEventCount: 0,
+    totalPayloadBytes: 0,
+    oldestActiveStartedAt: null as string | null,
+    calculatedAt: new Date().toISOString(),
+  };
+}
+
+function emptyDiagnosticsMetrics() {
+  return {
+    traceCount: 0,
+    succeededCount: 0,
+    failedCount: 0,
+    partialCount: 0,
+    needsInputCount: 0,
+    persistedCount: 0,
+    degradedCount: 0,
+    totalTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadInputTokens: 0,
+    totalDurationMs: 0,
+    averageDurationMs: null as number | null,
+    p50DurationMs: null as number | null,
+    p95DurationMs: null as number | null,
+    acceptedAsyncCount: 0,
+    materializedAsyncCount: 0,
+    staleAsyncCount: 0,
+  };
+}
+
+function mapCanvasRunStatus(state: string): "running" | "succeeded" | "failed" | "suspended" {
+  if (state === "succeeded") return "succeeded";
+  if (state === "failed") return "failed";
+  if (
+    state === "canceled"
+    || state === "cancelled"
+    || state === "waiting_for_origin_device"
+    || state === "confirmation_required"
+  ) return "suspended";
+  return "running";
+}
+
+function emptyAgentDiagnostics(projectId: string | null, extra: {
+  traces?: Array<Record<string, unknown>>;
+  spans?: Array<Record<string, unknown>>;
+} = {}) {
+  const traces = extra.traces ?? [];
+  const spans = extra.spans ?? [];
+  const statuses = traces.map((trace) => String(trace.status ?? ""));
+  const waitingAsyncTraceCount = traces.filter((trace) => {
+    const meta = trace.meta && typeof trace.meta === "object" ? trace.meta as Record<string, unknown> : {};
+    const state = String(meta.state ?? "");
+    return state === "waiting_for_origin_device" || state === "queued";
+  }).length;
+  const activeStartedAt = traces
+    .filter((trace) => trace.status === "running" || trace.status === "suspended")
+    .map((trace) => String(trace.startedAt ?? ""))
+    .filter(Boolean)
+    .sort()[0] ?? null;
+  return {
+    projectId,
+    bookId: null,
+    chapterId: null,
+    flowId: null,
+    nodeId: null,
+    label: null,
+    traces,
+    executionHealth: {
+      ...emptyExecutionHealth(),
+      totalTraceCount: traces.length,
+      runningTraceCount: statuses.filter((status) => status === "running").length,
+      waitingAsyncTraceCount,
+      oldestActiveStartedAt: activeStartedAt,
+    },
+    publicChatRuns: [],
+    storyboardDiagnostics: [],
+    spans,
+    metrics: {
+      ...emptyDiagnosticsMetrics(),
+      traceCount: traces.length,
+      succeededCount: statuses.filter((status) => status === "succeeded").length,
+      failedCount: statuses.filter((status) => status === "failed").length,
+      persistedCount: traces.length,
+    },
+    evaluations: [],
+    humanFeedback: [],
+    annotationQueue: [],
+    regressionExamples: [],
+    nextCursor: null,
+  };
 }
 
 function emptyDirectory() {
@@ -539,7 +757,7 @@ router.get("/projects", async (req, res) => {
     res.status(401).send({ error: "unauthenticated" });
     return;
   }
-  if (TAPCANVAS_HIDE_TEAM && req.query.teamId && req.query.teamId !== "personal") {
+  if (TAPCANVAS_HIDE_TEAM && req.query.teamId && !isPersonalCanvasTeamId(req.query.teamId)) {
     res.status(200).send(req.query.limit ? { items: [], nextCursor: null } : []);
     return;
   }
@@ -557,10 +775,7 @@ router.post("/projects", async (req, res) => {
     res.status(401).send({ error: "unauthenticated" });
     return;
   }
-  if (TAPCANVAS_HIDE_TEAM && req.body?.teamId) {
-    res.status(403).send({ error: "team_disabled", message: "暂不支持团队画布" });
-    return;
-  }
+  if (rejectDisabledTeamCanvas(res, req.body?.teamId)) return;
   const name = String(req.body?.name ?? "未命名画布").trim() || "未命名画布";
   if (req.body?.id) {
     const id = String(req.body.id);
@@ -586,10 +801,7 @@ router.post("/projects/bootstrap", async (req, res) => {
     res.status(401).send({ error: "unauthenticated" });
     return;
   }
-  if (TAPCANVAS_HIDE_TEAM && req.body?.teamId) {
-    res.status(403).send({ error: "team_disabled", message: "暂不支持团队画布" });
-    return;
-  }
+  if (rejectDisabledTeamCanvas(res, req.body?.teamId)) return;
   const name = String(req.body?.name ?? "未命名画布").trim() || "未命名画布";
   const generatePrompt = String(req.body?.prompt ?? "").trim();
   let created: OverlayProject;
@@ -680,8 +892,8 @@ router.get("/flows", async (req, res) => {
   try {
     const envelope = await withOpenPersonalCanvasProject(projectId, "read", async () => readCanvasDocument(projectId), sessionOf(req));
     res.status(200).send([flowEnvelopeDto(projectId, envelope)]);
-  } catch {
-    res.status(200).send([]);
+  } catch (error) {
+    writeTapCanvasError(res, error);
   }
 });
 
@@ -851,6 +1063,78 @@ router.post("/assets/upload", async (req, res) => {
       ownerNodeId: String(req.query.ownerNodeId ?? ""),
     }), session);
     res.status(201).send(result);
+  } catch (error) {
+    writeTapCanvasError(res, error);
+  }
+});
+
+router.get("/assets/books", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.query.projectId ?? "").trim();
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId) {
+    res.status(400).send({ code: "project_id_required", message: "必须指定个人画布项目" });
+    return;
+  }
+  try {
+    const items = await withOpenPersonalCanvasProject(projectId, "read", async () => {
+      const rows = await readProjectNovels();
+      return toBookListItems(projectId, rows);
+    }, session);
+    res.status(200).send(items);
+  } catch (error) {
+    writeTapCanvasError(res, error);
+  }
+});
+
+router.get("/assets/books/:bookId/index", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.query.projectId ?? "").trim();
+  const bookId = String(req.params.bookId ?? "").trim();
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId) {
+    res.status(400).send({ code: "project_id_required", message: "必须指定个人画布项目" });
+    return;
+  }
+  const parsed = parseCompatBookId(bookId);
+  if (!parsed) {
+    res.status(400).send({ code: "book_id_invalid", message: "书籍 ID 无效" });
+    return;
+  }
+  if (parsed.projectUuid.toLowerCase() !== projectId.toLowerCase()) {
+    res.status(403).send({ code: "book_project_mismatch", message: "书籍不属于当前个人画布项目" });
+    return;
+  }
+  try {
+    const index = await withOpenPersonalCanvasProject(projectId, "read", async () => {
+      const rows = await readProjectNovels();
+      const grouped = toBookListItems(projectId, rows);
+      const found = grouped.find((item) => item.bookId === compatBookId(projectId, parsed.novelProjectId));
+      if (!found) {
+        throw Object.assign(new Error("书籍不存在或不属于当前项目"), {
+          status: 404,
+          errorCode: "book_not_found",
+        });
+      }
+      const chapters = rows.filter((row) => novelGroupKey(row) === parsed.novelProjectId);
+      const bounds = chapterOffsetBounds(chapters);
+      return {
+        bookId: found.bookId,
+        projectId,
+        title: found.title,
+        chapterCount: found.chapterCount,
+        updatedAt: found.updatedAt,
+        rawPath: "",
+        chapters: bounds,
+      };
+    }, session);
+    res.status(200).send(index);
   } catch (error) {
     writeTapCanvasError(res, error);
   }
@@ -1494,6 +1778,111 @@ router.get("/executions", async (req, res) => {
     res.status(200).send(data);
   } catch {
     res.status(200).send([]);
+  }
+});
+
+router.get("/agents/diagnostics", async (req, res) => {
+  const session = sessionOf(req);
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  const projectId = String(req.query.projectId ?? "").trim();
+  if (!projectId) {
+    res.status(200).send(emptyAgentDiagnostics(null));
+    return;
+  }
+  try {
+    const payload = await withOpenPersonalCanvasProject(projectId, "read", async () => {
+      const listed = await listCanvasExecutions(projectId);
+      const spans = listed.runs.map((run) => {
+        const runUuid = String(run.runUuid ?? "");
+        const state = String(run.state ?? "");
+        const createdAt = String(run.createdAt ?? run.updatedAt ?? new Date(0).toISOString());
+        const updatedAt = String(run.updatedAt ?? createdAt);
+        const nodeUuid = String(run.nodeUuid ?? "");
+        return {
+          version: 1 as const,
+          id: runUuid,
+          traceId: runUuid,
+          spanId: runUuid,
+          parentSpanId: null,
+          linkedSpanIds: [],
+          requestId: null,
+          threadId: null,
+          turnId: null,
+          service: "async-worker" as const,
+          kind: "async_task" as const,
+          name: nodeUuid || runUuid,
+          status: mapCanvasRunStatus(state),
+          startedAt: createdAt,
+          finishedAt: state === "succeeded" || state === "failed" || state === "canceled" ? updatedAt : null,
+          durationMs: null,
+          scope: {
+            projectId,
+            bookId: null,
+            chapterId: null,
+            flowId: null,
+            nodeId: nodeUuid || null,
+            label: null,
+            workflowKey: null,
+          },
+          modelKey: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          costCredits: null,
+          capturePolicy: "structural" as const,
+          persistenceStatus: "persisted" as const,
+          errorCode: run.failureText ? "canvas_run_failed" : null,
+          attributes: {
+            state,
+            runUuid,
+            nodeUuid,
+          },
+          createdAt,
+        };
+      });
+      const traces = listed.runs.map((run) => {
+        const runUuid = String(run.runUuid ?? "");
+        const createdAt = String(run.createdAt ?? run.updatedAt ?? new Date(0).toISOString());
+        const updatedAt = String(run.updatedAt ?? createdAt);
+        const state = String(run.state ?? "");
+        return {
+          id: runUuid,
+          scopeType: "project",
+          scopeId: projectId,
+          taskId: runUuid,
+          requestKind: "canvas_execution",
+          inputSummary: String(run.nodeUuid ?? ""),
+          decisionLog: [],
+          toolCalls: [],
+          meta: { state },
+          resultSummary: null,
+          errorCode: run.failureText ? String(run.failureText) : null,
+          errorDetail: run.failureText ? String(run.failureText) : null,
+          createdAt,
+          status: mapCanvasRunStatus(state),
+          sessionKey: null,
+          workflowKey: null,
+          logicalTaskId: runUuid,
+          rootTraceId: runUuid,
+          parentTraceId: null,
+          physicalRunId: runUuid,
+          workflowRunId: null,
+          startedAt: createdAt,
+          updatedAt,
+          finishedAt: state === "succeeded" || state === "failed" || state === "canceled" ? updatedAt : null,
+          nextEventSeq: 0,
+        };
+      });
+      return emptyAgentDiagnostics(projectId, { traces, spans });
+    }, session);
+    res.status(200).send(payload);
+  } catch (error) {
+    writeTapCanvasError(res, error);
   }
 });
 

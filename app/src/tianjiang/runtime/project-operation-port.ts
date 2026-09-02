@@ -197,7 +197,7 @@ function isCanvasProjectOpened(projectUuid: string, coordinator: object): boolea
   return Boolean(opened?.has(projectUuid) || opened?.has(projectUuid.toLowerCase()));
 }
 
-/** 个人画布唯一授权边界：必须已打开、personal/canvas、当前账号 owner。 */
+/** 个人画布唯一授权边界：personal/canvas、当前账号 owner；目录通过后才打开本地库。 */
 export async function withOpenPersonalCanvasProject<T>(
   projectUuid: string,
   mode: "read" | "write",
@@ -216,17 +216,43 @@ export async function withOpenPersonalCanvasProject<T>(
   const item = catalog.find((row) => row.projectUuid === projectUuid);
   if (!item) canvasPermissionDenied();
   if (item.kind !== "personal" || item.businessType !== "canvas") canvasPermissionDenied();
-  if (Number(item.ownerUserId) !== Number(session.user.id) && item.myRole !== "owner") {
+  if (Number(item.ownerUserId) !== Number(session.user.id) || item.myRole !== "owner") {
     canvasPermissionDenied();
   }
-  if (!isCanvasProjectOpened(projectUuid, syncCoordinator)) canvasPermissionDenied();
-  if (mode === "write" && (item.openMode === "readonly" || item.myRole === "viewer")) {
-    canvasPermissionDenied();
+  let openedHereGeneration: number | null = null;
+  let operationError: unknown;
+  try {
+    // 中文注释：目录已证明是当前账号的个人画布后，才允许打开本地库；禁止凭猜测 UUID 预创建项目库。
+    // 清理边界必须覆盖打开后的所有校验，避免登记失败或只读拒绝时把运行时遗留在内存。
+    if (!isCanvasProjectOpened(projectUuid, syncCoordinator)) {
+      if (typeof syncCoordinator.openProject !== "function") canvasPermissionDenied();
+      const opened = await syncCoordinator.openProject(session, projectUuid);
+      const runtimeGeneration = Number(opened?.runtimeGeneration);
+      if (!Number.isSafeInteger(runtimeGeneration) || runtimeGeneration <= 0) canvasPermissionDenied();
+      openedHereGeneration = runtimeGeneration;
+      if (!isCanvasProjectOpened(projectUuid, syncCoordinator)) canvasPermissionDenied();
+    }
+    if (mode === "write" && item.openMode === "readonly") {
+      canvasPermissionDenied();
+    }
+    const identity = { issuer: session.serverUrl, userId: session.user.id };
+    return await runWithUserStorage(identity, () => runWithProjectStorage(projectUuid, () => handler({
+      projectUuid,
+      mode,
+      session,
+    })));
+  } catch (error) {
+    operationError = error;
+    throw error;
+  } finally {
+    if (openedHereGeneration !== null) {
+      try {
+        // 中文注释：兼容接口仅做兜底短开；宿主正常流程会提前持有 UI 运行时，
+        // 这里必须按本次准确代次回收，避免历史画布在项目切换后常驻内存。
+        await syncCoordinator.closeProject(session, projectUuid, openedHereGeneration);
+      } catch (closeError) {
+        if (operationError === undefined) throw closeError;
+      }
+    }
   }
-  const identity = { issuer: session.serverUrl, userId: session.user.id };
-  return runWithUserStorage(identity, () => runWithProjectStorage(projectUuid, () => handler({
-    projectUuid,
-    mode,
-    session,
-  })));
 }

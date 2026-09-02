@@ -212,6 +212,7 @@ export async function listCanvasExecutions(projectUuid: string): Promise<{ runs:
       projectUuid,
       sequence: Number(row.run_generation),
       failureText: row.failure_text ? String(row.failure_text) : "",
+      createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     })),
   };

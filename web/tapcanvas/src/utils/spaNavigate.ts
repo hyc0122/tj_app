@@ -2,6 +2,7 @@ import { useIntentLifecycle } from '../canvas/intentLifecycle'
 
 const NAVIGATION_STATE_KEY = '__tapcanvasNavigation'
 const NAVIGATION_SESSION_KEY = 'tapcanvas:navigation-session'
+const TIANJIANG_HOST_SESSION_KEY = 'tapcanvas:tianjiang-host'
 
 interface TapCanvasNavigationState {
   sessionId: string
@@ -64,10 +65,47 @@ function shouldGuard(to: string): boolean {
   }
 }
 
+/**
+ * 天将桌面端把 TapCanvas 放在同源 iframe 内。画布项目切换必须交给宿主路由，
+ * 由宿主持有并准确关闭项目运行时代次，禁止 iframe 私自切页造成项目句柄常驻。
+ */
+function navigateThroughTianjiangHost(to: string, replace: boolean): boolean {
+  if (typeof window === 'undefined' || window.parent === window) return false
+  const current = new URL(window.location.href)
+  if (current.searchParams.get('tjHost') === '1') {
+    window.sessionStorage.setItem(TIANJIANG_HOST_SESSION_KEY, '1')
+  }
+  if (window.sessionStorage.getItem(TIANJIANG_HOST_SESSION_KEY) !== '1') return false
+  const target = new URL(to, window.location.origin)
+  if (target.origin !== window.location.origin) return false
+  const normalizedPath = target.pathname.replace(/^\/tapcanvas(?=\/|$)/, '') || '/'
+  const projectUuid = target.searchParams.get('projectId')?.trim() ?? ''
+  if ((normalizedPath === '/studio' || normalizedPath.startsWith('/studio/')) && projectUuid) {
+    window.parent.postMessage({
+      type: 'tianjiang:tapcanvas:navigate',
+      destination: 'studio',
+      projectUuid,
+      replace,
+    }, window.location.origin)
+    return true
+  }
+  if (normalizedPath === '/' || normalizedPath === '/projects' || normalizedPath === '/canvas') {
+    window.parent.postMessage({
+      type: 'tianjiang:tapcanvas:navigate',
+      destination: 'home',
+      projectUuid: null,
+      replace,
+    }, window.location.origin)
+    return true
+  }
+  return false
+}
+
 export function spaNavigate(to: string) {
   if (typeof window === 'undefined') return
   if (shouldGuard(to) && !useIntentLifecycle.getState().confirmAbandonAgent()) return
   const next = String(to || '').trim() || '/'
+  if (navigateThroughTianjiangHost(next, false)) return
   try {
     const current = ensureNavigationState()
     window.history.pushState(historyStateAt(current.index + 1), '', next)
@@ -82,6 +120,7 @@ export function spaReplace(to: string) {
   if (typeof window === 'undefined') return
   if (shouldGuard(to) && !useIntentLifecycle.getState().confirmAbandonAgent()) return
   const next = String(to || '').trim() || '/'
+  if (navigateThroughTianjiangHost(next, true)) return
   try {
     const current = ensureNavigationState()
     window.history.replaceState(historyStateAt(current.index), '', next)
