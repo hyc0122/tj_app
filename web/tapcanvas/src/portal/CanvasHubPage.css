@@ -58,6 +58,24 @@
   padding: 4px 10px;
 }
 
+/* 天将外层已有“无限画布”导航，这里只保留右上角账号入口，不再占用一整行。 */
+.canvas-hub-page > .neo-portal-header--account-only {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  left: auto;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+
+.canvas-hub-page > .neo-portal-header--account-only .neo-portal-header__actions {
+  margin: 0;
+}
+
 .canvas-hub-page .neo-portal-brand__wordmark {
   gap: 9px;
 }
@@ -140,7 +158,7 @@
 .canvas-hub-main {
   width: 100%;
   max-width: none;
-  min-height: calc(100vh - 62px);
+  min-height: 100vh;
   margin: 0 auto;
   padding: 20px 20px 40px;
 }

@@ -12,7 +12,7 @@ import { useIsAdmin } from '../auth/isAdmin'
 import { TapCanvasWordmark } from '../ui/brand/TapCanvasMark'
 import { spaNavigate } from '../utils/spaNavigate'
 import { preloadPortalRoute } from './portalRouteModules'
-import { TAPCANVAS_HIDE_COMMUNITY } from '../tianjiang/integrationFlags'
+import { TAPCANVAS_HIDE_COMMUNITY, TAPCANVAS_TIANJIANG_ADAPTER } from '../tianjiang/integrationFlags'
 
 const PortalAccountRuntime = React.lazy(() => import('./PortalAccountRuntime'))
 const PortalLoginRuntime = React.lazy(() => import('./PortalLoginRuntime'))
@@ -58,6 +58,7 @@ export function PortalHeader({ active, onNavigate, onRequestLogin }: PortalHeade
   const auth = useAuth()
   const isAdmin = useIsAdmin()
   const [loginOpen, setLoginOpen] = React.useState(false)
+  const accountOnly = TAPCANVAS_TIANJIANG_ADAPTER && active === 'projects'
 
   React.useEffect(() => {
     if (onNavigate) return
@@ -94,17 +95,17 @@ export function PortalHeader({ active, onNavigate, onRequestLogin }: PortalHeade
 
   return (
     <>
-      <header className="neo-portal-header">
-        <button className="neo-portal-brand" type="button" aria-label="TapCanvas 首页" onClick={() => navigate('/')}>
+      <header className={`neo-portal-header${accountOnly ? ' neo-portal-header--account-only' : ''}`}>
+        {accountOnly ? null : <button className="neo-portal-brand" type="button" aria-label="TapCanvas 首页" onClick={() => navigate('/')}>
           <TapCanvasWordmark
             className="neo-portal-brand__wordmark"
             markClassName="neo-portal-brand__logo"
             nameClassName="neo-portal-brand__name"
             markSize={27}
           />
-        </button>
+        </button>}
 
-        <nav className="neo-portal-nav" aria-label="主导航">
+        {accountOnly ? null : <nav className="neo-portal-nav" aria-label="主导航">
           {(TAPCANVAS_HIDE_COMMUNITY
             ? NAV_ITEMS.filter((item) => item.key === 'projects' || item.key === 'home')
             : NAV_ITEMS
@@ -134,7 +135,7 @@ export function PortalHeader({ active, onNavigate, onRequestLogin }: PortalHeade
               </button>
             )
           })}
-        </nav>
+        </nav>}
 
         <div className="neo-portal-header__actions">
           {isAdmin && active === 'home' ? (

@@ -41,3 +41,26 @@ export function accumulateSelectionChanges(
 
   return merged
 }
+
+/**
+ * 在确认发生普通点击时，立即把 React Flow 已产生的选中变化提交到业务 store。
+ *
+ * 框选仍走防抖批量提交；只有确认点击需要同步提交，避免完整节点挂载后的数据回写
+ * 使用旧的 selected 状态覆盖 React Flow 内部已经选中的节点。
+ */
+export function flushPendingSelectionCommit<NodeType extends Node>(input: {
+  pendingRef: { current: NodeChange<NodeType>[] }
+  timerRef: { current: ReturnType<typeof setTimeout> | null }
+  commit: (changes: NodeChange<NodeType>[]) => void
+  cancelTimer?: (timer: ReturnType<typeof setTimeout>) => void
+}): void {
+  const timer = input.timerRef.current
+  if (timer !== null) {
+    ;(input.cancelTimer ?? clearTimeout)(timer)
+    input.timerRef.current = null
+  }
+
+  const pending = input.pendingRef.current
+  input.pendingRef.current = []
+  if (pending.length) input.commit(pending)
+}

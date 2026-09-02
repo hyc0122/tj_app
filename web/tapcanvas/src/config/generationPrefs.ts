@@ -2,15 +2,29 @@
 // 消费方：① 画布在动态模型目录加载完成后校验并采用偏好 ② 生成偏好弹窗回显。
 // 服务端真相源 = users.generation_prefs（小T 上下文注入走服务端，不依赖本缓存）。
 import { getGenerationPreferences, putGenerationPreferences, type UserGenerationPrefsDto } from '../api/server'
+import type { ModelOption } from './models'
 
 export const GENERATION_PREFS_EVENT = 'tapcanvas-generation-prefs-changed'
 
 export const DEFAULT_GENERATION_PREFS: Readonly<Required<UserGenerationPrefsDto>> = {
-  imageModel: 'gpt-image-2',
+  imageModel: '',
   imageSize: '1K',
-  videoModel: 'minimax-h3',
+  videoModel: '',
   videoResolution: '768p',
   videoAspect: '16:9',
+}
+
+/**
+ * 画布下拉框保存稳定显示值，账号偏好必须保存模型服务发布的真实请求路由键。
+ * 禁止在缺少路由键时退回显示别名，否则下一次生成仍可能绕过系统模型映射。
+ */
+export function toGenerationPreferenceModelPatch(
+  field: 'imageModel' | 'videoModel',
+  option: ModelOption,
+): UserGenerationPrefsDto {
+  const requestModelKey = String(option.modelKey || '').trim()
+  if (!requestModelKey) throw new Error(`模型 ${option.label || option.value} 缺少系统请求路由键`)
+  return { [field]: requestModelKey }
 }
 
 let cachedPrefs: UserGenerationPrefsDto | null = null

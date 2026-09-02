@@ -197,7 +197,11 @@ import { buildComposeInitialPatch, buildComposeUrlSwapPatch } from './taskNode/c
 import { INTENT_ACTIONS } from './taskNode/intentActions'
 import { dispatchIntent } from '../dispatchIntent'
 import { readNodeModelPrefs, saveNodeModelPrefs } from '../nodeModelPrefs'
-import { DEFAULT_GENERATION_PREFS, updateRecentGenerationPrefs } from '../../config/generationPrefs'
+import {
+  DEFAULT_GENERATION_PREFS,
+  toGenerationPreferenceModelPatch,
+  updateRecentGenerationPrefs,
+} from '../../config/generationPrefs'
 import { resolveIntentChapterContext } from './taskNode/intentChapterContext'
 import { useIntentLifecycle } from '../intentLifecycle'
 import type { ChapterCanvasIntent } from '@tapcanvas/chapter-canvas-intents'
@@ -2320,11 +2324,13 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     const firstValue = firstOption.value.trim()
     if (isVideoNode) {
       setVideoModel(firstValue)
+      saveNodeModelPrefs({ videoModel: firstValue })
       updateNodeData(id, { videoModel: firstValue, videoModelVendor: firstOption.vendor || null })
       return
     }
     if (coreKind === 'image' || kind === 'imageEdit') {
       setImageModel(firstValue)
+      saveNodeModelPrefs({ imageModel: firstValue })
       updateNodeData(id, { imageModel: firstValue, imageModelVendor: null })
       return
     }
@@ -3166,8 +3172,11 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     }
   }, [durationOptions, hasDuration, id, isVideoNode, updateNodeData, videoDuration])
 
-  const persistRecentGenerationPrefs = React.useCallback((patch: UserGenerationPrefsDto) => {
-    saveNodeModelPrefs(patch)
+  const persistRecentGenerationPrefs = React.useCallback((
+    patch: UserGenerationPrefsDto,
+    localPatch: UserGenerationPrefsDto = patch,
+  ) => {
+    saveNodeModelPrefs(localPatch)
     void updateRecentGenerationPrefs(patch).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
       toast(`账号生成偏好保存失败：${message}`, 'error')
@@ -3185,13 +3194,19 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     if (isVideoNode) {
       setVideoModel(selectedValue)
       updateNodeData(id, { videoModel: selectedValue, videoModelVendor: option.vendor || null })
-      persistRecentGenerationPrefs({ videoModel: selectedValue })
+      persistRecentGenerationPrefs(
+        toGenerationPreferenceModelPatch('videoModel', option),
+        { videoModel: selectedValue },
+      )
       return
     }
     if (coreKind === 'image' || kind === 'imageEdit') {
       setImageModel(selectedValue)
       updateNodeData(id, { imageModel: selectedValue, imageModelVendor: null })
-      persistRecentGenerationPrefs({ imageModel: selectedValue })
+      persistRecentGenerationPrefs(
+        toGenerationPreferenceModelPatch('imageModel', option),
+        { imageModel: selectedValue },
+      )
       return
     }
     setModelKey(selectedValue)
@@ -10923,7 +10938,13 @@ const rewritePromptWithCharacters = React.useCallback(
           onCancel={() => setPendingIntentConfig(null)}
           onConfirm={({ imageModel, imageSize }) => {
             if (!pendingIntentConfig) return
-            persistRecentGenerationPrefs({ imageModel, imageSize })
+            const selectedOption = findModelOptionByIdentifier(modelMenuOptions, imageModel)
+            if (selectedOption) {
+              persistRecentGenerationPrefs(
+                { ...toGenerationPreferenceModelPatch('imageModel', selectedOption), imageSize },
+                { imageModel, imageSize },
+              )
+            }
             void dispatchIntent(pendingIntentConfig.intent, id, {
               chapterContext: pendingIntentConfig.chapterContext,
               generationConfig: { imageModel, imageSize },

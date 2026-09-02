@@ -65,7 +65,7 @@ import { usePreventBrowserSwipeNavigation } from '../utils/usePreventBrowserSwip
 import { formatErrorMessage } from './utils/formatErrorMessage'
 import { getPointToRectDistance, isPointInsideRect, screenPathIntersectsRect } from './utils/connectionAutoSnap'
 import { normalizeCanvasNodeChanges } from './utils/normalizeCanvasNodeChanges'
-import { accumulateSelectionChanges } from './utils/accumulateSelectionChanges'
+import { accumulateSelectionChanges, flushPendingSelectionCommit } from './utils/accumulateSelectionChanges'
 import { shouldHideEdgesAtZoom } from './utils/extremeZoomEdgeVisibility'
 import { getConnectedNodeIds } from './utils/connectedNodeIds'
 import { computeTidyByCategoryLayout } from './tidyByCategory'
@@ -1874,6 +1874,14 @@ function CanvasInner({
     if (pending?.length) onNodesChange(pending)
   }, [onNodesChange])
 
+  const flushPendingSelection = useCallback(() => {
+    flushPendingSelectionCommit({
+      pendingRef: pendingSelectionChangesRef,
+      timerRef: selectionCommitTimerRef,
+      commit: onNodesChange,
+    })
+  }, [onNodesChange])
+
   const onNodeDragStart = useCallback((_evt: any, node: any) => {
     // A rapid second drag must first persist the previous drag's final visual
     // position; otherwise the controlled business graph could overwrite it.
@@ -2460,6 +2468,8 @@ function CanvasInner({
       const soleSelectedNodeId = selectRfSoleSelectedNodeId(reactFlowStore.getState())
       const canFocusImmediately =
         !hasSelectionModifier && node.type !== 'groupNode' && soleSelectedNodeId === clickedNodeId
+      // 中文注释：完整节点挂载会回写模型等数据；先固化选中态，避免受控节点数组用旧 selected 覆盖焦点。
+      flushPendingSelection()
       // React Flow's internal selection is already updated by the time this
       // confirmed click callback runs. Publish it directly to the focus store so
       // the shell can hydrate on this click, without waiting for the debounced
@@ -2503,7 +2513,7 @@ function CanvasInner({
       : null
     setTapConnectSource({ nodeId: node.id })
     setConnectingType(derivedType)
-  }, [closeCanvasReferencePicker, quickConnectNodes, reactFlowStore, referencePickerBlockedSourceIds, referencePickerTargetId, tapConnectSource])
+  }, [closeCanvasReferencePicker, flushPendingSelection, quickConnectNodes, reactFlowStore, referencePickerBlockedSourceIds, referencePickerTargetId, tapConnectSource])
 
   const selectedNonGroupNodes = useMemo(
     () => selectedNodeSummaries.filter((node) => node.type !== 'groupNode'),
