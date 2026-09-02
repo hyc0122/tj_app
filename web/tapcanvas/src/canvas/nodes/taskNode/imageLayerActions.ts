@@ -11,7 +11,6 @@ import { useRFStore } from '../../store'
 import { useUIStore } from '../../../ui/uiStore'
 import {
   IMAGE_LAYER_DECOMPOSITION_DEFAULTS,
-  IMAGE_LAYER_DECOMPOSITION_MODEL_KEY,
   readImageLayerAssets,
 } from './imageLayerDecomposition'
 import {
@@ -31,14 +30,19 @@ type UploadEditedImageBlob = (input: Readonly<{
   filePrefix: string
 }>) => Promise<HostedEditedImageAsset>
 
-type ResolveImageEditModel = (requestedModel?: string | null) => string | null
+type ResolvedImageLayerModel = Readonly<{
+  value: string
+  requestModelKey: string
+}>
+
+type ResolveImageLayerModel = () => ResolvedImageLayerModel | null
 
 type RunImageLayerSplitInput = Readonly<{
   data: Record<string, unknown>
   nodeId: string
   nodeWidth: number
   primaryImageUrl: string
-  resolveImageEditModel: ResolveImageEditModel
+  resolveImageLayerModel: ResolveImageLayerModel
   sleep: (milliseconds: number) => Promise<void>
 }>
 
@@ -77,10 +81,10 @@ export async function runImageLayerSplit({
   nodeId,
   nodeWidth,
   primaryImageUrl,
-  resolveImageEditModel,
+  resolveImageLayerModel,
   sleep,
 }: RunImageLayerSplitInput): Promise<void> {
-  const layerModel = resolveImageEditModel(IMAGE_LAYER_DECOMPOSITION_MODEL_KEY)
+  const layerModel = resolveImageLayerModel()
   if (!layerModel) return
   const imageOperationSpec = createImageOperationForSource({
     kind: 'layer_decompose',
@@ -105,9 +109,10 @@ export async function runImageLayerSplit({
   store.addNode('taskNode', '图层分离', {
     kind: 'image',
     status: 'running',
-    imageModel: layerModel,
+    imageModel: layerModel.value,
     imageLayerDecomposition: {
-      modelKey: IMAGE_LAYER_DECOMPOSITION_MODEL_KEY,
+      modelKey: layerModel.requestModelKey,
+      modelValue: layerModel.value,
       ...IMAGE_LAYER_DECOMPOSITION_DEFAULTS,
     },
     imageOperationSpec,
@@ -149,7 +154,7 @@ export async function runImageLayerSplit({
       kind: 'image_edit',
       prompt: layerPrompt,
       extras: {
-        modelKey: layerModel,
+        modelKey: layerModel.requestModelKey,
         referenceImages: [primaryImageUrl],
         imageOperation: 'layer_decompose',
         imageOperationSpec,

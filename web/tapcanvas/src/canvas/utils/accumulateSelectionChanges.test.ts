@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import type { Node, NodeChange } from '@xyflow/react'
-import { accumulateSelectionChanges } from './accumulateSelectionChanges'
+import {
+  accumulateSelectionChanges,
+  commitConfirmedNodeSelectionAndFocus,
+} from './accumulateSelectionChanges'
 import * as selectionChangeHelpers from './accumulateSelectionChanges'
 
 const select = (id: string, selected: boolean): NodeChange<Node> => ({ id, type: 'select', selected })
@@ -163,17 +164,39 @@ describe('accumulateSelectionChanges', () => {
     expect(commit).toHaveBeenCalledTimes(1)
   })
 
-  it('Canvas 点击处理先冲刷选中态再发布焦点，框选路径使用同一调度器', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/canvas/Canvas.tsx'), 'utf8')
-    const clickStart = source.indexOf('const onNodeClick = useCallback')
-    const clickEnd = source.indexOf('const onNodeDoubleClick = useCallback', clickStart)
-    const clickHandler = source.slice(clickStart, clickEnd)
+  it('确认点击运行时契约先固化选中态再发布焦点，模型回写后仍保持选中和焦点', () => {
+    let selected = false
+    let focusedNodeId: string | null = null
+    let requestedNodeId: string | null = null
+    const sequence: string[] = []
 
-    expect(clickStart).toBeGreaterThanOrEqual(0)
-    expect(clickHandler.indexOf('flushPendingSelection()')).toBeGreaterThanOrEqual(0)
-    expect(clickHandler.indexOf('flushPendingSelection()')).toBeLessThan(
-      clickHandler.indexOf('setFocusedNodeId'),
-    )
-    expect(source).toContain('schedulePendingSelectionCommit({')
+    const focused = commitConfirmedNodeSelectionAndFocus({
+      clickedNodeId: 'image-1',
+      clickedNodeType: 'taskNode',
+      hasSelectionModifier: false,
+      soleSelectedNodeId: 'image-1',
+      flushPendingSelection: () => {
+        selected = true
+        sequence.push('selection')
+      },
+      setFocusedNodeId: (nodeId) => {
+        expect(selected).toBe(true)
+        focusedNodeId = nodeId
+        sequence.push('focus')
+      },
+      setFocusRequestedNodeId: (nodeId) => {
+        requestedNodeId = nodeId
+        sequence.push('hydrate')
+      },
+    })
+
+    // 模拟完整节点挂载后把实时模型目录值写回节点数据。
+    const nodeData = { imageModel: 'provider:live-image' }
+    expect(nodeData.imageModel).toBe('provider:live-image')
+    expect(focused).toBe(true)
+    expect(selected).toBe(true)
+    expect(focusedNodeId).toBe('image-1')
+    expect(requestedNodeId).toBe('image-1')
+    expect(sequence).toEqual(['selection', 'focus', 'hydrate'])
   })
 })

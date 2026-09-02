@@ -116,6 +116,8 @@ export function createGenerationPrefsRuntime(
     const operation = state.updateQueue
       .catch(() => undefined)
       .then(async () => {
+        // 中文注释：排队期间可能已经切换账号；必须在真正发起 PUT 前再次校验作用域。
+        if (!isCurrentState(state)) return null
         const result = await input.write(prefs)
         if (!isCurrentState(state)) return null
         state.revision += 1

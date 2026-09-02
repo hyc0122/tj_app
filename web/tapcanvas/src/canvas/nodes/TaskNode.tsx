@@ -2280,6 +2280,14 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
   } = useModelOptionsState('imageEdit', {
     enabled: !viewOnly && coreKind === 'image' && !usePrimaryImageEditCatalog,
   })
+  const {
+    options: imageActionCatalogOptions,
+    loading: imageActionCatalogLoading,
+    error: imageActionCatalogError,
+  } = useModelOptionsState('imageEdit', {
+    enabled: !viewOnly && coreKind === 'image',
+    includeActionModels: true,
+  })
   const imageEditActionOptions = usePrimaryImageEditCatalog ? modelMenuOptions : secondaryImageEditOptions
   const imageEditActionLoading = usePrimaryImageEditCatalog ? modelListLoading : secondaryImageEditLoading
   const imageEditActionError = usePrimaryImageEditCatalog ? modelListError : secondaryImageEditError
@@ -2303,6 +2311,30 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     })
     return matched?.value || null
   }, [imageEditActionError, imageEditActionLoading, imageEditActionOptions, imageModel])
+  const resolveImageLayerModel = React.useCallback((): { value: string; requestModelKey: string } | null => {
+    if (imageActionCatalogLoading) {
+      toast('图片动作模型目录仍在加载，请稍后重试', 'error')
+      return null
+    }
+    if (imageActionCatalogError) {
+      toast(`图片动作模型目录加载失败：${imageActionCatalogError.message}`, 'error')
+      return null
+    }
+    const matched = resolveCatalogActionModelOption({
+      options: imageActionCatalogOptions,
+      requiredActionKey: 'layer_decompose',
+    })
+    if (!matched) {
+      toast('系统模型服务未配置“图层分离”动作模型，请先在模型管理中启用并声明 layer_decompose 能力', 'error')
+      return null
+    }
+    const requestModelKey = String(matched.modelKey || '').trim()
+    if (!requestModelKey) {
+      toast('图层分离动作模型缺少请求路由键，请在系统模型管理中修复', 'error')
+      return null
+    }
+    return { value: matched.value, requestModelKey }
+  }, [imageActionCatalogError, imageActionCatalogLoading, imageActionCatalogOptions])
   const selectedActiveModelOption = React.useMemo(
     () => findModelOptionByIdentifier(modelMenuOptions, activeModelKey),
     [activeModelKey, modelMenuOptions],
@@ -6932,13 +6964,13 @@ const rewritePromptWithCharacters = React.useCallback(
         nodeId: id,
         nodeWidth,
         primaryImageUrl,
-        resolveImageEditModel: resolveImageEditModelForAction,
+        resolveImageLayerModel,
         sleep: sleep3d,
       })
     } finally {
       setLayerLoading(false)
     }
-  }, [data, id, layerLoading, nodeWidth, primaryImageUrl, resolveImageEditModelForAction, sleep3d])
+  }, [data, id, layerLoading, nodeWidth, primaryImageUrl, resolveImageLayerModel, sleep3d])
 
   const handleLayerRecompose = React.useCallback(async () => {
     const { runImageLayerRecompose } = await import('./taskNode/imageLayerActions')

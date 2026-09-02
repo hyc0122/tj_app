@@ -9,6 +9,7 @@ import {
 import { loadGenerationPrefs, saveGenerationPrefs } from '../../config/generationPrefs'
 import { resolveVideoGenerationPreferenceCatalog } from '../../config/generationPreferenceCatalog'
 import type { UserGenerationPrefsDto } from '../../api/server'
+import { useAuth } from '../../auth/store'
 
 // 账号生成偏好弹窗：保存用户最近明确选择的生图模型/视频模型/规格。
 // 新账号由服务端返回完整初始值；每次执行仍以实时目录验证精确值，不做自动模型切换。
@@ -20,6 +21,10 @@ const IMAGE_SIZE_OPTIONS = [
 ]
 
 export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+  const accountScopeKey = useAuth((state) => {
+    const userId = String(state.user?.sub ?? '').trim()
+    return state.token && userId ? `user:${userId}` : 'signed-out'
+  })
   const imageModels = useModelOptionsState('image', { enabled: opened })
   const videoModels = useModelOptionsState('video', { enabled: opened })
   const imageModelOptions = imageModels.options
@@ -31,10 +36,19 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
   const [videoAspect, setVideoAspect] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadedScopeKey, setLoadedScopeKey] = useState('')
 
   useEffect(() => {
     if (!opened) return
     let canceled = false
+    // 中文注释：保持弹窗打开切换账号时先清空旧表单，禁止把上一账号内容误保存到新账号。
+    setImageModel('')
+    setImageSize('')
+    setVideoModel('')
+    setVideoResolution('')
+    setVideoAspect('')
+    setLoadedScopeKey('')
+    setError(null)
     ;(async () => {
       try {
         const prefs = await loadGenerationPrefs()
@@ -44,6 +58,7 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
         setVideoModel(prefs?.videoModel ?? '')
         setVideoResolution(prefs?.videoResolution ?? '')
         setVideoAspect(prefs?.videoAspect ?? '')
+        setLoadedScopeKey(accountScopeKey)
         setError(null)
       } catch (loadError) {
         if (!canceled) {
@@ -54,7 +69,7 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
     return () => {
       canceled = true
     }
-  }, [opened])
+  }, [accountScopeKey, opened])
 
   // 存储值是 requestModelKey；目录加载后把它映射回对应下拉项的 value（显示名），保证回显命中
   useEffect(() => {
@@ -120,6 +135,10 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
 
   const handleSave = async () => {
     setError(null)
+    if (!loadedScopeKey || loadedScopeKey !== accountScopeKey) {
+      setError($('账号已切换，正在重新读取当前账号的生成偏好，请稍后再保存。'))
+      return
+    }
     if (imageModels.loading || videoModels.loading) {
       setError($('模型目录仍在读取，请稍后再保存。'))
       return
@@ -156,7 +175,8 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
       }
       // 存生成链路认的真实模型键（requestModelKey），不存显示名/别名——
       // 选项显示名与上游请求 key 可能不同；提交时必须使用本次动态目录返回的精确 key。
-      await saveGenerationPrefs(prefs)
+      const saved = await saveGenerationPrefs(prefs)
+      if (!saved || loadedScopeKey !== accountScopeKey) return
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -287,6 +307,7 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
               !videoPreferenceCatalog ||
               videoResolutionUnavailable ||
               videoAspectUnavailable
+              || loadedScopeKey !== accountScopeKey
             }
           >
             {$('保存')}

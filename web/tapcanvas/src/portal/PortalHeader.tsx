@@ -95,7 +95,22 @@ export function PortalHeader({ active, onNavigate, onRequestLogin }: PortalHeade
 
   return (
     <>
-      <header className={`neo-portal-header${accountOnly ? ' neo-portal-header--account-only' : ''}`}>
+      <header
+        className={`neo-portal-header${accountOnly ? ' neo-portal-header--account-only' : ''}`}
+        style={accountOnly ? {
+          // 中文注释：嵌入天将时账号入口是右上角浮层，不能占据画布中心一整行。
+          position: 'absolute',
+          top: 8,
+          right: 10,
+          left: 'auto',
+          width: 'auto',
+          height: 'auto',
+          minHeight: 0,
+          display: 'block',
+          padding: 0,
+          background: 'transparent',
+        } : undefined}
+      >
         {accountOnly ? null : <button className="neo-portal-brand" type="button" aria-label="TapCanvas 首页" onClick={() => navigate('/')}>
           <TapCanvasWordmark
             className="neo-portal-brand__wordmark"

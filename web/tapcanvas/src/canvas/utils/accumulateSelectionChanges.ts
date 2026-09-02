@@ -94,3 +94,26 @@ export function schedulePendingSelectionCommit<NodeType extends Node>(input: {
     if (pending.length) input.commit(pending)
   }, input.delayMs ?? 120) as ReturnType<typeof setTimeout>
 }
+
+/**
+ * 确认普通点击后，严格按“先固化选中态、再发布焦点”的顺序执行。
+ * 抽成可测试的运行时契约，避免后续重构把完整节点挂载提前到选中态提交之前。
+ */
+export function commitConfirmedNodeSelectionAndFocus(input: {
+  clickedNodeId: string
+  clickedNodeType?: string | null
+  hasSelectionModifier: boolean
+  soleSelectedNodeId: string | null
+  flushPendingSelection: () => void
+  setFocusedNodeId: (nodeId: string | null) => void
+  setFocusRequestedNodeId: (nodeId: string) => void
+}): boolean {
+  input.flushPendingSelection()
+  const canFocusImmediately =
+    !input.hasSelectionModifier
+    && input.clickedNodeType !== 'groupNode'
+    && input.soleSelectedNodeId === input.clickedNodeId
+  input.setFocusedNodeId(canFocusImmediately ? input.clickedNodeId : null)
+  input.setFocusRequestedNodeId(input.clickedNodeId)
+  return canFocusImmediately
+}

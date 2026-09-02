@@ -67,6 +67,7 @@ import { getPointToRectDistance, isPointInsideRect, screenPathIntersectsRect } f
 import { normalizeCanvasNodeChanges } from './utils/normalizeCanvasNodeChanges'
 import {
   accumulateSelectionChanges,
+  commitConfirmedNodeSelectionAndFocus,
   flushPendingSelectionCommit,
   schedulePendingSelectionCommit,
 } from './utils/accumulateSelectionChanges'
@@ -2469,16 +2470,16 @@ function CanvasInner({
       const clickedNodeId = String(node.id)
       const hasSelectionModifier = evt.shiftKey || evt.metaKey || evt.ctrlKey
       const soleSelectedNodeId = selectRfSoleSelectedNodeId(reactFlowStore.getState())
-      const canFocusImmediately =
-        !hasSelectionModifier && node.type !== 'groupNode' && soleSelectedNodeId === clickedNodeId
-      // 中文注释：完整节点挂载会回写模型等数据；先固化选中态，避免受控节点数组用旧 selected 覆盖焦点。
-      flushPendingSelection()
-      // React Flow's internal selection is already updated by the time this
-      // confirmed click callback runs. Publish it directly to the focus store so
-      // the shell can hydrate on this click, without waiting for the debounced
-      // app-store commit or a state/effect round trip.
-      useFocusStore.getState().setFocusedNodeId(canFocusImmediately ? clickedNodeId : null)
-      setFocusRequestedNodeId(clickedNodeId)
+      // 中文注释：完整节点挂载会回写模型等数据；统一契约确保先固化选中态，再发布焦点。
+      commitConfirmedNodeSelectionAndFocus({
+        clickedNodeId,
+        clickedNodeType: node.type,
+        hasSelectionModifier,
+        soleSelectedNodeId,
+        flushPendingSelection,
+        setFocusedNodeId: (nodeId) => useFocusStore.getState().setFocusedNodeId(nodeId),
+        setFocusRequestedNodeId,
+      })
       const clickedData = node.data && typeof node.data === 'object'
         ? node.data as Record<string, unknown>
         : {}
