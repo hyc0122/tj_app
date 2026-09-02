@@ -82,4 +82,36 @@ describe('resolveCatalogActionModelOption', () => {
       currentValue: 'catalog-first',
     })).toBe(options[1])
   })
+
+  it('按实时目录声明的动作能力选择精确模型和请求路由键', () => {
+    const actionOptions: ModelOption[] = [
+      {
+        value: 'ordinary-image',
+        label: '普通图片模型',
+        modelKey: 'provider:ordinary-image',
+      },
+      {
+        value: 'live-layer-alias',
+        label: '实时图层分离模型',
+        modelKey: 'provider:real-layer-key',
+        meta: { actionKeys: ['layer_decompose'] },
+      },
+    ]
+
+    expect(resolveCatalogActionModelOption({
+      options: actionOptions,
+      requiredActionKey: 'layer_decompose',
+    })).toEqual(actionOptions[1])
+  })
+
+  it('目标动作模型不存在时明确返回空，不得退到普通图片模型', () => {
+    expect(resolveCatalogActionModelOption({
+      options: [{
+        value: 'ordinary-image',
+        label: '普通图片模型',
+        modelKey: 'provider:ordinary-image',
+      }],
+      requiredActionKey: 'layer_decompose',
+    })).toBeNull()
+  })
 })

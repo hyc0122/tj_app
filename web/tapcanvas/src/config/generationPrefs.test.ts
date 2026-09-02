@@ -135,4 +135,34 @@ describe('generation preferences runtime', () => {
     await expect(accountALoad).resolves.toBeNull()
     expect(runtime.getCached()).toEqual({ imageModel: 'provider:account-b' })
   })
+
+  it('账号切换后丢弃旧账号尚未开始的排队写入，禁止携带新会话写错账号', async () => {
+    const createRuntime = readRuntimeFactory()
+    expect(createRuntime).toBeTypeOf('function')
+    if (!createRuntime) return
+
+    let scope = 'account-a'
+    const firstWrite = deferred<UserGenerationPrefsDto | null>()
+    const write = vi.fn()
+      .mockImplementationOnce(() => firstWrite.promise)
+      .mockImplementationOnce(async (prefs: UserGenerationPrefsDto) => prefs)
+    const runtime = createRuntime({
+      read: async () => null,
+      write,
+      getScopeKey: () => scope,
+    })
+
+    const first = runtime.save({ imageModel: 'provider:account-a-first' })
+    const queued = runtime.save({ imageModel: 'provider:account-a-queued' })
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1))
+
+    scope = 'account-b'
+    expect(runtime.getCached()).toBeNull()
+    firstWrite.resolve({ imageModel: 'provider:account-a-first' })
+
+    await expect(first).resolves.toBeNull()
+    await expect(queued).resolves.toBeNull()
+    expect(write).toHaveBeenCalledTimes(1)
+    expect(runtime.getCached()).toBeNull()
+  })
 })
