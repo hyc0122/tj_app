@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Node, NodeChange } from '@xyflow/react'
 import { accumulateSelectionChanges } from './accumulateSelectionChanges'
+import * as selectionChangeHelpers from './accumulateSelectionChanges'
 
 const select = (id: string, selected: boolean): NodeChange<Node> => ({ id, type: 'select', selected })
 
@@ -43,5 +44,56 @@ describe('accumulateSelectionChanges', () => {
     accumulateSelectionChanges(pending, [select('b', true)])
 
     expect(pending).toEqual([select('a', true)])
+  })
+
+  it('确认点击节点时立即提交缓冲选中态，后续节点数据更新不会把焦点覆盖掉', () => {
+    type FlushSelectionCommit = (input: {
+      pendingRef: { current: NodeChange<Node>[] }
+      timerRef: { current: ReturnType<typeof setTimeout> | null }
+      commit: (changes: NodeChange<Node>[]) => void
+      cancelTimer: (timer: ReturnType<typeof setTimeout>) => void
+    }) => void
+    const flushPendingSelectionCommit = (
+      selectionChangeHelpers as typeof selectionChangeHelpers & {
+        flushPendingSelectionCommit?: FlushSelectionCommit
+      }
+    ).flushPendingSelectionCommit
+
+    // 中文注释：该断言先锁住缺失的同步提交能力；实现存在后继续验证真实状态结果。
+    expect(flushPendingSelectionCommit).toBeTypeOf('function')
+    if (!flushPendingSelectionCommit) return
+
+    let businessNodes = [{
+      id: 'image-1',
+      selected: false,
+      data: { kind: 'image', imageModel: '' },
+    }]
+    const pendingRef = { current: [select('image-1', true)] }
+    const timer = setTimeout(() => undefined, 1000)
+    const timerRef = { current: timer as ReturnType<typeof setTimeout> | null }
+    const cancelTimer = vi.fn((handle: ReturnType<typeof setTimeout>) => clearTimeout(handle))
+
+    flushPendingSelectionCommit({
+      pendingRef,
+      timerRef,
+      cancelTimer,
+      commit: (changes) => {
+        businessNodes = businessNodes.map((node) => {
+          const change = changes.find((candidate) => candidate.type === 'select' && candidate.id === node.id)
+          return change?.type === 'select' ? { ...node, selected: change.selected } : node
+        })
+      },
+    })
+
+    // 模拟节点完整面板挂载后，模型目录回写节点数据。
+    businessNodes = businessNodes.map((node) => ({
+      ...node,
+      data: { ...node.data, imageModel: 'atlas:gpt-image-real' },
+    }))
+
+    expect(cancelTimer).toHaveBeenCalledWith(timer)
+    expect(timerRef.current).toBeNull()
+    expect(pendingRef.current).toEqual([])
+    expect(businessNodes[0]?.selected).toBe(true)
   })
 })

@@ -26,6 +26,15 @@ describe('resolveDefaultCatalogModelOption', () => {
     })).toBeNull()
   })
 
+  it('replaces a stale hard-coded model with the first live model-service row', () => {
+    expect(resolveDefaultCatalogModelOption({
+      currentValue: 'gpt-image-2',
+      options,
+      loading: false,
+      error: null,
+    })).toBe(options[0])
+  })
+
   it('does not invent a default while the catalog is unavailable', () => {
     expect(resolveDefaultCatalogModelOption({
       currentValue: '',
