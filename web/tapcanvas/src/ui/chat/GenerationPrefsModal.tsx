@@ -177,7 +177,7 @@ export function GenerationPrefsModal({ opened, onClose }: { opened: boolean; onC
     >
       <Stack className="tc-generation-prefs-modal__content" gap="sm">
         <Text className="tc-generation-prefs-modal__description" size="xs" c="dimmed">
-          {$('账号偏好会跟随你最近一次明确选择；本次任务显式规格优先。新账号初始使用 gpt-image-2 / 1K 与 minimax-h3 / 768p / 16:9，执行前仍按实时目录校验。')}
+          {$('账号偏好会跟随你最近一次明确选择；本次任务显式规格优先。新账号从模型服务的实时可用目录中选择模型与规格，不使用前端固定模型。')}
         </Text>
         <Select
           className="tc-generation-prefs-modal__image-model"

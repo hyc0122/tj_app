@@ -64,3 +64,33 @@ export function flushPendingSelectionCommit<NodeType extends Node>(input: {
   input.pendingRef.current = []
   if (pending.length) input.commit(pending)
 }
+
+/**
+ * 为框选安排一次延迟提交。
+ *
+ * React Flow 内部 store 仍同步更新视觉选中态，业务 store 只在 120ms 窗口结束后批量写入；
+ * 普通点击会调用 flushPendingSelectionCommit 立即冲刷同一缓冲区。
+ */
+export function schedulePendingSelectionCommit<NodeType extends Node>(input: {
+  pendingRef: { current: NodeChange<NodeType>[] }
+  timerRef: { current: ReturnType<typeof setTimeout> | null }
+  commit: (changes: NodeChange<NodeType>[]) => void
+  shouldDefer?: () => boolean
+  delayMs?: number
+  scheduleTimer?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>
+  cancelTimer?: (timer: ReturnType<typeof setTimeout>) => void
+}): void {
+  const existingTimer = input.timerRef.current
+  if (existingTimer !== null) {
+    ;(input.cancelTimer ?? clearTimeout)(existingTimer)
+  }
+
+  const scheduleTimer = input.scheduleTimer ?? setTimeout
+  input.timerRef.current = scheduleTimer(() => {
+    input.timerRef.current = null
+    if (input.shouldDefer?.()) return
+    const pending = input.pendingRef.current
+    input.pendingRef.current = []
+    if (pending.length) input.commit(pending)
+  }, input.delayMs ?? 120) as ReturnType<typeof setTimeout>
+}

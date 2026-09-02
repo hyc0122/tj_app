@@ -102,8 +102,7 @@ describe('generation preferences runtime', () => {
 
     const first = runtime.save({ imageModel: 'provider:image-a' })
     const second = runtime.updateRecent({ videoModel: 'provider:video-b' })
-    await Promise.resolve()
-    expect(write).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1))
 
     firstWrite.resolve({ imageModel: 'provider:image-a' })
     await first

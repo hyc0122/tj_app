@@ -84,7 +84,10 @@ import {
 } from '../../config/useModelOptions'
 import { resolveModelGenerationCredits } from '../../config/modelPricing'
 import { resolveVideoInputPosterUrl } from './taskNode/videoPosterUrl'
-import { resolveDefaultCatalogModelOption } from './taskNode/defaultCatalogModel'
+import {
+  resolveCatalogActionModelOption,
+  resolveDefaultCatalogModelOption,
+} from './taskNode/defaultCatalogModel'
 import { getTaskNodeCoreType, getTaskNodeSchema, normalizeTaskNodeKind } from './taskNodeSchema'
 import { buildTaskNodeFeatureFlags, type TaskNodeFeatureFlags } from './taskNode/features'
 import {
@@ -378,10 +381,6 @@ type ToolbarMetaAction = {
   showLabel?: boolean
   badge?: React.ReactNode
 }
-
-// 打光 / 调整角度统一走 gemini-3.1-flash-image-preview：它支持参考图编辑，
-// 且使用仅由分辨率决定的 image:{resolution} 计费规格。
-const RELIGHT_MODEL_KEY = 'gemini-3.1-flash-image-preview'
 
 const PRODUCTION_LAYER_LABELS: Record<string, string> = {
   evidence: '证据',
@@ -2297,16 +2296,12 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
       toast('没有可用图片模型，请先在系统模型管理中配置渠道、协议与价格', 'error')
       return null
     }
-    const requestedModel = String(requestedValue ?? imageModel ?? '').trim()
-    if (requestedModel) {
-      const matched = findModelOptionByIdentifier(imageEditActionOptions, requestedModel)
-      if (!matched) {
-        toast(`图片模型 ${requestedModel} 当前不可用，请重新选择后重试`, 'error')
-        return null
-      }
-      return matched.value
-    }
-    return imageEditActionOptions[0]?.value || null
+    const matched = resolveCatalogActionModelOption({
+      options: imageEditActionOptions,
+      requestedValue,
+      currentValue: imageModel,
+    })
+    return matched?.value || null
   }, [imageEditActionError, imageEditActionLoading, imageEditActionOptions, imageModel])
   const selectedActiveModelOption = React.useMemo(
     () => findModelOptionByIdentifier(modelMenuOptions, activeModelKey),
@@ -2424,12 +2419,15 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
           : [],
       })
 
+      const editableModel = resolveImageEditModelForAction()
+      if (!editableModel) throw new Error('当前没有可用的图片编辑模型')
+
       addNode('taskNode', undefined, {
         kind: 'imageEdit',
         prompt: activeSmartPrompt,
         aspect: nextImageEditAspect,
         sampleCount: 1,
-        imageModel: RELIGHT_MODEL_KEY,
+        imageModel: editableModel,
         imageModelVendor: null,
         imageSize: relightImageSize,
         imageResolution: relightImageSize,
@@ -2472,7 +2470,7 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
 
       await runNodeDagToTarget(newNode.id, useRFStore.getState, useRFStore.setState, { concurrency: 1 })
     },
-    [addNode, basePoseImage, data, id, imageEditSize, kind],
+    [addNode, basePoseImage, data, id, imageEditSize, kind, resolveImageEditModelForAction],
   )
   const lightingCreditCost = React.useMemo(() => {
     const sourceDataRecord = data as Record<string, unknown>
@@ -2483,7 +2481,10 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     )
     const dims = parseImageEditSizeDimensions(candidateSize)
     const specKey = `image:${Math.max(dims.width, dims.height) >= 1700 ? '2k' : '1k'}`
-    const relightOption = findModelOptionByIdentifier(modelList, RELIGHT_MODEL_KEY)
+    const relightOption = resolveCatalogActionModelOption({
+      options: imageEditActionOptions,
+      currentValue: imageModel,
+    })
     if (!relightOption) return undefined
     const credits = resolveModelGenerationCredits({
       kind: 'imageEdit',
@@ -2492,7 +2493,7 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
       quantity: sampleCount,
     })
     return credits > 0 ? credits : undefined
-  }, [data, imageEditSize, kind, modelList, sampleCount])
+  }, [data, imageEditActionOptions, imageEditSize, imageModel, kind, sampleCount])
   const handleUploadLightingReferenceImage = React.useCallback(async (file: File): Promise<string> => {
     const projectId = typeof currentProject?.id === 'string' ? currentProject.id.trim() : ''
     const uploaded = await uploadServerAssetFile(file, file.name || '打光参考图', {
@@ -7233,7 +7234,7 @@ const rewritePromptWithCharacters = React.useCallback(
       toast(`${draft.label}缺少可执行的真实源图片`, 'error')
       return null
     }
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return null
     const imageOperationSpec = createImageOperationForSource({
       kind: draft.operationKind,
@@ -7304,7 +7305,7 @@ const rewritePromptWithCharacters = React.useCallback(
       toast('当前节点没有可用于人像调节的真实图片资产', 'error')
       return
     }
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     const beforeIds = new Set(useRFStore.getState().nodes.map((node) => node.id))
     addNode('taskNode', '人像质感调节', {
@@ -8359,7 +8360,7 @@ const rewritePromptWithCharacters = React.useCallback(
   }, [cancelNodeExecution, id, setNodeStatus])
 
   const handleCharacterFissionExecute = React.useCallback((draft: CharacterFissionDraft) => {
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     let nodeDraft: ReturnType<typeof buildCharacterFissionNodeDraft>
     try {
@@ -8655,7 +8656,7 @@ const rewritePromptWithCharacters = React.useCallback(
     const rows = gridSplitRows
     const cols = gridSplitCols
     const orderedCells = sortGridSplitCells(cells)
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     const sourceNode = useRFStore.getState().nodes.find((node) => node.id === id)
     const sx = (sourceNode?.position?.x ?? 0) + nodeWidth + 60
@@ -8858,7 +8859,7 @@ const rewritePromptWithCharacters = React.useCallback(
   const handleMaskConfirm = React.useCallback(async (maskBlob: Blob, prompt: string) => {
     setMaskMode(null)
     if (!primaryImageUrl) return
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     const operationKind: ImageOperationKind = maskMode === 'erase' ? 'erase' : 'inpaint'
     let hostedSource: HostedEditedImageAsset
@@ -8936,7 +8937,7 @@ const rewritePromptWithCharacters = React.useCallback(
 
   const handleElementEditConfirm = React.useCallback(async (submit: ElementEditSubmit) => {
     if (!primaryImageUrl) throw new Error('当前节点没有可编辑的真实图片资产')
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) throw new Error('当前没有可用的图片编辑模型')
 
     const sourcePng = await createMaskEditSourcePng(primaryImageUrl)
@@ -9041,7 +9042,7 @@ const rewritePromptWithCharacters = React.useCallback(
 
   const handleHdApply = React.useCallback((scale: 2 | 4) => {
     if (!primaryImageUrl || hdLoading) return
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     setHdLoading(true)
     setHdPanelOpen(false)
@@ -9095,7 +9096,7 @@ const rewritePromptWithCharacters = React.useCallback(
     if (!sourceImageUrl) throw new Error('当前节点没有可用于情绪调节的真实图片资产')
     if (!emotionSelection) throw new Error('请先选择要调节情绪的人物')
     if (emotionLoading) return
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     setEmotionLoading(true)
     setEmotionError(null)
@@ -9225,7 +9226,7 @@ const rewritePromptWithCharacters = React.useCallback(
 
   const handleExpandApply = React.useCallback(async (scale: number) => {
     if (!primaryImageUrl || expandLoading) return
-    const editableModel = resolveImageEditModelForAction('gpt-image-2')
+    const editableModel = resolveImageEditModelForAction()
     if (!editableModel) return
     setExpandLoading(true)
     setExpandPanelOpen(false)

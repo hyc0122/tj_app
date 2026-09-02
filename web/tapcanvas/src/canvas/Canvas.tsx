@@ -65,7 +65,11 @@ import { usePreventBrowserSwipeNavigation } from '../utils/usePreventBrowserSwip
 import { formatErrorMessage } from './utils/formatErrorMessage'
 import { getPointToRectDistance, isPointInsideRect, screenPathIntersectsRect } from './utils/connectionAutoSnap'
 import { normalizeCanvasNodeChanges } from './utils/normalizeCanvasNodeChanges'
-import { accumulateSelectionChanges, flushPendingSelectionCommit } from './utils/accumulateSelectionChanges'
+import {
+  accumulateSelectionChanges,
+  flushPendingSelectionCommit,
+  schedulePendingSelectionCommit,
+} from './utils/accumulateSelectionChanges'
 import { shouldHideEdgesAtZoom } from './utils/extremeZoomEdgeVisibility'
 import { getConnectedNodeIds } from './utils/connectedNodeIds'
 import { computeTidyByCategoryLayout } from './tidyByCategory'
@@ -2123,14 +2127,13 @@ function CanvasInner({
         pendingSelectionChangesRef.current,
         normalizedChanges,
       )
-      if (selectionCommitTimerRef.current) clearTimeout(selectionCommitTimerRef.current)
-      selectionCommitTimerRef.current = setTimeout(() => {
-        selectionCommitTimerRef.current = null
-        if (nodeDragActiveRef.current) return
-        const pending = pendingSelectionChangesRef.current
-        pendingSelectionChangesRef.current = []
-        if (pending.length) onNodesChange(pending)
-      }, 120)
+      schedulePendingSelectionCommit({
+        pendingRef: pendingSelectionChangesRef,
+        timerRef: selectionCommitTimerRef,
+        commit: onNodesChange,
+        shouldDefer: () => nodeDragActiveRef.current,
+        delayMs: 120,
+      })
       return
     }
 

@@ -21,3 +21,28 @@ export function resolveDefaultCatalogModelOption(
   const firstOption = input.options[0]
   return firstOption && firstOption.value.trim() ? firstOption : null
 }
+
+export type CatalogActionModelInput = {
+  options: readonly ModelOption[]
+  requestedValue?: string | null
+  currentValue?: string | null
+}
+
+/**
+ * 动作节点只从实时模型目录中选择模型。
+ *
+ * 优先使用动作显式请求，其次使用当前节点选择；两者都已下线时采用目录第一项。
+ * 前端不再为打光、高清、扩图等动作写死供应商模型名。
+ */
+export function resolveCatalogActionModelOption(
+  input: CatalogActionModelInput,
+): ModelOption | null {
+  const requested = findModelOptionByIdentifier(input.options, input.requestedValue)
+  if (requested) return requested
+
+  const current = findModelOptionByIdentifier(input.options, input.currentValue)
+  if (current) return current
+
+  const firstOption = input.options[0]
+  return firstOption && firstOption.value.trim() ? firstOption : null
+}

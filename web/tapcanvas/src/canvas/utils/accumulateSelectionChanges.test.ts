@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { Node, NodeChange } from '@xyflow/react'
 import { accumulateSelectionChanges } from './accumulateSelectionChanges'
 import * as selectionChangeHelpers from './accumulateSelectionChanges'
@@ -159,5 +161,19 @@ describe('accumulateSelectionChanges', () => {
 
     vi.advanceTimersByTime(120)
     expect(commit).toHaveBeenCalledTimes(1)
+  })
+
+  it('Canvas 点击处理先冲刷选中态再发布焦点，框选路径使用同一调度器', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/canvas/Canvas.tsx'), 'utf8')
+    const clickStart = source.indexOf('const onNodeClick = useCallback')
+    const clickEnd = source.indexOf('const onNodeDoubleClick = useCallback', clickStart)
+    const clickHandler = source.slice(clickStart, clickEnd)
+
+    expect(clickStart).toBeGreaterThanOrEqual(0)
+    expect(clickHandler.indexOf('flushPendingSelection()')).toBeGreaterThanOrEqual(0)
+    expect(clickHandler.indexOf('flushPendingSelection()')).toBeLessThan(
+      clickHandler.indexOf('setFocusedNodeId'),
+    )
+    expect(source).toContain('schedulePendingSelectionCommit({')
   })
 })
