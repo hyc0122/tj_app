@@ -81,6 +81,12 @@ function navigateThroughTianjiangHost(to: string, replace: boolean): boolean {
   const normalizedPath = target.pathname.replace(/^\/tapcanvas(?=\/|$)/, '') || '/'
   const projectUuid = target.searchParams.get('projectId')?.trim() ?? ''
   if ((normalizedPath === '/studio' || normalizedPath.startsWith('/studio/')) && projectUuid) {
+    const currentProjectUuid = current.searchParams.get('projectId')?.trim() ?? ''
+    if (currentProjectUuid === projectUuid) {
+      // 中文注释：裸项目入口会在 iframe 内规范化为带 owner 的 Studio 地址。
+      // 同项目不能再交给宿主，否则宿主路由未变、iframe 也未 replace，画布会永久停在加载页。
+      return false
+    }
     window.parent.postMessage({
       type: 'tianjiang:tapcanvas:navigate',
       destination: 'studio',

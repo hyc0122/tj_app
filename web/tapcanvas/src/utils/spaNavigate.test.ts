@@ -59,4 +59,51 @@ describe('spa navigation history', () => {
     }, window.location.origin)
     expect(window.location.pathname).toBe('/tapcanvas/index.html')
   })
+
+  it('天将宿主模式下同项目规范化导航必须在 iframe 内完成，不得回送同一宿主路由', () => {
+    const projectUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa19'
+    const postMessage = vi.fn()
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: { postMessage },
+    })
+    window.history.replaceState(
+      {},
+      '',
+      `/tapcanvas/studio?projectId=${projectUuid}&tjHost=1`,
+    )
+
+    spaReplace(
+      `/studio?projectId=${projectUuid}&ownerType=project&ownerId=${projectUuid}`,
+    )
+
+    expect(postMessage).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe('/studio')
+    expect(new URL(window.location.href).searchParams.get('ownerType')).toBe('project')
+  })
+
+  it('天将宿主模式下跨项目导航仍必须交给父窗口', () => {
+    const projectA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa19'
+    const projectB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb20'
+    const postMessage = vi.fn()
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: { postMessage },
+    })
+    window.history.replaceState(
+      {},
+      '',
+      `/tapcanvas/studio?projectId=${projectA}&tjHost=1`,
+    )
+
+    spaNavigate(`/studio?projectId=${projectB}`)
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'tianjiang:tapcanvas:navigate',
+      destination: 'studio',
+      projectUuid: projectB,
+      replace: false,
+    }, window.location.origin)
+    expect(new URL(window.location.href).searchParams.get('projectId')).toBe(projectA)
+  })
 })
