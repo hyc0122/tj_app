@@ -67,8 +67,8 @@ describe('Canvas confirmed node selection wiring', () => {
       'clickedNodeId',
       'clickedNodeType',
       'hasSelectionModifier',
-      'soleSelectedNodeId',
       'flushPendingSelection',
+      'readSoleSelectedNodeId',
       'setFocusedNodeId',
       'setFocusRequestedNodeId',
     ]))

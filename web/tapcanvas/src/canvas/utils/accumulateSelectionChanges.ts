@@ -103,16 +103,18 @@ export function commitConfirmedNodeSelectionAndFocus(input: {
   clickedNodeId: string
   clickedNodeType?: string | null
   hasSelectionModifier: boolean
-  soleSelectedNodeId: string | null
+  readSoleSelectedNodeId: () => string | null
   flushPendingSelection: () => void
   setFocusedNodeId: (nodeId: string | null) => void
   setFocusRequestedNodeId: (nodeId: string) => void
 }): boolean {
   input.flushPendingSelection()
+  // 冲刷会同步写入 Zustand；必须在冲刷后读取，不能继续使用点击前的旧快照。
+  const soleSelectedNodeId = input.readSoleSelectedNodeId()
   const canFocusImmediately =
     !input.hasSelectionModifier
     && input.clickedNodeType !== 'groupNode'
-    && input.soleSelectedNodeId === input.clickedNodeId
+    && soleSelectedNodeId === input.clickedNodeId
   input.setFocusedNodeId(canFocusImmediately ? input.clickedNodeId : null)
   input.setFocusRequestedNodeId(input.clickedNodeId)
   return canFocusImmediately

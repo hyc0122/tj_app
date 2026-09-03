@@ -8,6 +8,7 @@ import { isCanvasNodeDragActive, sanitizeGraphForCanvas, useRFStore } from './ca
 import { isSelectionOnlyNodeDiff } from './canvas/persistence/isSelectionOnlyNodeDiff'
 import { persistedGraphContentKey } from './canvas/persistence/persistedGraphContentKey'
 import { exportCanvasAsJSON, importCanvasFromFile, filterNodesForPersistence } from './canvas/utils/serialization'
+import { preserveTransientNodeSelection } from './canvas/utils/selectionRetention'
 import { createReusableWorkflowGraph, readReusableWorkflowGraph } from './canvas/reusableWorkflowGraph'
 import KeyboardShortcuts from './KeyboardShortcuts'
 import { applyTemplate, captureCurrentSelection, deleteTemplate, listTemplateNames, saveTemplate, renameTemplate } from './templates'
@@ -1009,7 +1010,12 @@ function CanvasApp({
               outputRefsByAgentNodeId: new Map<string, unknown>(),
               readOnly: false,
             })
-            useRFStore.setState({ nodes: visibleGraph.nodes, edges: visibleGraph.edges })
+            const currentNodes = useRFStore.getState().nodes
+            useRFStore.setState({
+              // selected 不入持久化快照；同一画布 rebase 只能替换内容，不能清除用户交互态。
+              nodes: preserveTransientNodeSelection(currentNodes, visibleGraph.nodes),
+              edges: visibleGraph.edges,
+            })
           })
         })
         restoreCreationSession(result.snapshot.sceneCreationProgress)

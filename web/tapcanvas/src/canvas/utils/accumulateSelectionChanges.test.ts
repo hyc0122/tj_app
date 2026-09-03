@@ -174,10 +174,14 @@ describe('accumulateSelectionChanges', () => {
       clickedNodeId: 'image-1',
       clickedNodeType: 'taskNode',
       hasSelectionModifier: false,
-      soleSelectedNodeId: 'image-1',
       flushPendingSelection: () => {
         selected = true
         sequence.push('selection')
+      },
+      readSoleSelectedNodeId: () => {
+        expect(selected).toBe(true)
+        sequence.push('read-selection')
+        return selected ? 'image-1' : null
       },
       setFocusedNodeId: (nodeId) => {
         expect(selected).toBe(true)
@@ -197,6 +201,6 @@ describe('accumulateSelectionChanges', () => {
     expect(selected).toBe(true)
     expect(focusedNodeId).toBe('image-1')
     expect(requestedNodeId).toBe('image-1')
-    expect(sequence).toEqual(['selection', 'focus', 'hydrate'])
+    expect(sequence).toEqual(['selection', 'read-selection', 'focus', 'hydrate'])
   })
 })

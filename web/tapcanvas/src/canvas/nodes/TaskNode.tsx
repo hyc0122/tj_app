@@ -11,6 +11,8 @@ import { readSbaNodePresentation } from '@tapcanvas/storyboard-adventure-protoco
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import { Position, NodeResizeControl, NodeToolbar, useStore, useReactFlow } from '@xyflow/react'
 import { isCanvasNodeDragActive, useRFStore } from '../store'
+import { useIsNodeFocused } from '../focusStore'
+import { shouldKeepFocusedNodeControlsVisible } from '../utils/selectionRetention'
 import { useUIStore } from '../../ui/uiStore'
 import { ASSET_REFRESH_EVENT, notifyAssetRefresh } from '../../ui/assetEvents'
 import { ActionIcon, Group, Paper, Popover, Button, Text, Stack, TextInput, Select, Badge, Tooltip } from '@mantine/core'
@@ -1841,7 +1843,14 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     isAudioNode,
   ])
   const { selectedNodeCount, isBoxSelecting } = useCanvasRenderContext()
-  const isSingleSelectionActive = Boolean(selected && !dragging && !isBoxSelecting && selectedNodeCount <= 1)
+  const stableNodeFocused = useIsNodeFocused(id)
+  const isSingleSelectionActive = shouldKeepFocusedNodeControlsVisible({
+    focused: stableNodeFocused,
+    reactFlowSelected: Boolean(selected),
+    dragging: Boolean(dragging),
+    boxSelecting: isBoxSelecting,
+    selectedNodeCount,
+  })
   const wantsCharacterRefs = isSingleSelectionActive
   const characterRefs = useStableRFStoreSelection(
     React.useCallback((s): CharacterRef[] => {

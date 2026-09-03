@@ -71,6 +71,7 @@ import {
   flushPendingSelectionCommit,
   schedulePendingSelectionCommit,
 } from './utils/accumulateSelectionChanges'
+import { resolveConfirmedFocusedNodeId } from './utils/selectionRetention'
 import { shouldHideEdgesAtZoom } from './utils/extremeZoomEdgeVisibility'
 import { getConnectedNodeIds } from './utils/connectedNodeIds'
 import { computeTidyByCategoryLayout } from './tidyByCategory'
@@ -274,31 +275,14 @@ const selectSelectedNodeSummaries = (state: RFStoreState): SelectedNodeSummary[]
   return selectedNodeSummariesCache
 }
 
-// Sole-selected node id read off React Flow's INTERNAL store (see the focusedNodeId derivation for
-// why focus can't wait for the app store's debounced commit). Reference-cached on the internal
-// `nodes` array the same way the app-store selectors above are: this selector runs on EVERY internal
-// store update (transform changes on every pan/zoom frame included), and `nodes` only changes
-// identity when node data actually changes — unlike `nodeLookup`, which React Flow mutates in place
-// and so cannot be used as a cache key.
-let rfSoleSelectedSource: unknown = null
-let rfSoleSelectedCache: string | null = null
-
-const selectRfSoleSelectedNodeId = (state: { nodes: FlowNode[] }): string | null => {
-  if (state.nodes === rfSoleSelectedSource) return rfSoleSelectedCache
-  rfSoleSelectedSource = state.nodes
+const selectAppSoleSelectedNodeId = (nodes: readonly FlowNode[]): string | null => {
   let soleId: string | null = null
-  for (const node of state.nodes) {
+  for (const node of nodes) {
     if (!node.selected) continue
-    // A group anywhere in the selection (alone or alongside nodes) means no single focus, matching
-    // the previous app-store derivation (selectedGroupIds.length === 0).
-    if (soleId !== null || node.type === 'groupNode') {
-      soleId = null
-      break
-    }
+    if (soleId !== null || node.type === 'groupNode') return null
     soleId = String(node.id)
   }
-  rfSoleSelectedCache = soleId
-  return rfSoleSelectedCache
+  return soleId
 }
 
 const areSelectedNodeSummariesEqual = (a: SelectedNodeSummary[], b: SelectedNodeSummary[]) => {
@@ -2469,14 +2453,13 @@ function CanvasInner({
       // interactive TaskNode body.
       const clickedNodeId = String(node.id)
       const hasSelectionModifier = evt.shiftKey || evt.metaKey || evt.ctrlKey
-      const soleSelectedNodeId = selectRfSoleSelectedNodeId(reactFlowStore.getState())
       // 中文注释：完整节点挂载会回写模型等数据；统一契约确保先固化选中态，再发布焦点。
       commitConfirmedNodeSelectionAndFocus({
         clickedNodeId,
         clickedNodeType: node.type,
         hasSelectionModifier,
-        soleSelectedNodeId,
         flushPendingSelection,
+        readSoleSelectedNodeId: () => selectAppSoleSelectedNodeId(useRFStore.getState().nodes),
         setFocusedNodeId: (nodeId) => useFocusStore.getState().setFocusedNodeId(nodeId),
         setFocusRequestedNodeId,
       })
@@ -2541,16 +2524,13 @@ function CanvasInner({
   // body; everything else stays a lightweight thumbnail shell. Multi-select / group-select / empty
   // selection → no focus, all shells. Published to the focus store so each node reads it in O(1).
   //
-  // Selection is read from React Flow's INTERNAL store, not the app store. handleNodesChange applies
-  // pure-select changes to the internal store synchronously but debounces the app-store commit by
-  // 120ms (that debounce exists to keep the O(N) whole-graph rebuild off the click path). Deriving
-  // focus from the app store therefore added a hard 120ms floor to "click → body mounts" for no
-  // benefit; the internal store already has the authoritative selection by the time onNodeClick runs.
-  const rfSoleSelectedNodeId = useStore(selectRfSoleSelectedNodeId)
-  const focusedNodeId =
-    rfSoleSelectedNodeId !== null && focusRequestedNodeId === rfSoleSelectedNodeId
-      ? rfSoleSelectedNodeId
-      : null
+  // 普通点击会同步冲刷业务 store，因此焦点不再依赖 React Flow 的内部临时数组。
+  // 完整节点挂载、尺寸测量或受控节点重建时，内部数组可能短暂回到 selected=false；
+  // 若把它当焦点真源，就会把刚显示的下方选项立即卸载。
+  const focusedNodeId = resolveConfirmedFocusedNodeId({
+    focusRequestedNodeId,
+    selectedNodes: nodes,
+  })
   useLayoutEffect(() => {
     const fs = useFocusStore.getState()
     // View-only: nothing is selectable, so render every (visible) node full — readers need real
