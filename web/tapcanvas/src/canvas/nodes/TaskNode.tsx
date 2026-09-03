@@ -6667,7 +6667,6 @@ const rewritePromptWithCharacters = React.useCallback(
     setTranslatePromptLoading(true)
     try {
       const translated = await llmChat({
-        model: 'gpt-5.4',
         systemPrompt: '你是一个提示词翻译助手。如果用户输入的是中文，请完整翻译成英文（图片/视频生成 prompt 格式保持不变，时间轴标记如 [0s] 等原样保留）；如果是英文，请完整翻译成中文。只输出翻译结果，不要添加任何解释、前缀或 Markdown。禁止截断，必须翻译全部内容。',
         userPrompt: promptText,
         temperature: 0.3,

@@ -2107,7 +2107,6 @@ export async function agentsChat(payload: AgentsChatRequestDto): Promise<AgentsC
 }
 
 export async function llmChat(opts: {
-  model: string
   systemPrompt: string
   userPrompt: string
   temperature?: number
@@ -2117,7 +2116,8 @@ export async function llmChat(opts: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: opts.model,
+      // 中文注释：提示词翻译不暴露独立模型选择，统一走账号“模型服务”的通用文本映射。
+      model: 'universalAi',
       temperature: opts.temperature ?? 0.3,
       ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
       messages: [

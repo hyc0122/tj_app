@@ -6,7 +6,7 @@ vi.mock('../tianjiang/confirmGate', () => ({
   requestTianjiangPaidConfirm: confirmMock,
 }))
 
-import { runPublicTask, runPublicTaskWithAuth } from './server'
+import { llmChat, runPublicTask, runPublicTaskWithAuth } from './server'
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -132,5 +132,28 @@ describe('天将收费任务确认合同', () => {
     expect(secondBody.confirmationUuid).toBe('9d78719a-9055-4dbb-ae2a-fbc33d46fdd5')
     expect(secondBody.requestDigest).toBe('c'.repeat(64))
     expect(secondBody.baseRevision).toBe(9)
+  })
+})
+
+describe('天将提示词翻译模型路由', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('未暴露具体文本模型选择时必须走账号模型服务的通用映射', async () => {
+    const fetchMock = vi.fn<[RequestInfo | URL, RequestInit?], Promise<Response>>()
+      .mockResolvedValue(jsonResponse({
+        choices: [{ message: { content: 'cinematic night street' } }],
+      }, 200))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const translated = await llmChat({
+      systemPrompt: '只输出翻译结果',
+      userPrompt: '电影感夜街',
+    })
+
+    expect(translated).toBe('cinematic night street')
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+    expect(requestBody.model).toBe('universalAi')
   })
 })

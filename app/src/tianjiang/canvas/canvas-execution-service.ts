@@ -60,6 +60,19 @@ async function resolveCanvasExecutionModel(input: {
 
 export const MODEL_CATALOG_VERSION = "canvas-model-catalog.v1";
 
+type StoredCanvasExecutionItem = {
+  nodeUuid: string;
+  capabilityId: string;
+  nodeType: string;
+  modelId: string;
+  providerId: string;
+  deploymentKey: string;
+  credentialSlotId: string;
+  normalizedParameters: { prompt?: unknown };
+  inputAssetUuids: string[];
+  itemRequestDigest: string;
+};
+
 function rfc3339Ms(date: Date): string {
   return date.toISOString();
 }
@@ -86,6 +99,46 @@ function quoteForPolicy(policy: string): {
     quoteId: crypto.randomUUID(),
     quoteExpiresAt,
   };
+}
+
+async function confirmationInputsStillMatch(
+  document: Awaited<ReturnType<typeof readCanvasDocument>>,
+  items: StoredCanvasExecutionItem[],
+): Promise<boolean> {
+  const nodes = (document.document.graph.nodes ?? []) as Array<{
+    nodeUuid?: string;
+    kind?: string;
+    data?: { prompt?: string; modelId?: string; assetUuid?: string };
+  }>;
+
+  try {
+    for (const item of items) {
+      const node = nodes.find((candidate) => String(candidate.nodeUuid ?? "") === item.nodeUuid);
+      if (!node?.kind) return false;
+      const capability = capabilityForNodeType(node.kind);
+      const mediaType = capability.nodeType === "video_generation" ? "video" : "image";
+      const route = await resolveCanvasExecutionModel({
+        modelId: String(node.data?.modelId ?? ""),
+        mediaType,
+      });
+      const inputAssetUuids = node.data?.assetUuid ? [node.data.assetUuid] : [];
+      if (
+        capability.capabilityId !== item.capabilityId
+        || capability.nodeType !== item.nodeType
+        || route.modelId !== item.modelId
+        || route.providerId !== item.providerId
+        || route.deploymentKey !== item.deploymentKey
+        || route.credentialSlotId !== item.credentialSlotId
+        || String(node.data?.prompt ?? "") !== String(item.normalizedParameters?.prompt ?? "")
+        || canonicalizeJcs(inputAssetUuids) !== canonicalizeJcs(item.inputAssetUuids ?? [])
+      ) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function previewCanvasExecution(projectUuid: string, input: {
@@ -243,9 +296,15 @@ export async function confirmCanvasExecution(projectUuid: string, input: {
   if (Number(confirmation.document_revision) !== input.baseRevision) {
     throw new CanvasRuntimeError("CANVAS_CONFIRMATION_STALE", "确认基于的画布版本已变化", 409, true);
   }
-  // 中文注释：客户端回传旧 revision 不能证明画布未变化，首次消费前必须读取当前权威 revision。
+  const items = JSON.parse(String(confirmation.immutable_items_json)) as StoredCanvasExecutionItem[];
+  // 中文注释：客户端回传旧 revision 不能证明执行输入未变化，因此首次消费前读取当前权威文档。
+  // 进度、状态、节点位置等非执行字段可在确认框停留期间自动保存；只有提示词、模型、能力或输入资产
+  // 变化时才让确认单失效，避免客户端自己的进度保存把视频确认单误判为过期。
   const currentDocument = await readCanvasDocument(projectUuid);
-  if (currentDocument.revision !== input.baseRevision) {
+  if (
+    currentDocument.revision !== input.baseRevision
+    && !(await confirmationInputsStillMatch(currentDocument, items))
+  ) {
     throw new CanvasRuntimeError("CANVAS_CONFIRMATION_STALE", "确认基于的画布版本已变化", 409, true);
   }
   if (String(confirmation.expires_at) < rfc3339Ms(new Date())) {
@@ -254,12 +313,6 @@ export async function confirmCanvasExecution(projectUuid: string, input: {
   if (confirmation.consumed_at) {
     throw new CanvasRuntimeError("CANVAS_CONFIRMATION_ALREADY_CONSUMED", "确认已被消费", 409, false);
   }
-  const items = JSON.parse(String(confirmation.immutable_items_json)) as Array<{
-    nodeUuid: string;
-    capabilityId: string;
-    itemRequestDigest: string;
-    normalizedParameters: unknown;
-  }>;
   const batchUuid = crypto.randomUUID();
   const receiptUuid = crypto.randomUUID();
   const acceptedAt = rfc3339Ms(new Date());

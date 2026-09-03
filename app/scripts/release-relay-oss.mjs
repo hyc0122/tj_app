@@ -342,7 +342,11 @@ export function createAliOssRemote({ client, checkpointRoot }) {
       return uploadLocalFile({
         remote: {
           put: async (key, filePath) => {
-            await client.put(key, filePath);
+            // 可变 latest 指针必须禁止边缘缓存，否则客户端会继续读到上一版本。
+            const options = object.mutable
+              ? { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } }
+              : undefined;
+            await client.put(key, filePath, options);
             return { mode: "put", attempts: [{ attempt: 1, status: "success" }] };
           },
           multipart: (options) => multipartUploadWithCheckpoint({
