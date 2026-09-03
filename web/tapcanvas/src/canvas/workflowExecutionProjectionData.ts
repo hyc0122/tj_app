@@ -25,6 +25,8 @@ const WORKFLOW_EXECUTION_PROJECTION_DATA_KEYS = new Set([
   'workflowPhysicalRunId',
   'workflowNodeRunId',
   'workflowResolvedOutputReuse',
+  'workflowWaitingReasonCode',
+  'workflowWaitingReasonLabel',
 ])
 
 let projectionDepth = 0
@@ -48,7 +50,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isExecutionDoWorkflowNodeData(value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value) || value.adminWorkflow !== true) return false
+  if (!isRecord(value)) return false
+  // 中文注释：workflowExecution 是可持久化的执行占位，其运行状态同样只属于投影层。
+  if (value.kind === 'workflowExecution' && value.workflowRuntimeReference !== true) return true
+  if (value.adminWorkflow !== true) return false
   return value.kind === 'workflowTrigger' || value.kind === 'workflowStage'
 }
 

@@ -7,13 +7,28 @@ import express from "express";
 import http from "node:http";
 import test from "node:test";
 
-import { db, initializeCanvasWorkspace, pauseGenerationTaskRecovery, releaseProjectDatabaseLease } from "../../src/utils/db";
+import {
+  acquireProjectDatabaseLease,
+  db,
+  initializeCanvasWorkspace,
+  pauseGenerationTaskRecovery,
+  projectDatabaseLeaseSnapshot,
+  releaseProjectDatabaseLease,
+} from "../../src/utils/db";
 import { runWithTemporaryAccount } from "./helpers/worktree-runtime";
 import { runWithProjectStorage } from "../../src/tianjiang/runtime/user-storage-context";
+import {
+  personalCanvasOperationTailCountForTests,
+  withOpenPersonalCanvasProject,
+} from "../../src/tianjiang/runtime/project-operation-port";
 import { syncCoordinator } from "../../src/tianjiang/runtime/runtime";
-import { setTapCanvasCreateProjectForTests } from "../../src/routes/tianjiang/tapcanvas-compat";
+import {
+  setTapCanvasCreateProjectForTests,
+  setTapCanvasWorkspaceContextBeforeWriteForTests,
+} from "../../src/routes/tianjiang/tapcanvas-compat";
 
 const PERSONAL = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa19";
+const PERSONAL_TWO = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee19";
 const TEAM = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb19";
 const OTHER = "cccccccc-cccc-4ccc-8ccc-cccccccccc19";
 const NOVEL = "dddddddd-dddd-4ddd-8ddd-dddddddddd19";
@@ -198,6 +213,260 @@ test("个人目录只返回当前账号 kind=personal 且 businessType=canvas �
   });
 });
 
+test("AI 执行台项目上下文必须按个人画布持久化并支持版本回滚，不能返回 404", async () => {
+  await runWithTemporaryAccount("tc-b25-workspace-context", async () => {
+    const restore = stubCatalog([
+      catalogItem({ projectUuid: PERSONAL, name: "上下文画布" }),
+      catalogItem({ projectUuid: PERSONAL_TWO, name: "另一个上下文画布" }),
+      catalogItem({ projectUuid: OTHER, name: "他人画布", ownerUserId: 8801, myRole: "owner" }),
+    ]);
+    try {
+      await initializeCanvasWorkspace(PERSONAL);
+      await initializeCanvasWorkspace(PERSONAL_TWO);
+      await withCompat(async (origin) => {
+        const endpoint = `${origin}/api/tianjiang/tapcanvas/agents/project-context`;
+        const initial = await fetch(`${endpoint}?projectId=${PERSONAL}`);
+        assert.equal(initial.status, 200, "AI 执行台项目上下文不得返回 404");
+        const initialBody = await initial.json() as {
+          projectId: string;
+          ownerId: string;
+          currentChapter: number | null;
+          projectFiles: Array<{ path: string; content: string; history: unknown[] }>;
+        };
+        assert.equal(initialBody.projectId, PERSONAL);
+        assert.equal(initialBody.ownerId, String(SESSION.user.id));
+        assert.equal(initialBody.currentChapter, null, "未传章节时不得把 null 误映射为第 1 章");
+        assert.ok(initialBody.projectFiles.some((file) => file.path === "PROJECT.md"));
+
+        const firstSave = await fetch(`${endpoint}/file`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ projectId: PERSONAL, fileName: "RULES.md", content: "只使用软件模型路由。" }),
+        });
+        assert.equal(firstSave.status, 200);
+        const firstBody = await firstSave.json() as {
+          projectFiles: Array<{ path: string; content: string; history: Array<{ versionId: string }> }>;
+        };
+        const firstRules = firstBody.projectFiles.find((file) => file.path === "RULES.md");
+        assert.equal(firstRules?.content, "只使用软件模型路由。");
+        assert.equal(firstRules?.history.length, 1);
+        const firstVersionId = firstRules?.history[0]?.versionId;
+        assert.ok(firstVersionId);
+
+        const secondSave = await fetch(`${endpoint}/file`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ projectId: PERSONAL, fileName: "RULES.md", content: "第二版规则。" }),
+        });
+        assert.equal(secondSave.status, 200);
+
+        const version = await fetch(`${endpoint}/version?projectId=${PERSONAL}&fileName=RULES.md&versionId=${encodeURIComponent(firstVersionId!)}`);
+        assert.equal(version.status, 200);
+        assert.equal((await version.json() as { content: string }).content, "只使用软件模型路由。");
+
+        const rolledBack = await fetch(`${endpoint}/rollback`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ projectId: PERSONAL, fileName: "RULES.md", versionId: firstVersionId }),
+        });
+        assert.equal(rolledBack.status, 200);
+        assert.equal((await rolledBack.json() as { content: string }).content, "只使用软件模型路由。");
+
+        // 中文注释：两个面板并发保存不同文件时，后完成的请求不得覆盖先完成的文件。
+        let activeWrites = 0;
+        let maxActiveWrites = 0;
+        setTapCanvasWorkspaceContextBeforeWriteForTests(async () => {
+          activeWrites += 1;
+          maxActiveWrites = Math.max(maxActiveWrites, activeWrites);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          activeWrites -= 1;
+        });
+        const [briefSave, charactersSave] = await Promise.all([
+          fetch(`${endpoint}/file`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ projectId: PERSONAL, fileName: "CREATIVE_BRIEF.md", content: "并发创作简报" }),
+          }),
+          fetch(`${endpoint}/file`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ projectId: PERSONAL, fileName: "CHARACTERS.md", content: "并发角色设定" }),
+          }),
+        ]);
+        assert.equal(briefSave.status, 200);
+        assert.equal(charactersSave.status, 200);
+        assert.equal(maxActiveWrites, 1, "同一项目上下文写入必须串行，禁止并发 read-modify-write");
+        const afterConcurrentSave = await fetch(`${endpoint}?projectId=${PERSONAL}`);
+        assert.equal(afterConcurrentSave.status, 200);
+        const concurrentBody = await afterConcurrentSave.json() as {
+          projectFiles: Array<{ path: string; content: string }>;
+        };
+        assert.equal(concurrentBody.projectFiles.find((file) => file.path === "CREATIVE_BRIEF.md")?.content, "并发创作简报");
+        assert.equal(concurrentBody.projectFiles.find((file) => file.path === "CHARACTERS.md")?.content, "并发角色设定");
+
+        const verified = await fetch(`${endpoint}/verify?projectId=${PERSONAL}`);
+        assert.equal(verified.status, 200);
+        const verifyBody = await verified.json() as {
+          projectId: string;
+          totalChars: number;
+          files: unknown[];
+          budgets: { maxCharsPerFile: number; maxTotalChars: number };
+        };
+        assert.equal(verifyBody.projectId, PERSONAL);
+        assert.ok(verifyBody.totalChars > 0);
+        assert.ok(verifyBody.files.length >= 1);
+        assert.equal(verifyBody.budgets.maxCharsPerFile, 256 * 1024);
+        assert.equal(verifyBody.budgets.maxTotalChars, 5 * 256 * 1024);
+
+        const secondProjectSave = await fetch(`${endpoint}/file`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ projectId: PERSONAL_TWO, fileName: "RULES.md", content: "另一个项目的规则" }),
+        });
+        assert.equal(secondProjectSave.status, 200);
+        const [firstProjectContext, secondProjectContext] = await Promise.all([
+          fetch(`${endpoint}?projectId=${PERSONAL}`).then((response) => response.json()) as Promise<{ projectFiles: Array<{ path: string; content: string }> }>,
+          fetch(`${endpoint}?projectId=${PERSONAL_TWO}`).then((response) => response.json()) as Promise<{ projectFiles: Array<{ path: string; content: string }> }>,
+        ]);
+        assert.equal(firstProjectContext.projectFiles.find((file) => file.path === "RULES.md")?.content, "只使用软件模型路由。");
+        assert.equal(secondProjectContext.projectFiles.find((file) => file.path === "RULES.md")?.content, "另一个项目的规则");
+
+        const forbidden = await fetch(`${endpoint}?projectId=${OTHER}`);
+        assert.notEqual(forbidden.status, 200, "他人个人画布上下文不得越权读取");
+      });
+    } finally {
+      setTapCanvasWorkspaceContextBeforeWriteForTests(null);
+      restore();
+      await pauseGenerationTaskRecovery().catch(() => undefined);
+      await releaseProjectDatabaseLease(PERSONAL, "ui").catch(() => undefined);
+      await releaseProjectDatabaseLease(PERSONAL_TWO, "ui").catch(() => undefined);
+    }
+  });
+});
+
+test("个人画布兼容请求并发短开时不得提前关闭仍在使用的项目运行时", async () => {
+  await runWithTemporaryAccount("tc-b25-concurrent-short-open", async () => {
+    const item = catalogItem({ projectUuid: PERSONAL, name: "并发短开画布" });
+    const originalList = syncCoordinator.listProjects.bind(syncCoordinator);
+    const originalOpen = syncCoordinator.openProject.bind(syncCoordinator);
+    const originalClose = syncCoordinator.closeProject.bind(syncCoordinator);
+    let opened = false;
+    let generation = 0;
+    let activeHandlers = 0;
+    let maxActiveHandlers = 0;
+    let closeWhileHandlerActive = false;
+    const closeGenerations: number[] = [];
+    syncCoordinator.listProjects = (() => [{ ...item }]) as typeof syncCoordinator.listProjects;
+    (syncCoordinator as { isProjectOpened?: (uuid: string) => boolean }).isProjectOpened = () => opened;
+    syncCoordinator.openProject = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      opened = true;
+      generation += 1;
+      return { projectUuid: PERSONAL, runtimeGeneration: generation };
+    }) as typeof syncCoordinator.openProject;
+    syncCoordinator.closeProject = (async (_session, projectUuid, runtimeGeneration) => {
+      assert.equal(projectUuid, PERSONAL);
+      if (activeHandlers > 0) closeWhileHandlerActive = true;
+      closeGenerations.push(Number(runtimeGeneration));
+      opened = false;
+      return { projectUuid, state: "closed", runtimeGeneration: 0 };
+    }) as typeof syncCoordinator.closeProject;
+    try {
+      await Promise.all([1, 2].map(() => withOpenPersonalCanvasProject(PERSONAL, "read", async () => {
+        activeHandlers += 1;
+        maxActiveHandlers = Math.max(maxActiveHandlers, activeHandlers);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        activeHandlers -= 1;
+      }, SESSION as never)));
+      assert.equal(maxActiveHandlers, 1, "同一项目的短开请求必须串行执行");
+      assert.equal(closeWhileHandlerActive, false, "不得关闭仍被另一个请求使用的项目运行时");
+      assert.deepEqual(closeGenerations, [1, 2]);
+      assert.equal(opened, false);
+    } finally {
+      syncCoordinator.listProjects = originalList;
+      syncCoordinator.openProject = originalOpen;
+      syncCoordinator.closeProject = originalClose;
+      delete (syncCoordinator as { isProjectOpened?: unknown }).isProjectOpened;
+    }
+  });
+});
+
+test("个人画布兼容请求支持同项目重入、异常后释放队列且不同项目并行", async () => {
+  await runWithTemporaryAccount("tc-b25-operation-queue", async () => {
+    const restore = stubCatalog([
+      catalogItem({ projectUuid: PERSONAL, name: "重入画布" }),
+      catalogItem({ projectUuid: PERSONAL_TWO, name: "并行画布" }),
+    ]);
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    try {
+      await initializeCanvasWorkspace(PERSONAL);
+      await initializeCanvasWorkspace(PERSONAL_TWO);
+      const nested = withOpenPersonalCanvasProject(PERSONAL, "read", () => (
+        withOpenPersonalCanvasProject(PERSONAL, "read", async () => "nested-ok", SESSION as never)
+      ), SESSION as never);
+      assert.equal(await Promise.race([
+        nested,
+        new Promise<string>((resolve) => setTimeout(() => resolve("timeout"), 250)),
+      ]), "nested-ok", "同项目嵌套调用不得自锁");
+
+      await assert.rejects(
+        withOpenPersonalCanvasProject(PERSONAL, "read", async () => {
+          throw new Error("queue-first-failed");
+        }, SESSION as never),
+        /queue-first-failed/,
+      );
+      assert.equal(await withOpenPersonalCanvasProject(PERSONAL, "read", async () => "after-error", SESSION as never), "after-error");
+
+      await Promise.all([PERSONAL, PERSONAL_TWO].map((projectUuid) => (
+        withOpenPersonalCanvasProject(projectUuid, "read", async () => {
+          concurrent += 1;
+          maxConcurrent = Math.max(maxConcurrent, concurrent);
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          concurrent -= 1;
+        }, SESSION as never)
+      )));
+      assert.equal(maxConcurrent, 2, "不同项目不得被同一全局队列串行化");
+      assert.equal(personalCanvasOperationTailCountForTests(), 0, "所有路径结束后必须清空 tail map");
+    } finally {
+      restore();
+      await releaseProjectDatabaseLease(PERSONAL, "scheduler").catch(() => undefined);
+      await releaseProjectDatabaseLease(PERSONAL_TWO, "scheduler").catch(() => undefined);
+    }
+  });
+});
+
+test("个人画布兼容 handler 在 UI 关闭期间持有 scheduler lease", async () => {
+  await runWithTemporaryAccount("tc-b25-handler-close-lease", async () => {
+    const restore = stubCatalog([catalogItem({ projectUuid: PERSONAL, name: "在途画布" })]);
+    let resume!: () => void;
+    const suspended = new Promise<void>((resolve) => { resume = resolve; });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    try {
+      await initializeCanvasWorkspace(PERSONAL);
+      await acquireProjectDatabaseLease(PERSONAL, "ui");
+      const operation = withOpenPersonalCanvasProject(PERSONAL, "read", async () => {
+        assert.equal(projectDatabaseLeaseSnapshot(PERSONAL).scheduler, 1);
+        entered();
+        await suspended;
+        await db("canvas_documents").where({ id: 1 }).first();
+      }, SESSION as never);
+      await started;
+      await releaseProjectDatabaseLease(PERSONAL, "ui");
+      assert.equal(projectDatabaseLeaseSnapshot(PERSONAL).scheduler, 1, "UI close 后在途兼容请求必须继续保护句柄");
+      resume();
+      await operation;
+      assert.equal(projectDatabaseLeaseSnapshot(PERSONAL).scheduler, 0);
+    } finally {
+      resume?.();
+      restore();
+      await releaseProjectDatabaseLease(PERSONAL, "ui").catch(() => undefined);
+      await releaseProjectDatabaseLease(PERSONAL, "scheduler").catch(() => undefined);
+    }
+  });
+});
+
 test("当前账号真实个人画布可打开、保存并再次打开；他人/团队/非画布项目不得越权打开", async () => {
   await runWithTemporaryAccount("tc-b19-open", async () => {
     const restore = stubCatalog([
@@ -209,25 +478,45 @@ test("当前账号真实个人画布可打开、保存并再次打开；他人/�
     try {
       await initializeCanvasWorkspace(PERSONAL);
       await withCompat(async (origin) => {
+        const persistedStoryboardProgress = {
+          id: "storyboard-session",
+          title: "AI 创作",
+          status: "running",
+          unitType: "storyboard_chunk",
+          currentIndex: 2,
+          total: 8,
+          currentNodeId: "n-open",
+          currentTaskId: "task-open",
+          summary: "正在生成第 2 个创作单元",
+          lastError: "",
+          history: [],
+          updatedAt: 123,
+        };
         const saved = await fetch(`${origin}/api/tianjiang/tapcanvas/flows`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             projectId: PERSONAL,
             name: "画布",
-            data: { nodes: [{ id: "n-open", type: "taskNode", data: { kind: "text", prompt: "第一稿" } }], edges: [] },
+            data: {
+              nodes: [{ id: "n-open", type: "taskNode", data: { kind: "text", prompt: "第一稿" } }],
+              edges: [],
+              sceneCreationProgress: persistedStoryboardProgress,
+            },
             expectedRevision: 0,
           }),
         });
         assert.equal(saved.status, 200);
-        const first = await saved.json() as { canvasRevision: number; data: { nodes: Array<{ id: string }> } };
+        const first = await saved.json() as { canvasRevision: number; data: { nodes: Array<{ id: string }>; sceneCreationProgress?: unknown } };
         assert.equal(first.canvasRevision, 1);
+        assert.deepEqual(first.data.sceneCreationProgress, persistedStoryboardProgress);
 
         const loaded = await fetch(`${origin}/api/tianjiang/tapcanvas/flows/${PERSONAL}`);
         assert.equal(loaded.status, 200);
-        const flow = await loaded.json() as { canvasRevision: number; data: { nodes: Array<{ data?: { prompt?: string } }> } };
+        const flow = await loaded.json() as { canvasRevision: number; data: { nodes: Array<{ data?: { prompt?: string } }>; sceneCreationProgress?: unknown } };
         assert.equal(flow.canvasRevision, 1);
         assert.ok(flow.data.nodes.some((node) => String(node.data?.prompt ?? "").includes("第一稿")));
+        assert.deepEqual(flow.data.sceneCreationProgress, persistedStoryboardProgress);
 
         const listed = await fetch(`${origin}/api/tianjiang/tapcanvas/flows?projectId=${PERSONAL}`);
         assert.equal(listed.status, 200);

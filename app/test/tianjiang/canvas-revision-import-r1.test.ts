@@ -66,6 +66,13 @@ test("JSON 导入必须重映射 UUID 并与文档 revision 同事务", async ()
       collapsed: false,
       data: { title: "导入文本", runUuid: "should-strip" },
     }];
+    document.sceneCreationProgress = {
+      id: "source-session",
+      status: "running",
+      currentNodeId: sourceNode,
+      currentTaskId: "source-task",
+      history: [{ nodeId: sourceNode }],
+    };
     try {
       const response = await fetch(
         `http://127.0.0.1:${port}/api/tianjiang/runtime/projects/${PROJECT_UUID}/canvas/imports/json`,
@@ -80,15 +87,28 @@ test("JSON 导入必须重映射 UUID 并与文档 revision 同事务", async ()
         },
       );
       const body = await response.json().catch(() => ({})) as {
-        data?: { revision?: number; document?: { graph?: { nodes?: Array<{ nodeUuid?: string; data?: Record<string, unknown> }> } } };
+        data?: {
+          revision?: number;
+          document?: {
+            graph?: { nodes?: Array<{ nodeUuid?: string; data?: Record<string, unknown> }> };
+            sceneCreationProgress?: unknown;
+          };
+        };
       };
       const imported = body.data?.document?.graph?.nodes?.[0];
-      if (response.status !== 200 || body.data?.revision !== 1 || imported?.nodeUuid === sourceNode || imported?.data?.runUuid) {
+      if (
+        response.status !== 200
+        || body.data?.revision !== 1
+        || imported?.nodeUuid === sourceNode
+        || imported?.data?.runUuid
+        || body.data?.document?.sceneCreationProgress !== null
+      ) {
         console.error(SENTINEL);
         assert.equal(response.status, 200, SENTINEL);
         assert.equal(body.data?.revision, 1, SENTINEL);
         assert.notEqual(imported?.nodeUuid, sourceNode, SENTINEL);
         assert.equal(imported?.data?.runUuid, undefined, SENTINEL);
+        assert.equal(body.data?.document?.sceneCreationProgress, null, "导入不得保留来源项目的任务和节点进度引用");
       }
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));

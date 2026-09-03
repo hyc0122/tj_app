@@ -12,6 +12,23 @@ function canonical(value: unknown): string {
   }
 }
 
+function withoutReactFlowViewState<NodeType extends Node>(node: NodeType): NodeType {
+  // 中文注释：这些字段由 React Flow 的选中、拖动和测量过程产生，不属于作者内容。
+  const {
+    selected: _selected,
+    dragging: _dragging,
+    measured: _measured,
+    ...persistable
+  } = node
+  return persistable as NodeType
+}
+
+function withoutReactFlowEdgeViewState<EdgeType extends Edge>(edge: EdgeType): EdgeType {
+  // 中文注释：连线选中态同样只属于编辑器视图，不应触发保存或保留未保存标记。
+  const { selected: _selected, ...persistable } = edge
+  return persistable as EdgeType
+}
+
 /**
  * 可持久化图内容的稳定签名。
  *
@@ -23,9 +40,11 @@ function canonical(value: unknown): string {
  */
 export function persistedGraphContentKey(nodes: readonly Node[], edges: readonly Edge[]): string {
   const persistableNodes = withoutWorkflowExecutionProjectionNodes(nodes)
+    .map(withoutReactFlowViewState)
     .slice()
     .sort((a, b) => String(a.id ?? '').localeCompare(String(b.id ?? '')))
   const persistableEdges = withoutWorkflowExecutionProjectionEdges(edges)
+    .map(withoutReactFlowEdgeViewState)
     .slice()
     .sort((a, b) => String(a.id ?? '').localeCompare(String(b.id ?? '')))
   return `${canonical(persistableNodes)}|${canonical(persistableEdges)}`

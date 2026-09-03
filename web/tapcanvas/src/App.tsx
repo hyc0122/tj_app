@@ -1,7 +1,7 @@
 import React from 'react'
 import { AppShell, ActionIcon, Group, Box, Button, Badge, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconCoins, IconChartBar, IconBooks } from '@tabler/icons-react'
+import { IconChartBar, IconBooks } from '@tabler/icons-react'
 import Canvas from './canvas/Canvas'
 import GithubGate from './auth/GithubGate'
 import { isCanvasNodeDragActive, sanitizeGraphForCanvas, useRFStore } from './canvas/store'
@@ -27,14 +27,12 @@ import {
   listProjectFlows,
   getServerFlow,
   listShotFlows,
-  getMyTeam,
   upsertProject,
   pingActivity,
   API_BASE,
   type FlowDto,
   type FlowSaveReceipt,
   type ProjectDto,
-  type TeamDto,
 } from './api/server'
 import { useAuth } from './auth/store'
 import { useIsAdmin } from './auth/isAdmin'
@@ -125,6 +123,7 @@ import { preloadModelOptions } from './config/useModelOptions'
 import { useCanvasSync, type SyncPatch } from './canvas/sync/useCanvasSync'
 import { derivedApplyGuard, remoteApplyGuard } from './canvas/sync/remoteApplyGuard'
 import { hasCreationSessionProgressChanged } from './canvas/persistence/creationSessionPersistence'
+import { applyCompletedCanvasSave } from './canvas/persistence/saveCompletionOrchestrator'
 import { applyCanvasGraphPatch } from './canvas/sync/applyCanvasGraphPatch'
 import { useYjsCanvasSync } from './canvas/sync/yjs/useYjsCanvasSync'
 import { getYjsMode } from './canvas/sync/yjs/yjsFlags'
@@ -332,8 +331,6 @@ function CanvasApp({
       : null
   ), [studioRouteScope.ownerId, studioRouteScope.ownerType])
   const studioFlowId = studioRouteScope.flowId || ''
-  const [headerTeam, setHeaderTeam] = React.useState<TeamDto | null>(null)
-  const [headerPointsLoading, setHeaderPointsLoading] = React.useState(false)
   const [annotationModeActive, setAnnotationModeActive] = React.useState(false)
   const [headerAdminWorkbenchOpen, setHeaderAdminWorkbenchOpen] = React.useState(false)
   const [referralModalOpen, setReferralModalOpen] = React.useState(false)
@@ -540,31 +537,6 @@ function CanvasApp({
     }
   }, [auth.user?.sub, detachCurrentFlowFromProject, routeKey, routeProjectId, setCurrentProject, setCurrentFlow, setDirty])
 
-  const refreshHeaderCredits = React.useCallback(async () => {
-    const user = auth.user
-    if (!user || user.guest) {
-      setHeaderTeam(null)
-      setHeaderPointsLoading(false)
-      return
-    }
-    setHeaderPointsLoading(true)
-    try {
-      const membership = await getMyTeam()
-      setHeaderTeam(membership?.team || null)
-    } catch {
-      setHeaderTeam(null)
-    } finally {
-      setHeaderPointsLoading(false)
-    }
-  }, [auth.user])
-
-  // 切换团队时刷新积分显示
-  React.useEffect(() => {
-    const handler = () => { void refreshHeaderCredits() }
-    window.addEventListener('tapcanvas:team-changed', handler)
-    return () => window.removeEventListener('tapcanvas:team-changed', handler)
-  }, [refreshHeaderCredits])
-
   // 标注模式：隐藏 header 操作区，避免与标注工具栏重叠
   React.useEffect(() => {
     const handler = (e: Event) => {
@@ -573,10 +545,6 @@ function CanvasApp({
     window.addEventListener('tapcanvas:annotation-mode', handler)
     return () => window.removeEventListener('tapcanvas:annotation-mode', handler)
   }, [])
-
-  React.useEffect(() => {
-    void refreshHeaderCredits()
-  }, [refreshHeaderCredits])
 
   const autoResumePendingTasks = React.useCallback(() => {
     try {
@@ -933,6 +901,7 @@ function CanvasApp({
     snapshot: FlowDto['data']
   }): Promise<FlowSaveReceipt> => {
     const sessionEpoch = canvasSessionEpochRef.current
+    const savingMutationRevision = canvasMutationRevisionRef.current
     const saveAtRevision = (snapshot: FlowDto['data'], expectedRevision: number): Promise<FlowSaveReceipt> => {
       const authoringSnapshot: FlowDto['data'] = {
         ...snapshot,
@@ -990,12 +959,30 @@ function CanvasApp({
     }
 
     setLocalFlowRevision(result.flow.canvasRevision ?? expectedRevision + 1)
-    acknowledgedFlowRef.current = result.snapshot
-
-    if (result.rebased) {
-      const currentProvenance = useRFStore.getState().graphProvenanceKey
-      if (!input.flowId || !currentProvenance || currentProvenance === `flow:${input.flowId}`) {
-        const sanitized = sanitizeGraphForCanvas(result.snapshot)
+    applyCompletedCanvasSave({
+      rebased: result.rebased,
+      savingMutationRevision,
+      currentMutationRevision: canvasMutationRevisionRef.current,
+      savingSnapshot: input.snapshot,
+      acknowledgedSnapshot: result.snapshot,
+      readCurrentSnapshot: () => {
+        const liveState = useRFStore.getState()
+        return {
+          nodes: liveState.nodes,
+          edges: liveState.edges,
+          sceneCreationProgress: serializeCreationSessionForPersistence(useUIStore.getState().creationSession),
+        }
+      },
+      setAcknowledgedSnapshot: (snapshot) => {
+        acknowledgedFlowRef.current = snapshot as FlowDto['data']
+      },
+      applyRebasedSnapshot: (snapshot) => {
+        const currentProvenance = useRFStore.getState().graphProvenanceKey
+        if (input.flowId && currentProvenance && currentProvenance !== `flow:${input.flowId}`) {
+          return false
+        }
+        const snapshotToApply = snapshot as FlowDto['data']
+        const sanitized = sanitizeGraphForCanvas(snapshotToApply)
         remoteApplyGuard.run(() => {
           workflowExecutionProjectionGuard.run(() => {
             // A conflict rebase restores the persisted authoring graph, which
@@ -1018,9 +1005,11 @@ function CanvasApp({
             })
           })
         })
-        restoreCreationSession(result.snapshot.sceneCreationProgress)
-      }
-    }
+        restoreCreationSession(snapshotToApply.sceneCreationProgress)
+        return true
+      },
+      setDirty,
+    })
 
     return result.flow
   }
@@ -1077,7 +1066,6 @@ function CanvasApp({
     }
     // 项目即工作流：名称使用项目名
     const flowName = proj!.name || '未命名'
-    const savingMutationRevision = canvasMutationRevisionRef.current
     const { nodes, edges } = filterNodesForPersistence(
       useRFStore.getState().nodes,
       useRFStore.getState().edges,
@@ -1107,7 +1095,6 @@ function CanvasApp({
       if (saved.id && useRFStore.getState().graphProvenanceKey == null) {
         useRFStore.getState().setGraphProvenance(`flow:${saved.id}`)
       }
-      setDirty(canvasMutationRevisionRef.current !== savingMutationRevision)
       lastSilentSaveErrorRef.current = ''
       notifications.update({ id: nid, title: $('已保存'), message: $t('项目「{{name}}」已保存', { name: proj!.name }), loading: false, autoClose: 1500, color: 'green' })
       if (createdProjectId) {
@@ -1296,7 +1283,6 @@ function CanvasApp({
       return false
     }
     const flowName = proj!.name || '未命名'
-    const savingMutationRevision = canvasMutationRevisionRef.current
     const nodes = useRFStore.getState().nodes
     const edges = useRFStore.getState().edges
     const { currentFlow: flow, canvasViewport: viewport } = readUiSnapshot()
@@ -1330,7 +1316,6 @@ function CanvasApp({
       if (saved.id && useRFStore.getState().graphProvenanceKey == null) {
         useRFStore.getState().setGraphProvenance(`flow:${saved.id}`)
       }
-      setDirty(canvasMutationRevisionRef.current !== savingMutationRevision)
       lastSilentSaveErrorRef.current = ''
       if (createdProjectId) {
         spaReplace(buildStudioUrl({
@@ -1729,13 +1714,6 @@ function CanvasApp({
                       </ActionIcon>
                     </Tooltip>
                   ) : null}
-					<Badge
-						className="app-credit-balance"
-						variant="light"
-						leftSection={<IconCoins size={13} />}
-					>
-						{headerPointsLoading ? '…' : String(Math.max(0, Number(headerTeam?.creditsAvailable || 0)))}
-					</Badge>
                 </>
               ) : null}
               <Tooltip label="章节画布" withArrow>

@@ -35,6 +35,8 @@ export interface CanvasDocument {
   graph: CanvasGraph;
   viewport: { x: number; y: number; zoom: number };
   preferences: { wheelMode: "zoom" | "pan"; snapToGrid: boolean; gridSize: number };
+  /** 中文注释：TapCanvas 一句话成片的可恢复进度，必须随文档修订一起持久化。 */
+  sceneCreationProgress?: unknown;
 }
 
 const RUNTIME_KEYS = new Set([
@@ -77,6 +79,7 @@ export function emptyCanvasDocument(): CanvasDocument {
     graph: { nodes: [], edges: [] },
     viewport: { x: 0, y: 0, zoom: 1 },
     preferences: { wheelMode: "zoom", snapToGrid: true, gridSize: 16 },
+    sceneCreationProgress: null,
   };
 }
 

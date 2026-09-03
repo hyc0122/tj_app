@@ -70,6 +70,8 @@ export function remapImportedDocument(document: CanvasDocument): CanvasDocument 
     graph: { nodes, edges },
     viewport: document.viewport ?? emptyCanvasDocument().viewport,
     preferences: document.preferences ?? emptyCanvasDocument().preferences,
+    // 创作会话中的节点、任务和会话标识都属于来源项目，不能作为可移植画布内容导入。
+    sceneCreationProgress: null,
   };
 }
 

@@ -33,6 +33,8 @@ describe('workflow execution projection data', () => {
       workflowExecutionFinishedAt: '2026-08-12T05:00:01.000Z',
       workflowNodeRunId: 'node-run-1',
       workflowResolvedOutputReuse: { kind: 'replay' },
+      workflowWaitingReasonCode: 'provider_balance_required',
+      workflowWaitingReasonLabel: '等待余额恢复',
     })
 
     expect(authoringData).toEqual({
@@ -40,6 +42,26 @@ describe('workflow execution projection data', () => {
       adminWorkflow: true,
       label: 'Prompt agent',
       workflowAtomicSpec: { executorRef: 'agents.logical-task/v2' },
+    })
+  })
+
+  it('durable workflowExecution 占位节点只剥离运行态字段', () => {
+    const nodes = withoutWorkflowExecutionProjectionNodes([{
+      id: 'durable-execution',
+      data: {
+        kind: 'workflowExecution',
+        workflowRuntimeReference: false,
+        label: '执行占位',
+        workflowStatus: 'running',
+        workflowWaitingReasonCode: 'provider_balance_required',
+        workflowWaitingReasonLabel: '等待余额恢复',
+      },
+    }])
+
+    expect(nodes[0]?.data).toEqual({
+      kind: 'workflowExecution',
+      workflowRuntimeReference: false,
+      label: '执行占位',
     })
   })
 

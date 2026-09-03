@@ -20,6 +20,7 @@ export async function migrateCanvasProjectSchema(
       graph_json TEXT NOT NULL,
       viewport_json TEXT NOT NULL,
       preferences_json TEXT NOT NULL,
+      scene_creation_progress_json TEXT NOT NULL DEFAULT 'null',
       home_initialization_state TEXT NOT NULL CHECK (home_initialization_state IN ('pending','consumed','disabled')),
       updated_at TEXT NOT NULL
     )
@@ -31,6 +32,7 @@ export async function migrateCanvasProjectSchema(
       graph_json TEXT NOT NULL,
       viewport_json TEXT NOT NULL,
       preferences_json TEXT NOT NULL,
+      scene_creation_progress_json TEXT NOT NULL DEFAULT 'null',
       snapshot_kind TEXT NOT NULL CHECK (snapshot_kind IN ('automatic','manual','restore')),
       payload_bytes INTEGER NOT NULL CHECK (payload_bytes >= 0),
       document_sha256 TEXT NOT NULL,
@@ -43,6 +45,17 @@ export async function migrateCanvasProjectSchema(
         OR (is_pinned = 0 AND pin_reason IS NULL AND pinned_at IS NULL))
     )
   `);
+  // 中文注释：已有项目库无须重建；激活时就地补齐 beta.25 的创作进度列。
+  if (!(await database.schema.hasColumn("canvas_documents", "scene_creation_progress_json"))) {
+    await database.schema.alterTable("canvas_documents", (table) => {
+      table.text("scene_creation_progress_json").notNullable().defaultTo("null");
+    });
+  }
+  if (!(await database.schema.hasColumn("canvas_revisions", "scene_creation_progress_json"))) {
+    await database.schema.alterTable("canvas_revisions", (table) => {
+      table.text("scene_creation_progress_json").notNullable().defaultTo("null");
+    });
+  }
   await database.raw(`
     CREATE TABLE IF NOT EXISTS canvas_revision_pin_mutations (
       client_mutation_id TEXT PRIMARY KEY,
@@ -321,6 +334,7 @@ export async function migrateCanvasProjectSchema(
       graph_json: EMPTY_GRAPH,
       viewport_json: DEFAULT_VIEWPORT,
       preferences_json: DEFAULT_PREFERENCES,
+      scene_creation_progress_json: "null",
       home_initialization_state: "pending",
       updated_at: new Date().toISOString(),
     });

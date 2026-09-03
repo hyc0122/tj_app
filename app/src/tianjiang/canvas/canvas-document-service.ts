@@ -42,8 +42,11 @@ function sha256Text(value: string): string {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function payloadBytes(graph: string, viewport: string, preferences: string): number {
-  return Buffer.byteLength(graph, "utf8") + Buffer.byteLength(viewport, "utf8") + Buffer.byteLength(preferences, "utf8");
+function payloadBytes(graph: string, viewport: string, preferences: string, sceneCreationProgress: string): number {
+  return Buffer.byteLength(graph, "utf8")
+    + Buffer.byteLength(viewport, "utf8")
+    + Buffer.byteLength(preferences, "utf8")
+    + Buffer.byteLength(sceneCreationProgress, "utf8");
 }
 
 function parseRow(projectUuid: string, row: {
@@ -51,6 +54,7 @@ function parseRow(projectUuid: string, row: {
   graph_json: string;
   viewport_json: string;
   preferences_json: string;
+  scene_creation_progress_json?: string;
   updated_at: string;
 }): CanvasDocumentEnvelope {
   return {
@@ -62,6 +66,7 @@ function parseRow(projectUuid: string, row: {
       graph: JSON.parse(String(row.graph_json)),
       viewport: JSON.parse(String(row.viewport_json)),
       preferences: JSON.parse(String(row.preferences_json)),
+      sceneCreationProgress: JSON.parse(String(row.scene_creation_progress_json ?? "null")),
     },
   };
 }
@@ -101,10 +106,12 @@ export async function saveCanvasDocument(
     graph,
     viewport: input.document?.viewport ?? { x: 0, y: 0, zoom: 1 },
     preferences: input.document?.preferences ?? { wheelMode: "zoom", snapToGrid: true, gridSize: 16 },
+    sceneCreationProgress: input.document?.sceneCreationProgress ?? null,
   };
   const graphJson = JSON.stringify(document.graph);
   const viewportJson = JSON.stringify(document.viewport);
   const preferencesJson = JSON.stringify(document.preferences);
+  const sceneCreationProgressJson = JSON.stringify(document.sceneCreationProgress ?? null);
   if (Buffer.byteLength(graphJson, "utf8") > CANVAS_LIMITS.MAX_CANVAS_GRAPH_JSON_BYTES) {
     throw new CanvasRuntimeError("CANVAS_BODY_TOO_LARGE", "请求体超过画布上限", 413, false);
   }
@@ -139,6 +146,7 @@ export async function saveCanvasDocument(
       graph_json: graphJson,
       viewport_json: viewportJson,
       preferences_json: preferencesJson,
+      scene_creation_progress_json: sceneCreationProgressJson,
       home_initialization_state: options.homeInitializationState
         ?? (current?.home_initialization_state === "pending" ? "disabled" : current?.home_initialization_state),
       updated_at: updatedAt,
@@ -146,7 +154,7 @@ export async function saveCanvasDocument(
     if (Number(affected) !== 1) {
       throw new CanvasRuntimeError("CANVAS_REVISION_CONFLICT", "画布文档版本已变化", 409, true);
     }
-    const bytes = payloadBytes(graphJson, viewportJson, preferencesJson);
+    const bytes = payloadBytes(graphJson, viewportJson, preferencesJson, sceneCreationProgressJson);
     await enforceRevisionBudget(trx, bytes);
     const revisionUuid = crypto.randomUUID();
     await trx("canvas_revisions").insert({
@@ -155,9 +163,10 @@ export async function saveCanvasDocument(
       graph_json: graphJson,
       viewport_json: viewportJson,
       preferences_json: preferencesJson,
+      scene_creation_progress_json: sceneCreationProgressJson,
       snapshot_kind: "manual",
       payload_bytes: bytes,
-      document_sha256: sha256Text(graphJson + viewportJson + preferencesJson),
+      document_sha256: sha256Text(graphJson + viewportJson + preferencesJson + sceneCreationProgressJson),
       is_pinned: 0,
       pin_reason: null,
       pinned_at: null,
@@ -244,6 +253,7 @@ export async function restoreCanvasRevision(
     graph: JSON.parse(String(row.graph_json)),
     viewport: JSON.parse(String(row.viewport_json)),
     preferences: JSON.parse(String(row.preferences_json)),
+    sceneCreationProgress: JSON.parse(String(row.scene_creation_progress_json ?? "null")),
   };
   return saveCanvasDocument(projectUuid, {
     baseRevision: input.baseRevision,

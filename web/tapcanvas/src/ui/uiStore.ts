@@ -440,7 +440,6 @@ function normalizePersistedCreationSession(value: unknown): PersistedCreationSes
 
 export function serializeCreationSessionForPersistence(session: CreationSession | null): PersistedCreationSession | null {
   if (!session) return null
-  if (session.unitType !== 'scene') return null
   return {
     id: session.id,
     title: session.title,
@@ -649,18 +648,37 @@ export const useUIStore = create<UIState>((set, get) => ({
       || nextIndex > current.currentIndex
       || (nextIndex === current.currentIndex && nextUpdatedAt >= current.updatedAt)
     if (!shouldReplace) return
+    const nextTitle = String(payload.title || '').trim() || current?.title || 'AI 创作'
+    const nextStatus = payload.status || current?.status || 'running'
+    const nextNodeId = String(payload.currentNodeId || '').trim()
+    const nextTaskId = String(payload.currentTaskId || '').trim()
+    const nextSummary = String(payload.summary || '').trim()
+    const nextLastError = String(payload.lastError || '').trim()
+    if (
+      current
+      && current.id === payload.id
+      && current.title === nextTitle
+      && current.status === nextStatus
+      && current.unitType === payload.unitType
+      && current.currentIndex === nextIndex
+      && current.total === nextTotal
+      && current.currentNodeId === nextNodeId
+      && current.currentTaskId === nextTaskId
+      && current.summary === nextSummary
+      && current.lastError === nextLastError
+    ) return
     set({
       creationSession: {
         id: payload.id,
-        title: String(payload.title || '').trim() || current?.title || 'AI 创作',
-        status: payload.status || current?.status || 'running',
+        title: nextTitle,
+        status: nextStatus,
         unitType: payload.unitType,
         currentIndex: nextIndex,
         total: nextTotal,
-        currentNodeId: String(payload.currentNodeId || '').trim(),
-        currentTaskId: String(payload.currentTaskId || '').trim(),
-        summary: String(payload.summary || '').trim(),
-        lastError: String(payload.lastError || '').trim(),
+        currentNodeId: nextNodeId,
+        currentTaskId: nextTaskId,
+        summary: nextSummary,
+        lastError: nextLastError,
         history: current?.history ?? [],
         updatedAt: nextUpdatedAt,
       },

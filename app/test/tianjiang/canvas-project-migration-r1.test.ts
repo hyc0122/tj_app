@@ -59,6 +59,7 @@ test("项目库安装画布表且账号库不得装入可同步 outbox", async (
     );
     assert.equal(doc?.home_initialization_state, "pending", SENTINEL);
     assert.equal(doc?.revision, 0, SENTINEL);
+    assert.equal(doc?.scene_creation_progress_json, "null", SENTINEL);
     } catch (error) {
       if ((error as { code?: string })?.code === "ERR_ASSERTION") {
         console.error(SENTINEL);

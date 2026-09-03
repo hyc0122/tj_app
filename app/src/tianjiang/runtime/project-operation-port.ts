@@ -197,8 +197,46 @@ function isCanvasProjectOpened(projectUuid: string, coordinator: object): boolea
   return Boolean(opened?.has(projectUuid) || opened?.has(projectUuid.toLowerCase()));
 }
 
+const personalCanvasOperationTails = new Map<string, Promise<void>>();
+const personalCanvasOperationScope = new AsyncLocalStorage<ReadonlySet<string>>();
+
+export function personalCanvasOperationTailCountForTests(): number {
+  return process.env.NODE_TEST_CONTEXT ? personalCanvasOperationTails.size : -1;
+}
+
+async function runSerializedPersonalCanvasOperation<T>(
+  projectUuid: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const activeProjects = personalCanvasOperationScope.getStore();
+  if (activeProjects?.has(projectUuid)) {
+    // 中文注释：同一异步调用链内的同项目重入已经位于临界区，直接复用以避免等待自己。
+    return operation();
+  }
+  const previous = personalCanvasOperationTails.get(projectUuid) ?? Promise.resolve();
+  let releaseTurn!: () => void;
+  const turn = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
+  const tail = previous.catch(() => undefined).then(() => turn);
+  personalCanvasOperationTails.set(projectUuid, tail);
+  await previous.catch(() => undefined);
+  try {
+    const nextActiveProjects = new Set(activeProjects ?? []);
+    nextActiveProjects.add(projectUuid);
+    return await personalCanvasOperationScope.run(nextActiveProjects, operation);
+  } finally {
+    // 中文注释：同一项目的授权、短开、处理和关闭必须作为一个整体串行，
+    // 防止先结束的请求关闭另一个仍在使用的 project.sqlite。
+    releaseTurn();
+    if (personalCanvasOperationTails.get(projectUuid) === tail) {
+      personalCanvasOperationTails.delete(projectUuid);
+    }
+  }
+}
+
 /** 个人画布唯一授权边界：personal/canvas、当前账号 owner；目录通过后才打开本地库。 */
-export async function withOpenPersonalCanvasProject<T>(
+async function withOpenPersonalCanvasProjectOnce<T>(
   projectUuid: string,
   mode: "read" | "write",
   handler: (context: OpenPersonalCanvasContext) => Promise<T>,
@@ -236,11 +274,32 @@ export async function withOpenPersonalCanvasProject<T>(
       canvasPermissionDenied();
     }
     const identity = { issuer: session.serverUrl, userId: session.user.id };
-    return await runWithUserStorage(identity, () => runWithProjectStorage(projectUuid, () => handler({
-      projectUuid,
-      mode,
-      session,
-    })));
+    return await runWithUserStorage(identity, async () => {
+      let leased = false;
+      let handlerError: unknown;
+      try {
+        // 中文注释：兼容请求在整个 handler 期间持有 scheduler lease；即使 UI 同时关闭，
+        // project.sqlite 也要等请求结束后才能销毁。
+        await acquireProjectDatabaseLease(projectUuid, "scheduler");
+        leased = true;
+        return await runWithProjectStorage(projectUuid, () => handler({
+          projectUuid,
+          mode,
+          session,
+        }));
+      } catch (error) {
+        handlerError = error;
+        throw error;
+      } finally {
+        if (leased) {
+          try {
+            await releaseProjectDatabaseLease(projectUuid, "scheduler");
+          } catch (releaseError) {
+            if (handlerError === undefined) throw releaseError;
+          }
+        }
+      }
+    });
   } catch (error) {
     operationError = error;
     throw error;
@@ -255,4 +314,15 @@ export async function withOpenPersonalCanvasProject<T>(
       }
     }
   }
+}
+
+export async function withOpenPersonalCanvasProject<T>(
+  projectUuid: string,
+  mode: "read" | "write",
+  handler: (context: OpenPersonalCanvasContext) => Promise<T>,
+  session?: CentralSession,
+): Promise<T> {
+  return runSerializedPersonalCanvasOperation(projectUuid, () => (
+    withOpenPersonalCanvasProjectOnce(projectUuid, mode, handler, session)
+  ));
 }

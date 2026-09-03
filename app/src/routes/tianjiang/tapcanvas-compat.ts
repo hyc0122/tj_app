@@ -97,9 +97,213 @@ type ProjectAliasState = Record<string, { name: string; updatedAt: string }>;
 
 const TAPCANVAS_DIRECTORY_SETTING_KEY = "tapcanvas.projectDirectory.v1";
 const TAPCANVAS_PROJECT_ALIAS_SETTING_KEY = "tapcanvas.projectAliases.v1";
+const TAPCANVAS_WORKSPACE_CONTEXT_SETTING_KEY = "tapcanvas.workspaceContext.v1";
 const MAX_DIRECTORY_BYTES = 2 * 1024 * 1024;
 const MAX_DIRECTORY_NODES = 10_000;
 const MAX_PROJECT_ALIASES = 2_000;
+const MAX_WORKSPACE_CONTEXT_FILE_CHARS = 256 * 1024;
+const MAX_WORKSPACE_CONTEXT_HISTORY = 30;
+
+const PROJECT_WORKSPACE_CONTEXT_FILE_NAMES = [
+  "PROJECT.md",
+  "CREATIVE_BRIEF.md",
+  "RULES.md",
+  "CHARACTERS.md",
+  "STORY_STATE.md",
+] as const;
+
+type ProjectWorkspaceContextFileName = typeof PROJECT_WORKSPACE_CONTEXT_FILE_NAMES[number];
+
+type ProjectWorkspaceContextVersion = {
+  versionId: string;
+  content: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+type ProjectWorkspaceContextFileState = {
+  content: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  history: ProjectWorkspaceContextVersion[];
+};
+
+type ProjectWorkspaceContextState = {
+  version: 1;
+  files: Record<ProjectWorkspaceContextFileName, ProjectWorkspaceContextFileState>;
+};
+
+function isProjectWorkspaceContextFileName(value: unknown): value is ProjectWorkspaceContextFileName {
+  return PROJECT_WORKSPACE_CONTEXT_FILE_NAMES.includes(value as ProjectWorkspaceContextFileName);
+}
+
+function defaultWorkspaceContextContent(fileName: ProjectWorkspaceContextFileName, input: {
+  projectId: string;
+  projectName: string;
+}): string {
+  if (fileName === "PROJECT.md") {
+    return [
+      `# ${input.projectName}`,
+      "",
+      `- 项目 ID：${input.projectId}`,
+      "- 运行环境：天将桌面端个人画布",
+      "- 模型来源：软件模型路由",
+    ].join("\n");
+  }
+  const titles: Record<Exclude<ProjectWorkspaceContextFileName, "PROJECT.md">, string> = {
+    "CREATIVE_BRIEF.md": "创作简报",
+    "RULES.md": "项目规则",
+    "CHARACTERS.md": "角色设定",
+    "STORY_STATE.md": "故事状态",
+  };
+  return `# ${titles[fileName]}\n`;
+}
+
+function emptyProjectWorkspaceContextState(input: {
+  projectId: string;
+  projectName: string;
+}): ProjectWorkspaceContextState {
+  const files = {} as ProjectWorkspaceContextState["files"];
+  for (const fileName of PROJECT_WORKSPACE_CONTEXT_FILE_NAMES) {
+    files[fileName] = {
+      content: defaultWorkspaceContextContent(fileName, input),
+      updatedAt: null,
+      updatedBy: null,
+      history: [],
+    };
+  }
+  return {
+    version: 1,
+    files,
+  };
+}
+
+function normalizeWorkspaceContextVersion(value: unknown): ProjectWorkspaceContextVersion | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const versionId = typeof record.versionId === "string" ? record.versionId.trim() : "";
+  const content = typeof record.content === "string" ? record.content : "";
+  const updatedAt = typeof record.updatedAt === "string" ? record.updatedAt.trim() : "";
+  const updatedBy = typeof record.updatedBy === "string" ? record.updatedBy.trim() : "";
+  if (!versionId || !updatedAt || !updatedBy) return null;
+  if (content.length > MAX_WORKSPACE_CONTEXT_FILE_CHARS) return null;
+  return { versionId, content, updatedAt, updatedBy };
+}
+
+function normalizeProjectWorkspaceContextState(value: unknown, input: {
+  projectId: string;
+  projectName: string;
+}): ProjectWorkspaceContextState {
+  const fallback = emptyProjectWorkspaceContextState(input);
+  if (!value || typeof value !== "object") return fallback;
+  const files = (value as { files?: unknown }).files;
+  if (!files || typeof files !== "object" || Array.isArray(files)) return fallback;
+
+  for (const fileName of PROJECT_WORKSPACE_CONTEXT_FILE_NAMES) {
+    const candidate = (files as Record<string, unknown>)[fileName];
+    if (!candidate || typeof candidate !== "object") continue;
+    const record = candidate as Record<string, unknown>;
+    const content = typeof record.content === "string" ? record.content : fallback.files[fileName].content;
+    if (content.length > MAX_WORKSPACE_CONTEXT_FILE_CHARS) continue;
+    fallback.files[fileName] = {
+      content,
+      updatedAt: typeof record.updatedAt === "string" && record.updatedAt.trim() ? record.updatedAt : null,
+      updatedBy: typeof record.updatedBy === "string" && record.updatedBy.trim() ? record.updatedBy : null,
+      history: Array.isArray(record.history)
+        ? record.history
+          .map(normalizeWorkspaceContextVersion)
+          .filter((item): item is ProjectWorkspaceContextVersion => item !== null)
+          .slice(-MAX_WORKSPACE_CONTEXT_HISTORY)
+        : [],
+    };
+  }
+  return fallback;
+}
+
+async function readProjectWorkspaceContextState(input: {
+  projectId: string;
+  projectName: string;
+}): Promise<ProjectWorkspaceContextState> {
+  const row = await db("o_setting").where({ key: TAPCANVAS_WORKSPACE_CONTEXT_SETTING_KEY }).first();
+  if (!row || typeof row.value !== "string" || !row.value.trim()) {
+    return emptyProjectWorkspaceContextState(input);
+  }
+  try {
+    return normalizeProjectWorkspaceContextState(JSON.parse(row.value), input);
+  } catch {
+    // 中文注释：损坏的上下文设置只回退为项目默认文件，不得阻断画布打开。
+    return emptyProjectWorkspaceContextState(input);
+  }
+}
+
+type WorkspaceContextBeforeWriteHook = () => Promise<void>;
+let workspaceContextBeforeWriteHookForTests: WorkspaceContextBeforeWriteHook | undefined;
+
+export function setTapCanvasWorkspaceContextBeforeWriteForTests(
+  hook: WorkspaceContextBeforeWriteHook | null,
+): void {
+  if (!process.env.NODE_TEST_CONTEXT) return;
+  workspaceContextBeforeWriteHookForTests = hook ?? undefined;
+}
+
+async function writeProjectWorkspaceContextState(state: ProjectWorkspaceContextState): Promise<void> {
+  if (workspaceContextBeforeWriteHookForTests) {
+    await workspaceContextBeforeWriteHookForTests();
+  }
+  const value = JSON.stringify(state);
+  const exists = await db("o_setting").where({ key: TAPCANVAS_WORKSPACE_CONTEXT_SETTING_KEY }).first();
+  if (exists) {
+    await db("o_setting").where({ key: TAPCANVAS_WORKSPACE_CONTEXT_SETTING_KEY }).update({ value });
+    return;
+  }
+  await db("o_setting").insert({ key: TAPCANVAS_WORKSPACE_CONTEXT_SETTING_KEY, value });
+}
+
+function projectWorkspaceContextDto(input: {
+  projectId: string;
+  projectName: string;
+  ownerId: string;
+  state: ProjectWorkspaceContextState;
+  bookId?: string | null;
+  chapter?: number | null;
+}) {
+  return {
+    projectId: input.projectId,
+    ownerId: input.ownerId,
+    projectRoot: `project://${input.projectId}`,
+    globalContextDir: ".tapcanvas/context",
+    projectContextDir: `.tapcanvas/projects/${input.projectId}/context`,
+    currentBookId: input.bookId || null,
+    currentChapter: input.chapter !== null
+      && typeof input.chapter !== "undefined"
+      && Number.isFinite(Number(input.chapter))
+      ? Math.max(1, Math.trunc(Number(input.chapter)))
+      : null,
+    globalFiles: [],
+    projectFiles: PROJECT_WORKSPACE_CONTEXT_FILE_NAMES.map((fileName) => {
+      const file = input.state.files[fileName];
+      return {
+        path: fileName,
+        content: file.content,
+        layer: "project" as const,
+        updatedAt: file.updatedAt,
+        updatedBy: file.updatedBy,
+        history: file.history.map(({ content: _content, ...version }) => ({ ...version, fileName, layer: "project" as const })),
+      };
+    }),
+  };
+}
+
+async function resolveOwnedWorkspaceProject(session: CentralSession, projectId: string): Promise<OverlayProject> {
+  const project = (await listUserProjects(session)).find((item) => item.id === projectId);
+  if (!project) {
+    throw Object.assign(new Error("项目不存在或当前账号无权访问"), {
+      status: 403,
+      errorCode: "PERMISSION_DENIED",
+    });
+  }
+  return project;
+}
 
 function sessionOf(req: express.Request): CentralSession | undefined {
   return (req as { centralSession?: CentralSession }).centralSession;
@@ -444,6 +648,7 @@ function normalizeGraph(data: Record<string, unknown> | undefined): {
   nodes: Array<Record<string, unknown>>;
   edges: Array<Record<string, unknown>>;
   viewport: { x: number; y: number; zoom: number };
+  sceneCreationProgress: unknown;
 } {
   const rawNodes = Array.isArray(data?.nodes) ? data.nodes as Array<Record<string, unknown>> : [];
   const rawEdges = Array.isArray(data?.edges) ? data.edges as Array<Record<string, unknown>> : [];
@@ -489,6 +694,7 @@ function normalizeGraph(data: Record<string, unknown> | undefined): {
       };
     }),
     viewport,
+    sceneCreationProgress: data?.sceneCreationProgress ?? null,
   };
 }
 
@@ -547,6 +753,7 @@ async function persistFlow(
         graph: { nodes: graph.nodes, edges: graph.edges },
         viewport: graph.viewport,
         preferences: current.document.preferences,
+        sceneCreationProgress: graph.sceneCreationProgress,
       },
     });
   }, session);
@@ -714,7 +921,7 @@ async function catalogModels(filters: {
 
 function flowEnvelopeDto(
   projectId: string,
-  envelope: { revision: number; updatedAt?: string; document: { graph: { nodes: unknown[]; edges: unknown[] }; viewport?: unknown } },
+  envelope: { revision: number; updatedAt?: string; document: { graph: { nodes: unknown[]; edges: unknown[] }; viewport?: unknown; sceneCreationProgress?: unknown } },
   name = "画布",
   dataAdjusted = false,
 ) {
@@ -722,6 +929,7 @@ function flowEnvelopeDto(
     nodes: envelope.document.graph.nodes ?? [],
     edges: envelope.document.graph.edges ?? [],
     viewport: envelope.document.viewport ?? { x: 0, y: 0, zoom: 1 },
+    sceneCreationProgress: envelope.document.sceneCreationProgress ?? null,
   };
   const updatedAt = envelope.updatedAt ?? new Date().toISOString();
   return {
@@ -918,6 +1126,7 @@ router.post("/flows", async (req, res) => {
       nodes: Array.isArray(rawData.nodes) ? rawData.nodes : [],
       edges: Array.isArray(rawData.edges) ? rawData.edges : [],
       viewport: rawData.viewport ?? { x: 0, y: 0, zoom: 1 },
+      sceneCreationProgress: rawData.sceneCreationProgress ?? null,
     };
     const dataAdjusted = JSON.stringify(inputGraph) !== JSON.stringify(normalized);
     const saved = await persistFlow(
@@ -1778,6 +1987,204 @@ router.get("/executions", async (req, res) => {
     res.status(200).send(data);
   } catch {
     res.status(200).send([]);
+  }
+});
+
+router.get("/agents/project-context", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.query.projectId ?? "").trim();
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId) {
+    res.status(400).send({ error: "project_id_required", message: "必须指定个人画布项目" });
+    return;
+  }
+  try {
+    const project = await resolveOwnedWorkspaceProject(session, projectId);
+    const payload = await withOpenPersonalCanvasProject(projectId, "read", async () => {
+      const state = await readProjectWorkspaceContextState({ projectId, projectName: project.name });
+      return projectWorkspaceContextDto({
+        projectId,
+        projectName: project.name,
+        ownerId: String(session.user.id),
+        state,
+        bookId: typeof req.query.bookId === "string" ? req.query.bookId.trim() || null : null,
+        chapter: typeof req.query.chapter === "string" ? Number(req.query.chapter) : null,
+      });
+    }, session);
+    res.status(200).send(payload);
+  } catch (error) {
+    writeTapCanvasError(res, error);
+  }
+});
+
+router.put("/agents/project-context/file", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.body?.projectId ?? "").trim();
+  const fileName = req.body?.fileName;
+  const content = typeof req.body?.content === "string" ? req.body.content : null;
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId || !isProjectWorkspaceContextFileName(fileName) || content === null) {
+    res.status(400).send({ error: "invalid_request", message: "项目、文件名或内容无效" });
+    return;
+  }
+  if (content.length > MAX_WORKSPACE_CONTEXT_FILE_CHARS) {
+    res.status(413).send({ error: "context_file_too_large", message: "项目上下文文件不能超过 262144 个字符" });
+    return;
+  }
+  try {
+    const project = await resolveOwnedWorkspaceProject(session, projectId);
+    const payload = await withOpenPersonalCanvasProject(projectId, "write", async () => {
+      const state = await readProjectWorkspaceContextState({ projectId, projectName: project.name });
+      const updatedAt = new Date().toISOString();
+      const updatedBy = session.user.nickname || session.user.username;
+      const version = { versionId: crypto.randomUUID(), content, updatedAt, updatedBy };
+      state.files[fileName] = {
+        content,
+        updatedAt,
+        updatedBy,
+        history: [...state.files[fileName].history, version].slice(-MAX_WORKSPACE_CONTEXT_HISTORY),
+      };
+      await writeProjectWorkspaceContextState(state);
+      return projectWorkspaceContextDto({
+        projectId,
+        projectName: project.name,
+        ownerId: String(session.user.id),
+        state,
+      });
+    }, session);
+    res.status(200).send(payload);
+  } catch (error) {
+    writeTapCanvasError(res, error);
+  }
+});
+
+router.get("/agents/project-context/version", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.query.projectId ?? "").trim();
+  const fileName = req.query.fileName;
+  const versionId = String(req.query.versionId ?? "").trim();
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId || !isProjectWorkspaceContextFileName(fileName) || !versionId) {
+    res.status(400).send({ error: "invalid_request", message: "项目、文件名或版本无效" });
+    return;
+  }
+  try {
+    const project = await resolveOwnedWorkspaceProject(session, projectId);
+    const payload = await withOpenPersonalCanvasProject(projectId, "read", async () => {
+      const state = await readProjectWorkspaceContextState({ projectId, projectName: project.name });
+      const version = state.files[fileName].history.find((item) => item.versionId === versionId);
+      if (!version) throw Object.assign(new Error("上下文版本不存在"), { status: 404 });
+      return { ...version, fileName, layer: "project" as const };
+    }, session);
+    res.status(200).send(payload);
+  } catch (error) {
+    writeTapCanvasError(res, error);
+  }
+});
+
+router.put("/agents/project-context/rollback", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.body?.projectId ?? "").trim();
+  const fileName = req.body?.fileName;
+  const versionId = String(req.body?.versionId ?? "").trim();
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId || !isProjectWorkspaceContextFileName(fileName) || !versionId) {
+    res.status(400).send({ error: "invalid_request", message: "项目、文件名或版本无效" });
+    return;
+  }
+  try {
+    const project = await resolveOwnedWorkspaceProject(session, projectId);
+    const payload = await withOpenPersonalCanvasProject(projectId, "write", async () => {
+      const state = await readProjectWorkspaceContextState({ projectId, projectName: project.name });
+      const target = state.files[fileName].history.find((item) => item.versionId === versionId);
+      if (!target) throw Object.assign(new Error("上下文版本不存在"), { status: 404 });
+      const updatedAt = new Date().toISOString();
+      const updatedBy = session.user.nickname || session.user.username;
+      const rollbackVersion = {
+        versionId: crypto.randomUUID(),
+        content: target.content,
+        updatedAt,
+        updatedBy,
+      };
+      state.files[fileName] = {
+        content: target.content,
+        updatedAt,
+        updatedBy,
+        history: [...state.files[fileName].history, rollbackVersion].slice(-MAX_WORKSPACE_CONTEXT_HISTORY),
+      };
+      await writeProjectWorkspaceContextState(state);
+      return {
+        path: fileName,
+        content: target.content,
+        layer: "project" as const,
+        updatedAt,
+        updatedBy,
+        history: state.files[fileName].history.map(({ content: _content, ...version }) => ({
+          ...version,
+          fileName,
+          layer: "project" as const,
+        })),
+      };
+    }, session);
+    res.status(200).send(payload);
+  } catch (error) {
+    writeTapCanvasError(res, error);
+  }
+});
+
+router.get("/agents/project-context/verify", async (req, res) => {
+  const session = sessionOf(req);
+  const projectId = String(req.query.projectId ?? "").trim();
+  if (!session) {
+    res.status(401).send({ error: "unauthenticated" });
+    return;
+  }
+  if (!projectId) {
+    res.status(400).send({ error: "project_id_required", message: "必须指定个人画布项目" });
+    return;
+  }
+  try {
+    const project = await resolveOwnedWorkspaceProject(session, projectId);
+    const payload = await withOpenPersonalCanvasProject(projectId, "read", async () => {
+      const state = await readProjectWorkspaceContextState({ projectId, projectName: project.name });
+      const files = PROJECT_WORKSPACE_CONTEXT_FILE_NAMES.map((fileName) => {
+        const file = state.files[fileName];
+        return {
+          layer: "project" as const,
+          path: fileName,
+          charCount: file.content.length,
+          truncated: false,
+          updatedAt: file.updatedAt,
+          updatedBy: file.updatedBy,
+        };
+      });
+      return {
+        projectId,
+        ownerId: String(session.user.id),
+        projectRoot: `project://${projectId}`,
+        globalContextDir: ".tapcanvas/context",
+        projectContextDir: `.tapcanvas/projects/${projectId}/context`,
+        budgets: { maxCharsPerFile: MAX_WORKSPACE_CONTEXT_FILE_CHARS, maxTotalChars: MAX_WORKSPACE_CONTEXT_FILE_CHARS * PROJECT_WORKSPACE_CONTEXT_FILE_NAMES.length },
+        totalChars: files.reduce((sum, file) => sum + file.charCount, 0),
+        files,
+        warnings: [],
+      };
+    }, session);
+    res.status(200).send(payload);
+  } catch (error) {
+    writeTapCanvasError(res, error);
   }
 });
 
