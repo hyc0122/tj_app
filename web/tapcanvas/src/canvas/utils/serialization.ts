@@ -300,42 +300,20 @@ export function deepClone(obj: any, visited = new WeakSet()): any {
   return obj;
 }
 
-function isRemoteUrl(url: unknown): boolean {
-  return typeof url === 'string' && /^https?:\/\//i.test(url.trim())
-}
-
 /**
- * 过滤掉不适合持久化的节点：
- * 1. 仍在生成中（running / queued）的节点——保存后再打开任务无法续上
- * 2. image / video 节点没有远程 URL——没有资产等同于空壳，保存意义为零
+ * 保存完整的创作图，并仅剔除真正悬空的边。
  *
- * 同时返回过滤后兼容的 edges（删除悬空边）。
+ * 图片/视频节点在生成前就是有效的创作配置；运行状态又由持久任务中心恢复，
+ * 因此不能因为暂时没有远程 URL，或正在 queued/running，就把节点从画布删除。
  */
 export function filterNodesForPersistence(
   nodes: Node[],
   edges: Edge[],
 ): { nodes: Node[]; edges: Edge[] } {
-  const keptIds = new Set<string>()
-
-  for (const node of nodes) {
-    const data = (node.data || {}) as Record<string, unknown>
-    const status = data.status as string | undefined
-    const kind   = data.kind   as string | undefined
-
-    // 生成中的节点不保存
-    if (status === 'running' || status === 'queued') continue
-
-    // image / video 节点必须有远程 URL 才保存
-    if (kind === 'image' && !isRemoteUrl(data.imageUrl)) continue
-    if (kind === 'video' && !isRemoteUrl(data.videoUrl)) continue
-
-    keptIds.add(node.id)
-  }
-
-  const keptNodes = nodes.filter(n => keptIds.has(n.id))
+  const keptIds = new Set(nodes.map((node) => node.id))
   const keptEdges = edges.filter(e => keptIds.has(e.source) && keptIds.has(e.target))
 
-  return { nodes: keptNodes, edges: keptEdges }
+  return { nodes: [...nodes], edges: keptEdges }
 }
 
 /**

@@ -291,6 +291,7 @@ import type { TaskNodeType } from './taskNode/taskNodeTypes'
 import { areTaskNodePropsEqual } from './taskNode/taskNodePropsEqual'
 import {
   buildImageBillingSpecKeyForOption,
+  buildMediaModelNodePatch,
   formatImageQualityOptionLabel,
   formatImageResolutionOptionLabel,
   getTaskNodeModelDisplayLabel,
@@ -2361,13 +2362,13 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     if (isVideoNode) {
       setVideoModel(firstValue)
       saveNodeModelPrefs({ videoModel: firstValue })
-      updateNodeData(id, { videoModel: firstValue, videoModelVendor: firstOption.vendor || null })
+      updateNodeData(id, buildMediaModelNodePatch('video', firstOption))
       return
     }
     if (coreKind === 'image' || kind === 'imageEdit') {
       setImageModel(firstValue)
       saveNodeModelPrefs({ imageModel: firstValue })
-      updateNodeData(id, { imageModel: firstValue, imageModelVendor: null })
+      updateNodeData(id, buildMediaModelNodePatch('image', firstOption))
       return
     }
     setModelKey(firstValue)
@@ -2885,12 +2886,12 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     }
     if (isVideoNode) {
       setVideoModel(nextModelValue)
-      updateNodeData(id, { videoModel: nextModelValue, videoModelVendor: next.vendor || null })
+      updateNodeData(id, buildMediaModelNodePatch('video', next))
       return
     }
     if (coreKind === 'image' || kind === 'imageEdit') {
       setImageModel(nextModelValue)
-      updateNodeData(id, { imageModel: nextModelValue, imageModelVendor: null })
+      updateNodeData(id, buildMediaModelNodePatch('image', next))
       return
     }
     setModelKey(nextModelValue)
@@ -3235,7 +3236,7 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     }
     if (isVideoNode) {
       setVideoModel(selectedValue)
-      updateNodeData(id, { videoModel: selectedValue, videoModelVendor: option.vendor || null })
+      updateNodeData(id, buildMediaModelNodePatch('video', option))
       persistRecentGenerationPrefs(
         toGenerationPreferenceModelPatch('videoModel', option),
         { videoModel: selectedValue },
@@ -3244,7 +3245,7 @@ function TaskNodeInner({ id, data, selected, dragging }: NodeProps<TaskNodeType>
     }
     if (coreKind === 'image' || kind === 'imageEdit') {
       setImageModel(selectedValue)
-      updateNodeData(id, { imageModel: selectedValue, imageModelVendor: null })
+      updateNodeData(id, buildMediaModelNodePatch('image', option))
       persistRecentGenerationPrefs(
         toGenerationPreferenceModelPatch('imageModel', option),
         { imageModel: selectedValue },

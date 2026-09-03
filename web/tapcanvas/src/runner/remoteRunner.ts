@@ -145,6 +145,8 @@ import {
 } from '../canvas/utils/semanticBindings'
 import { taskHubRuntime, configureTaskHub } from './taskHub'
 import { withCanvasGenerationContext } from './generationAssetContext'
+import { saveCurrentCanvasSnapshot } from '../canvas/persistence/saveCurrentCanvasSnapshot'
+import { persistCanvasExecutionModelBeforeTask } from './canvasExecutionModelPersistence'
 import {
   deriveShotPromptsFromStructuredData,
   normalizeStoryboardStructuredData,
@@ -1499,13 +1501,33 @@ function appendRequestPayloadLog(input: {
   }
 }
 
-async function runTaskByVendor(vendor: string, request: TaskRequestDto, nodeId: string): Promise<TaskResultDto> {
+async function runTaskByVendor(
+  vendor: string,
+  request: TaskRequestDto,
+  ctx: Pick<RunnerContext, 'id' | 'getState'>,
+): Promise<TaskResultDto> {
   const normalizedVendor = String(vendor || '').trim()
   if (!normalizedVendor) {
     throw new Error('vendor is required')
   }
   const { apiKey, vendorCandidates } = requirePublicApiRuntime()
-  const contextualRequest = withCanvasGenerationContext(request, useUIStore.getState(), nodeId)
+  const contextualRequest = withCanvasGenerationContext(request, useUIStore.getState(), ctx.id)
+  await persistCanvasExecutionModelBeforeTask({
+    nodeId: ctx.id,
+    request: contextualRequest,
+    readNodeModelId: (nodeId) => {
+      const node = (ctx.getState().nodes as Node[] | undefined)?.find((item) => item.id === nodeId)
+      const data = node?.data && typeof node.data === 'object' && !Array.isArray(node.data)
+        ? node.data as Record<string, unknown>
+        : {}
+      return typeof data.modelId === 'string' ? data.modelId : ''
+    },
+    writeNodeModelId: (nodeId, modelId) => {
+      // 中文注释：展示别名继续保留在 imageModel/videoModel，modelId 只保存真实请求路由键。
+      ctx.getState().updateNodeData?.(nodeId, { modelId })
+    },
+    saveCurrentSnapshot: saveCurrentCanvasSnapshot,
+  })
   const res = await runPublicTask(apiKey, {
     vendor: normalizedVendor,
     ...(normalizedVendor === 'auto' && vendorCandidates ? { vendorCandidates } : {}),
@@ -1554,7 +1576,7 @@ function beginPendingRequestProgress(
 }
 
 async function runTaskByVendorWithPendingProgress(
-  ctx: Pick<RunnerContext, 'id' | 'setNodeStatus' | 'isCanceled'>,
+  ctx: Pick<RunnerContext, 'id' | 'setNodeStatus' | 'isCanceled' | 'getState'>,
   options: {
     vendor: string
     request: TaskRequestDto
@@ -1573,7 +1595,7 @@ async function runTaskByVendorWithPendingProgress(
     stepMs: options.stepMs,
   })
   try {
-    const result = await runTaskByVendor(options.vendor, options.request, ctx.id)
+    const result = await runTaskByVendor(options.vendor, options.request, ctx)
     return {
       result,
       requestProgress: stopProgress(),

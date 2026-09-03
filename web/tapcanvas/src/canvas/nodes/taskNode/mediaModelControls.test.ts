@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ModelOption } from '../../../config/models'
 import {
   DEFAULT_IMAGE_ASPECT_RATIO,
+  buildMediaModelNodePatch,
   buildImageBillingSpecKeyForOption,
   formatImageQualityOptionLabel,
   formatImageResolutionOptionLabel,
@@ -14,6 +15,26 @@ import {
 } from './mediaModelControls'
 
 describe('mediaModelControls', () => {
+  it('把模型目录展示值和真实请求路由分别写入媒体节点', () => {
+    const option: ModelOption = {
+      value: 'doubao-seedream-4-0-250828',
+      label: 'Seedream 4.0',
+      vendor: 'auto',
+      modelKey: 'new-api:doubao-seedream-4-0-250828',
+    }
+
+    expect(buildMediaModelNodePatch('image', option)).toEqual({
+      imageModel: 'doubao-seedream-4-0-250828',
+      imageModelVendor: null,
+      modelId: 'new-api:doubao-seedream-4-0-250828',
+    })
+    expect(buildMediaModelNodePatch('video', option)).toEqual({
+      videoModel: 'doubao-seedream-4-0-250828',
+      videoModelVendor: 'auto',
+      modelId: 'new-api:doubao-seedream-4-0-250828',
+    })
+  })
+
   it('normalizes catalog labels and image settings', () => {
     expect(formatImageResolutionOptionLabel('高清输出', '2K')).toBe('2K')
     expect(formatImageQualityOptionLabel('High', 'high')).toBe('高画质')

@@ -8,6 +8,31 @@ import { normalizeOrientation, type Orientation } from '../../../utils/orientati
 
 export const DEFAULT_IMAGE_ASPECT_RATIO = '16:9'
 
+/**
+ * 中文注释：节点同时保存目录展示值和服务端真实请求路由。
+ * imageModel/videoModel 用于界面回显，modelId 用于服务端收费预览与防篡改校验。
+ */
+export function buildMediaModelNodePatch(
+  kind: 'image' | 'video',
+  option: ModelOption,
+): Record<string, unknown> {
+  const value = String(option.value || '').trim()
+  const requestModelKey = String(option.modelKey || '').trim()
+  const modelIdPatch = requestModelKey ? { modelId: requestModelKey } : {}
+  if (kind === 'video') {
+    return {
+      videoModel: value,
+      videoModelVendor: option.vendor || null,
+      ...modelIdPatch,
+    }
+  }
+  return {
+    imageModel: value,
+    imageModelVendor: null,
+    ...modelIdPatch,
+  }
+}
+
 export function formatImageResolutionOptionLabel(label: string, value: string): string {
   const trimmedValue = String(value || '').trim()
   const trimmedLabel = String(label || '').trim()
