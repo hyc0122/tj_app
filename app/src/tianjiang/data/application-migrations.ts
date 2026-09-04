@@ -29,7 +29,10 @@ import {
   migrateStoryboardProjectSchema,
   migrateStoryboardVideoPromptTemplateSettings,
 } from "./storyboard-project-migration";
-import { migrateCanvasProjectSchema } from "./canvas-project-migration";
+import {
+  migrateCanvasProjectSchema,
+  migrateCanvasSceneCreationProgressColumns,
+} from "./canvas-project-migration";
 import { migrateCanvasAccountStagingReservations } from "../canvas/canvas-import-staging-reservation-store";
 import {
   migrateDreaminaCliAccountSchema,
@@ -324,6 +327,13 @@ export function buildApplicationMigrations(
                 )
               `);
             },
+          } satisfies SqliteMigration,
+          {
+            // 中文注释：beta.25 曾修改已登记迁移的实现体；旧库不会重跑，必须追加新版本补列。
+            version: tableMigrations.length + 22,
+            name: "canvas-scene-creation-progress-v1",
+            checksumSource: "append canvas scene creation progress columns v1",
+            up: migrateCanvasSceneCreationProgressColumns,
           } satisfies SqliteMigration,
         ]
       : [

@@ -8,6 +8,25 @@ const DEFAULT_PREFERENCES = JSON.stringify({
   gridSize: 16,
 });
 
+/**
+ * 为已经登记过 canvas-project-schema-v1 的旧项目库补齐创作进度列。
+ * 必须由独立的新迁移调用，不能只修改已发布迁移的实现体。
+ */
+export async function migrateCanvasSceneCreationProgressColumns(
+  database: Knex | Knex.Transaction,
+): Promise<void> {
+  if (!(await database.schema.hasColumn("canvas_documents", "scene_creation_progress_json"))) {
+    await database.schema.alterTable("canvas_documents", (table) => {
+      table.text("scene_creation_progress_json").notNullable().defaultTo("null");
+    });
+  }
+  if (!(await database.schema.hasColumn("canvas_revisions", "scene_creation_progress_json"))) {
+    await database.schema.alterTable("canvas_revisions", (table) => {
+      table.text("scene_creation_progress_json").notNullable().defaultTo("null");
+    });
+  }
+}
+
 /** 仅项目库安装画布业务表；设备 outbox 不得进入会同步的 project.sqlite。 */
 export async function migrateCanvasProjectSchema(
   database: Knex | Knex.Transaction,
@@ -45,17 +64,7 @@ export async function migrateCanvasProjectSchema(
         OR (is_pinned = 0 AND pin_reason IS NULL AND pinned_at IS NULL))
     )
   `);
-  // 中文注释：已有项目库无须重建；激活时就地补齐 beta.25 的创作进度列。
-  if (!(await database.schema.hasColumn("canvas_documents", "scene_creation_progress_json"))) {
-    await database.schema.alterTable("canvas_documents", (table) => {
-      table.text("scene_creation_progress_json").notNullable().defaultTo("null");
-    });
-  }
-  if (!(await database.schema.hasColumn("canvas_revisions", "scene_creation_progress_json"))) {
-    await database.schema.alterTable("canvas_revisions", (table) => {
-      table.text("scene_creation_progress_json").notNullable().defaultTo("null");
-    });
-  }
+  await migrateCanvasSceneCreationProgressColumns(database);
   await database.raw(`
     CREATE TABLE IF NOT EXISTS canvas_revision_pin_mutations (
       client_mutation_id TEXT PRIMARY KEY,
