@@ -38,7 +38,7 @@ export default function runCode(
   const captureRemoteTask = async (method: string, requestUrl: unknown, payload: unknown) => {
     if (capturedRemoteTask || method.toUpperCase() === "GET" || !hooks?.onRemoteTaskCreated) return;
     const requestPath = safeRequestPath(requestUrl);
-    const remoteTaskId = extractRemoteTaskId(payload, hooks.provider);
+    const remoteTaskId = extractRemoteTaskId(payload, hooks.provider, requestPath);
     if (!remoteTaskId) return;
     // 必须等待事务持久化完成后才把创建响应交还给 vendor，确保首次轮询前已有恢复记录。
     await hooks.onRemoteTaskCreated(remoteTaskId, { requestPath });
@@ -97,6 +97,8 @@ export default function runCode(
     logger,
     jsonwebtoken,
     crypto,
+    // 中文注释：URL 仅提供解析能力，供动态供应商校验新协议的 HTTPS 素材与结果地址。
+    URL,
   };
   if (vendor !== undefined) {
     sandbox.vendor = vendor;
@@ -164,9 +166,15 @@ function safeRequestPath(input: unknown): string {
   }
 }
 
-function extractRemoteTaskId(payload: unknown, provider: string): string | undefined {
+function extractRemoteTaskId(payload: unknown, provider: string, requestPath: string): string | undefined {
   if (!payload || typeof payload !== "object") return undefined;
   const record = payload as Record<string, any>;
+  if (provider === "tianjiang") {
+    // 中文注释：佳速新回执的视频只有顶层 id；仅创建端点可捕获，禁止把查询 DTO 的 data.id 当任务号。
+    if (!/\/(?:images\/create|video\/generations)\/?$/.test(requestPath)) return undefined;
+    const id = [record.task_id, record.id].find((value) => typeof value === "string" && value.trim());
+    return typeof id === "string" ? id.trim() : undefined;
+  }
   const explicitTaskCandidates = [
     record.taskId,
     record.task_id,
@@ -177,9 +185,6 @@ function extractRemoteTaskId(payload: unknown, provider: string): string | undef
   const candidates = [
     ...explicitTaskCandidates,
     ...(idProviders.has(provider) ? [record.id, record.data?.id] : []),
-    ...(provider === "tianjiang" && (
-      typeof record.data === "string" || typeof record.data === "number"
-    ) ? [record.data] : []),
   ];
   const value = candidates.find((item) =>
     (typeof item === "string" && item.trim().length > 0) || typeof item === "number");

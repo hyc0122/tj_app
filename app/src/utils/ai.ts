@@ -175,6 +175,7 @@ async function withTaskRecord<T>(
   requestInput: unknown,
   fn: (modelName: `${string}:${string}`, think: Boolean, thinkLevel: 0 | 1 | 2 | 3) => Promise<T>,
   safeFailureSummary?: string,
+  expectedMediaType?: "image" | "video" | "audio",
 ): Promise<T> {
   const modelName = await resolveModelName(modelKey);
   const [provider, model] = modelName.split(/:(.+)/);
@@ -202,7 +203,7 @@ async function withTaskRecord<T>(
       () => fn(modelName, false, 0),
     );
 
-    const artifact = await materializeLiveGenerationArtifact(result);
+    const artifact = await materializeLiveGenerationArtifact(result, expectedMediaType);
     if (!artifact) {
       await taskRecord.markPendingFinalize();
       throw new Error("生成结果尚未落库，不能标记为已完成");
@@ -237,7 +238,7 @@ async function withTaskRecord<T>(
   }
 }
 
-async function materializeLiveGenerationArtifact(result: unknown): Promise<{
+async function materializeLiveGenerationArtifact(result: unknown, expectedMediaType?: "image" | "video" | "audio"): Promise<{
   mediaType: "image" | "video" | "audio";
   sourceKind: "remote_url" | "local_path";
   remoteUrl?: string;
@@ -253,7 +254,8 @@ async function materializeLiveGenerationArtifact(result: unknown): Promise<{
   const trimmed = value.trim();
   if (/^https:\/\//i.test(trimmed)) {
     return {
-      mediaType: inferArtifactMediaType(trimmed),
+      // 中文注释：Image/Video 入口明确业务种类，CDN 下载地址可能没有扩展名，不能只靠 URL 猜测。
+      mediaType: expectedMediaType ?? inferArtifactMediaType(trimmed),
       sourceKind: "remote_url",
       remoteUrl: trimmed,
     };
@@ -379,7 +381,7 @@ function capabilityForReference(
   provider: string,
   mediaType: "image" | "audio" | "video",
   vendorMetadata?: Record<string, unknown>,
-): { supportsUrl: boolean; supportsInline: boolean } {
+): { supportsUrl: boolean; supportsInline: boolean; requireUrl?: boolean } {
   const { resolveVendorMediaCapability } = require(
     "@/tianjiang/storyboard/vendor-media-capability",
   ) as typeof import("@/tianjiang/storyboard/vendor-media-capability");
@@ -387,6 +389,8 @@ function capabilityForReference(
   return {
     supportsUrl: form === "url",
     supportsInline: form === "inline",
+    // 中文注释：佳速的 images/videos/audios 数组禁止内联；其他供应商沿用各自合同。
+    requireUrl: provider === "tianjiang" && form === "url",
   };
 }
 
@@ -506,6 +510,7 @@ class AiImage {
         input,
         async (modelName) => (await (await this.prepareResolved(input, modelName)).stage()).execute(),
         safeVendorGenerationErrorSummary(),
+        "image",
       );
       return this;
     }
@@ -592,6 +597,7 @@ class AiVideo {
         input,
         async (modelName) => (await (await this.prepareResolved(input, modelName)).stage()).execute(),
         safeVendorGenerationErrorSummary(),
+        "video",
       );
       return this;
     }

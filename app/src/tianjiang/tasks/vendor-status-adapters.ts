@@ -88,7 +88,12 @@ export function createProductionProviderStatusAdapter(
   inputs: Record<string, string>,
   trustedFetch: TrustedFetch = fetch,
 ): ((remoteTaskId: string, task: GenerationTaskIdentity) => Promise<RemoteGenerationResult>) | undefined {
-  const baseUrl = inputs.mediaBaseUrl || inputs.baseUrl;
+  // 中文注释：佳速新协议创建与查询共用 baseUrl，空值及旧官方域名统一升级。
+  const configuredJiasuBase = (inputs.baseUrl || "").trim().replace(/\/+$/, "");
+  const baseUrl = provider === "tianjiang"
+    ? !configuredJiasuBase || /^https:\/\/js\.jiasuapi\.com(?:\/v1)?$/i.test(configuredJiasuBase)
+      ? "https://ai.jiasuapi.com/v1" : configuredJiasuBase
+    : inputs.mediaBaseUrl || inputs.baseUrl;
   if (!baseUrl) return undefined;
   const url = (suffix: string) => joinHTTPS(baseUrl, suffix);
   const bearer = () => ({
@@ -119,14 +124,26 @@ export function createProductionProviderStatusAdapter(
   }
   if (provider === "tianjiang") {
     return async (id, task) => {
-      const kind = task.remoteStatusHint?.includes("/image/") || task.taskClass?.includes("图")
-        ? "image"
-        : "video";
-      return normalizeRemoteState(await requestJSON(
-        trustedFetch,
-        url(`/${kind}/get${kind === "image" ? "Image" : "Video"}Status`),
-        { method: "POST", headers: bearer(), body: JSON.stringify({ taskICode: id }) },
-      ));
+      const hint = task.remoteStatusHint || "";
+      const kind = /\/images?\//.test(hint) ? "image"
+        : /\/videos?\//.test(hint) ? "video"
+          : /图|image/i.test(task.taskClass || "") ? "image" : "video";
+      const response = await trustedFetch(url(`/${kind === "image" ? "images" : "videos"}/tasks/${encodeURIComponent(id)}`), {
+        method: "GET", headers: bearer(),
+      });
+      if (response.status === 404) return { state: "not_found", reason: "远端任务不存在" };
+      if (response.status === 410) return { state: "failed", reason: "任务已结束或媒体已过保留期" };
+      if (!response.ok) throw new Error(`生成任务查询失败: HTTP ${response.status}`);
+      const result = normalizeJiasuTaskState(await response.json(), kind);
+      if (result.reason) {
+        // 中文注释：错误文本来自远端，不能反射账号密钥、Bearer 或内联素材。
+        const key = (inputs.apiKey || "").trim().replace(/^Bearer\s+/i, "");
+        result.reason = (key ? result.reason.split(key).join("[REDACTED_SECRET]") : result.reason)
+          .replace(/Bearer\s+[^\s;,]+/gi, "Bearer [REDACTED_SECRET]")
+          .replace(/data:[^\s;,]+;base64,[a-z0-9+/=]+/gi, "[REDACTED_MEDIA]")
+          .slice(0, 1000);
+      }
+      return result;
     };
   }
   if (provider === "vidu") {
@@ -171,6 +188,42 @@ export function createProductionProviderStatusAdapter(
     };
   }
   return undefined;
+}
+
+/** 中文注释：佳速图片与视频的公开回执不同，不能经过通用 numeric code 或旧 url 解析。 */
+export function normalizeJiasuTaskState(payload: unknown, kind: "image" | "video"): RemoteGenerationResult {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { state: "temporary_error", reason: "任务查询响应格式无效" };
+  }
+  const record = payload as Record<string, any>;
+  if (kind === "image" && record.code !== "success") {
+    return { state: "temporary_error", reason: "图片任务查询回执无效" };
+  }
+  const data = kind === "image" ? record.data : record;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { state: "temporary_error", reason: "任务查询响应格式无效" };
+  }
+  const status = String(data.status || "").toLowerCase();
+  if (status === "failure" || status === "failed") {
+    const reason = kind === "image" ? data.fail_reason : data.error?.message;
+    return { state: "failed", reason: typeof reason === "string" && reason.trim() ? reason.trim() : "生成任务失败" };
+  }
+  if (status === (kind === "image" ? "success" : "completed")) {
+    const candidates = kind === "image" ? [data.result_url] : Array.isArray(data.result_urls) ? data.result_urls : [];
+    const remoteUrl = candidates.find((value: unknown) => {
+      if (typeof value !== "string") return false;
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+      } catch { return false; }
+    });
+    return remoteUrl ? { state: "completed", artifact: { mediaType: kind, sourceKind: "remote_url", remoteUrl: remoteUrl.trim() } }
+      : { state: "temporary_error", reason: "任务已完成，但查询响应缺少有效结果 URL" };
+  }
+  const pending = kind === "image" ? ["not_start", "submitted", "queued", "in_progress", "unknown"]
+    : ["queued", "in_progress", "unknown"];
+  return pending.includes(status) ? { state: "pending" }
+    : { state: "temporary_error", reason: "任务查询响应缺少有效状态" };
 }
 
 export function normalizeRemoteState(payload: unknown): RemoteGenerationResult {
@@ -271,8 +324,11 @@ function extractNormalizedArtifact(record: Record<string, any>): NormalizedGener
     record.artifact?.url,
   );
   if (url) {
+    // 中文注释：动态适配器已知道业务类型，无后缀 CDN 地址不能再被推断成图片；字节校验仍由下载器执行。
+    const declaredType = record.artifact?.mediaType;
     return {
-      mediaType: inferArtifactMediaType(url, nested.content_type ?? record.content_type ?? record.artifact?.contentType),
+      mediaType: ["image", "video", "audio"].includes(declaredType)
+        ? declaredType : inferArtifactMediaType(url, nested.content_type ?? record.content_type ?? record.artifact?.contentType),
       sourceKind: "remote_url",
       remoteUrl: url,
       contentType: nested.content_type ?? record.content_type,
@@ -285,7 +341,8 @@ function extractNormalizedArtifact(record: Record<string, any>): NormalizedGener
         ...artifact,
         sourceKind: "remote_url",
         remoteUrl: artifact.remoteUrl,
-        mediaType: inferArtifactMediaType(artifact.remoteUrl, artifact.contentType),
+        mediaType: ["image", "video", "audio"].includes(artifact.mediaType)
+          ? artifact.mediaType : inferArtifactMediaType(artifact.remoteUrl, artifact.contentType),
       };
     }
   }

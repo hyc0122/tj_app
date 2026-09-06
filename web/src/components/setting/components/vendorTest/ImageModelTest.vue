@@ -16,8 +16,10 @@
 
       <!-- 输入区 -->
       <div class="inputSection">
+        <p v-if="vendorId === 'tianjiang'">佳速参考素材测试请填写可公开访问的 HTTPS URL；项目内生成仍会自动暂存上传素材。</p>
+        <t-input v-if="vendorId === 'tianjiang' && testMode !== 'text'" v-model="imageUrl" placeholder="参考图片 HTTPS URL" clearable />
         <!-- 图生图：上传图片 -->
-        <div v-if="testMode === 'singleImage'" class="uploadRow">
+        <div v-if="vendorId !== 'tianjiang' && testMode !== 'text'" class="uploadRow">
           <div class="uploadBox" @click="triggerImageUpload" @dragover.prevent @drop.prevent="handleDrop">
             <img v-if="imagePreview" :src="imagePreview" class="previewImg" alt="preview" />
             <template v-else>
@@ -96,12 +98,14 @@ watch(
 
 watch(testMode, () => {
   imageFile.value = null;
+  imageUrl.value = "";
   revokeImagePreview();
   resultUrl.value = "";
 });
 
 const prompt = ref("");
 const imageFile = ref<File | null>(null);
+const imageUrl = ref("");
 const imagePreview = ref("");
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const loading = ref(false);
@@ -124,7 +128,9 @@ onBeforeUnmount(() => {
 const canSubmit = computed(() => {
   if (loading.value) return false;
   if (testMode.value === "text") return !!prompt.value.trim();
-  if (testMode.value === "singleImage" || testMode.value === "multiReference") return !!imageFile.value;
+  if (testMode.value === "singleImage" || testMode.value === "multiReference") {
+    return props.vendorId === "tianjiang" ? !!imageUrl.value.trim() : !!imageFile.value;
+  }
   return false;
 });
 
@@ -158,6 +164,7 @@ const fileToDataURL = (file: File) =>
     reader.readAsDataURL(file);
   });
 async function handleTest() {
+  if (!canSubmit.value) return;
   loading.value = true;
   resultUrl.value = "";
   try {
@@ -167,7 +174,10 @@ async function handleTest() {
     };
     const p = prompt.value.trim();
     if (p) payload.prompt = p;
-    if (imageFile.value) {
+    if (props.vendorId === "tianjiang" && testMode.value !== "text") {
+      // 服务端沿用通用字段名，在请求预检阶段严格校验 HTTPS，不持久化 URL。
+      payload.imageBase64 = imageUrl.value.trim();
+    } else if (imageFile.value) {
       payload.imageBase64 = await fileToDataURL(imageFile.value); // 带前缀 data:image/...;base64,
     }
     const { data } = await axios.post("/setting/vendorConfig/modelTest/imageTest", payload);
@@ -182,6 +192,7 @@ async function handleTest() {
 
 function handleClose() {
   prompt.value = "";
+  imageUrl.value = "";
   imageFile.value = null;
   revokeImagePreview();
   resultUrl.value = "";

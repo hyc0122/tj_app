@@ -90,3 +90,29 @@ export async function migrateJiasuProviderModelCatalogV44(
   if (!dependencies.builtinSource.trim()) throw new Error("佳速 API 4.4 内置模板缺失");
   dependencies.writeInstalledSource(dependencies.builtinSource);
 }
+
+/**
+ * 中文注释：独立账号迁移让已安装 4.4 的用户升级异步协议，不重跑历史迁移。
+ * 只改旧官方基地址和动态源码，不写 models、enable、o_agentDeploy 或其他模型映射。
+ */
+export async function migrateJiasuProviderAsyncV5(
+  database: Knex | Knex.Transaction,
+  dependencies: JiasuProviderMigrationDependencies,
+): Promise<void> {
+  if (!(await database.schema.hasTable("o_vendorConfig"))) return;
+  const row = await database<VendorConfigRow>("o_vendorConfig").where({ id: "tianjiang" }).first();
+  if (!row) return;
+  const inputs = parseInputValues(row.inputValues);
+  const baseUrl = typeof inputs.baseUrl === "string" ? inputs.baseUrl.trim().replace(/\/+$/, "") : "";
+  const needsBaseUrl = !baseUrl || /^https:\/\/js\.jiasuapi\.com(?:\/v1)?$/i.test(baseUrl);
+  if (!isVersionAtLeast(dependencies.readInstalledVersion(), [5, 0])) {
+    if (!dependencies.builtinSource.trim()) throw new Error("佳速 API 5.0 内置模板缺失");
+    // 源码写入失败时不动数据库；事务回滚后重跑也不会反向降级已写入的新源码。
+    dependencies.writeInstalledSource(dependencies.builtinSource);
+  }
+  if (needsBaseUrl) {
+    await database<VendorConfigRow>("o_vendorConfig").where({ id: "tianjiang" }).update({
+      inputValues: JSON.stringify({ ...inputs, baseUrl: "https://ai.jiasuapi.com/v1" }),
+    });
+  }
+}

@@ -178,3 +178,31 @@ test("Ai.Image.run 在 locator 持久化后失败必须保持 pending_finalize�
     }
   });
 });
+
+test("Ai.Video.run 对无扩展名结果按视频持久化定位信息，不误判成图片", async () => {
+  await withAccount(async () => {
+    const vendorId = "syncopaquevideo";
+    // 中文注释：使用真实宿主入口和假模板；下载器在 DNS hook 停止，不访问真实供应商。
+    u.vendor.writeCode(vendorId, vendorSource(vendorId, `return "https://m.jiasuapi.com/media/opaque-result-id";`)
+      .replaceAll("imageRequest", "videoRequest").replace('type: "image"', 'type: "video"'));
+    await accountDatabase()("o_vendorConfig").insert({ id: vendorId, inputValues: "{}", models: "[]", enable: 1 });
+    const { setGenerationArtifactDownloaderForTests } = await import("../../src/tianjiang/tasks/generation-artifact-downloader");
+    setGenerationArtifactDownloaderForTests({ lookup: async () => { throw new Error("fixture-download-stop"); } });
+    try {
+      const [videoId] = await u.db("o_video").insert({ state: "生成中", filePath: "" });
+      await assert.rejects(() => Ai.Video(`${vendorId}:model`).run({
+        prompt: "opaque URL", referenceList: [], duration: 5, resolution: "720p", aspectRatio: "16:9", mode: ["text"],
+      }, {
+        taskClass: "视频生成", describe: "视频生成", projectId: PROJECT_ID,
+        relatedObjects: stringifyGenerationCompletionContract(createGenerationCompletionContract({
+          kind: "video", mediaType: "video", relativePath: "files/videos/opaque.mp4", videoId: Number(videoId), projectId: PROJECT_ID,
+        })),
+      }));
+      const task = await u.db("o_tasks").orderBy("id", "desc").first();
+      assert.equal(task.generationStatus, "pending_finalize");
+      const locator = JSON.parse(String(task.resultLocator));
+      assert.equal(locator.mediaType, "video");
+      assert.equal(locator.remoteUrl, "https://m.jiasuapi.com/media/opaque-result-id");
+    } finally { setGenerationArtifactDownloaderForTests(null); }
+  });
+});

@@ -8,6 +8,7 @@ import knex, { type Knex } from "knex";
 import { getInitialTableSchemas } from "../../src/lib/initDB";
 import { buildApplicationMigrations } from "../../src/tianjiang/data/application-migrations";
 import {
+  migrateJiasuProviderAsyncV5,
   migrateJiasuProviderModelCatalogV44,
   migrateJiasuProviderV4,
 } from "../../src/tianjiang/data/jiasu-provider-migration";
@@ -272,10 +273,61 @@ test("账号库注册佳速 4.4 源码升级迁移，项目库不得重复改写
   assert.ok(accountMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"));
   assert.equal(
     accountMigrations.at(-1)?.name,
-    "canvas-import-staging-reservations-v1",
+    "jiasu-provider-async-v5",
   );
   assert.equal(
     projectMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"),
     false,
   );
+});
+
+test("佳速新协议迁移保留密钥模型路由和开关，重复执行不降级源码", async () => {
+  const { database, root } = await createDatabase("tj-jiasu-v5-");
+  const writes: string[] = [];
+  let installed = "4.4";
+  try {
+    const models = '{"custom":[{"modelName":"user-image","type":"image"}],"excluded":["old-image"]}';
+    await database("o_vendorConfig").insert({ id: "tianjiang", inputValues: JSON.stringify({
+      apiKey: "existing-secret", baseUrl: "https://js.jiasuapi.com/v1/", userField: "保留",
+    }), models, enable: 0 });
+    const dependencies = {
+      builtinSource: "exports.vendor={version:'5.0'}",
+      readInstalledVersion: () => installed,
+      writeInstalledSource: (source: string) => { writes.push(source); installed = "5.0"; },
+    };
+    await migrateJiasuProviderAsyncV5(database, dependencies);
+    await migrateJiasuProviderAsyncV5(database, dependencies);
+    const row = await database("o_vendorConfig").where({ id: "tianjiang" }).first();
+    assert.deepEqual(JSON.parse(row.inputValues), {
+      apiKey: "existing-secret", baseUrl: "https://ai.jiasuapi.com/v1", userField: "保留",
+    });
+    assert.equal(row.models, models);
+    assert.equal(row.enable, 0);
+    assert.deepEqual(writes, [dependencies.builtinSource]);
+  } finally { await database.destroy(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("佳速新协议迁移保留显式私有代理，损坏配置不写源码或覆盖密钥", async () => {
+  const { database, root } = await createDatabase("tj-jiasu-v5-private-");
+  let writes = 0;
+  try {
+    const raw = JSON.stringify({ apiKey: "secret", baseUrl: "https://private.invalid/api/v1" });
+    await database("o_vendorConfig").insert({ id: "tianjiang", inputValues: raw, models: "[]", enable: 1 });
+    const dependencies = { builtinSource: "new-source", readInstalledVersion: () => "5.1", writeInstalledSource: () => { writes++; } };
+    await migrateJiasuProviderAsyncV5(database, dependencies);
+    assert.equal((await database("o_vendorConfig").first()).inputValues, raw);
+    assert.equal(writes, 0);
+    await database("o_vendorConfig").update({ inputValues: "{broken" });
+    await assert.rejects(migrateJiasuProviderAsyncV5(database, { ...dependencies, readInstalledVersion: () => "4.4" }), /配置损坏/);
+    assert.equal((await database("o_vendorConfig").first()).inputValues, "{broken");
+    assert.equal(writes, 0);
+  } finally { await database.destroy(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("新协议迁移只注册到账号库，不在项目库升级共享源码", () => {
+  const account = buildApplicationMigrations({ role: "account", skipEmbeddingInit: true });
+  const project = buildApplicationMigrations({ role: "project", skipEmbeddingInit: true });
+  assert.equal(account.at(-1)?.name, "jiasu-provider-async-v5");
+  assert.equal(project.some((migration) => migration.name === "jiasu-provider-async-v5"), false);
+  assert.equal(new Set(account.map((migration) => migration.version)).size, account.length);
 });

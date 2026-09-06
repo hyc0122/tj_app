@@ -7,6 +7,7 @@ import knex from "knex";
 
 import {
   createProductionProviderStatusAdapter,
+  normalizeJiasuTaskState,
   normalizeRemoteState,
   registerProductionGenerationStatusAdapters,
 } from "../../src/tianjiang/tasks/vendor-status-adapters";
@@ -16,6 +17,50 @@ import {
   runWithUserStorage,
 } from "../../src/tianjiang/runtime/user-storage-context";
 import { registerGenerationTaskStatusAdapter } from "../../src/tianjiang/tasks/generation-task-recovery";
+
+test("佳速兜底恢复按已存任务类型 GET 新路径，旧官方地址切换到 ai", async () => {
+  const calls: Array<{ url: string; method?: string; body?: BodyInit | null }> = [];
+  const adapter = createProductionProviderStatusAdapter("tianjiang", {
+    apiKey: "existing-secret", baseUrl: "https://js.jiasuapi.com/v1",
+  }, (async (input, init) => {
+    const url = String(input);
+    calls.push({ url, method: init?.method, body: init?.body });
+    return new Response(JSON.stringify(url.includes("/images/")
+      ? { code: "success", data: { id: 123, task_id: "my-image", status: "SUCCESS", result_url: "https://m.jiasuapi.com/media/image.png" } }
+      : { id: "my-video", status: "completed", result_urls: ["https://m.jiasuapi.com/media/video.mp4"] }), { status: 200 });
+  }) as typeof fetch)!;
+  const task = { provider: "tianjiang", remoteTaskId: "my-image", projectUuid: "11111111-1111-4111-a111-111111111111", requestDigest: "a".repeat(64) };
+  const image = await adapter("my-image", { ...task, remoteStatusHint: "/v1/images/create" });
+  const video = await adapter("my-video", { ...task, remoteTaskId: "my-video", remoteStatusHint: "/v1/video/generations" });
+  assert.equal(image.artifact?.mediaType, "image");
+  assert.equal(image.artifact?.remoteUrl, "https://m.jiasuapi.com/media/image.png");
+  assert.equal(video.artifact?.mediaType, "video");
+  assert.equal(video.artifact?.remoteUrl, "https://m.jiasuapi.com/media/video.mp4");
+  assert.deepEqual(calls, [
+    { url: "https://ai.jiasuapi.com/v1/images/tasks/my-image", method: "GET", body: undefined },
+    { url: "https://ai.jiasuapi.com/v1/videos/tasks/my-video", method: "GET", body: undefined },
+  ]);
+});
+
+test("佳速查询 envelope 与真实任务状态分离，未知和缺结果不会重新提交", () => {
+  assert.deepEqual(normalizeJiasuTaskState({ code: "success", data: { status: "QUEUED" } }, "image"), { state: "pending" });
+  assert.deepEqual(normalizeJiasuTaskState({ code: "success", data: { status: "FAILURE", fail_reason: "bad image" } }, "image"), { state: "failed", reason: "bad image" });
+  assert.equal(normalizeJiasuTaskState({ status: "completed", url: "https://m.jiasuapi.com/old.mp4" }, "video").state, "temporary_error");
+  assert.equal(normalizeJiasuTaskState({ code: "error" }, "image").state, "temporary_error");
+  assert.equal(normalizeJiasuTaskState({ status: "unknown" }, "video").state, "pending");
+  assert.equal(normalizeJiasuTaskState({ status: "completed", result_urls: ["file:///secret"] }, "video").state, "temporary_error");
+});
+
+test("动态恢复保留适配器声明的无后缀视频结果类型，仍只接受远端 URL", () => {
+  const remoteUrl = "https://m.jiasuapi.com/media/opaque-result-id";
+  const result = normalizeRemoteState({ state: "completed", url: remoteUrl,
+    artifact: { mediaType: "video", sourceKind: "remote_url", remoteUrl } });
+  assert.equal(result.artifact?.mediaType, "video");
+  assert.equal(result.artifact?.remoteUrl, remoteUrl);
+  assert.equal(normalizeRemoteState({ state: "completed", artifact: {
+    mediaType: "video", sourceKind: "local_path", localPath: "C:/secret.mp4",
+  } }).artifact, undefined);
+});
 
 test("生产状态适配器只查询原任务 ID，并按供应商响应归一化", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];

@@ -6,7 +6,7 @@
  * atlascloud：images / reference_images / reference_videos / reference_audios，短签 URL。
  * grsai：仅 firstFrameUrl / lastFrameUrl / urls，没有音频或视频文件字段。
  * klingai：image_url / image_list 内联；sound 只是布尔，不消费音频文件；videoRefs 未写入请求。
- * tianjiang：ReferenceItem.sourceType=base64，image/video/audio 均消费内联内容。
+ * tianjiang：佳速新协议 images/videos/audios 均消费 URL，宿主负责暂存旧内联输入。
  * vidu：只消费 imageBase64；metadata.audio 只是布尔。
  * volcengine：image_url / video_url / audio_url。
  * volcengineSd2：parseBase64 后 uploadAssets，image/video/audio 均为内联。
@@ -24,7 +24,7 @@ const BUILTIN_MEDIA_FORM: Record<string, Record<VendorMediaKind, VendorMediaForm
   atlascloud: { image: "url", audio: "url", video: "url" },
   grsai: { image: "url", audio: "none", video: "none" },
   klingai: { image: "inline", audio: "none", video: "none" },
-  tianjiang: { image: "inline", audio: "inline", video: "inline" },
+  tianjiang: { image: "url", audio: "url", video: "url" },
   vidu: { image: "inline", audio: "none", video: "none" },
   volcengine: { image: "url", audio: "url", video: "url" },
   volcengineSd2: { image: "inline", audio: "inline", video: "inline" },

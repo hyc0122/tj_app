@@ -14,6 +14,7 @@ import {
   migrateLegacyVendorSourceFile,
 } from "./product-identity-migration";
 import {
+  migrateJiasuProviderAsyncV5,
   migrateJiasuProviderModelCatalogV44,
   migrateJiasuProviderV4,
 } from "./jiasu-provider-migration";
@@ -412,6 +413,26 @@ export function buildApplicationMigrations(
             name: "canvas-import-staging-reservations-v1",
             checksumSource: "account local canvas import staging reservations not in project snapshot v1",
             up: migrateCanvasAccountStagingReservations,
+          } satisfies SqliteMigration,
+          {
+            version: tableMigrations.length + 20,
+            name: "jiasu-provider-async-v5",
+            checksumSource: "account tianjiang async image video v5 preserve secrets models mappings enabled v1",
+            up: async (database) => {
+              await migrateJiasuProviderAsyncV5(database, {
+                builtinSource: rawVendorData["tianjiang.ts"],
+                readInstalledVersion: () => {
+                  try {
+                    if (!u.vendor.getCode("tianjiang")) return undefined;
+                    return String(u.vendor.getVendor("tianjiang")?.version ?? "");
+                  } catch {
+                    // 中文注释：旧源码无效时只修复适配器，不清空账号密钥或模型配置。
+                    return undefined;
+                  }
+                },
+                writeInstalledSource: (source) => u.vendor.writeCode("tianjiang", source),
+              });
+            },
           } satisfies SqliteMigration,
         ]),
   ];

@@ -3,11 +3,11 @@
  *
  * 路由只由业务能力决定，模型名称仅作为 model 参数透传：
  * - 文本：POST /chat/completions
- * - 图片生成：POST /images/create（文生图、单参考图、多参考图统一入口）
+ * - 图片创建：POST /images/create，图片查询：GET /images/tasks/{task_id}
  * - 视频创建：POST /video/generations
- * - 视频查询：GET /video/generations/{task_id}
+ * - 视频查询：GET /videos/tasks/{task_id}
  *
- * @version 4.4
+ * @version 5.0
  */
 
 type VideoMode =
@@ -69,7 +69,8 @@ interface RemoteModel {
 
 type ReferenceItem = {
   type: "image" | "audio" | "video";
-  sourceType: "base64";
+  // 宿主沿用 base64 字段名，但在进入新协议前已将参考素材暂存为 HTTPS URL。
+  sourceType?: "base64" | "url";
   base64: string;
 };
 
@@ -87,7 +88,9 @@ interface VideoConfig {
   prompt: string;
   referenceList?: ReferenceItem[];
   audio?: boolean;
-  mode: VideoMode[];
+  mode: VideoMode | VideoMode[];
+  channel?: string;
+  function_mode?: string;
 }
 
 interface TTSConfig {
@@ -114,15 +117,14 @@ interface ApiErrorPayload {
   };
 }
 
-interface VideoTaskPayload {
-  id?: unknown;
-  task_id?: unknown;
-  status?: unknown;
-  url?: unknown;
-  error?: unknown;
-  message?: unknown;
-  output?: { url?: unknown };
-  data?: Array<{ url?: unknown }>;
+type TaskKind = "image" | "video";
+interface TaskContext { remoteStatusHint?: string; taskClass?: string }
+interface TaskResult {
+  state: "pending" | "completed" | "failed" | "not_found" | "temporary_error";
+  reason?: string;
+  url?: string;
+  output?: { url: string };
+  artifact?: { mediaType: TaskKind; sourceKind: "remote_url"; remoteUrl: string };
 }
 
 interface ProviderSourceManifest {
@@ -137,6 +139,7 @@ interface ProviderSourceManifest {
 
 declare const createOpenAI: any;
 declare const fetch: any;
+declare const URL: any;
 declare const pollTask: (
   fn: () => Promise<PollResult>,
   interval?: number,
@@ -148,19 +151,19 @@ declare const exports: {
   imageRequest: (config: ImageConfig, model: ImageModel) => Promise<string>;
   videoRequest: (config: VideoConfig, model: VideoModel) => Promise<string>;
   ttsRequest: (config: TTSConfig, model: TTSModel) => Promise<string>;
-  queryTask: (remoteTaskId: string) => Promise<Record<string, unknown>>;
+  queryTask: (remoteTaskId: string, context?: TaskContext) => Promise<TaskResult>;
   listModels: () => Promise<RemoteModel[]>;
   checkForUpdates: () => Promise<{ hasUpdate: boolean; latestVersion: string; notice: string }>;
   updateVendor: () => Promise<string>;
 };
 
-const PRODUCTION_BASE_URL = "https://js.jiasuapi.com/v1";
+const PRODUCTION_BASE_URL = "https://ai.jiasuapi.com/v1";
 const PROVIDER_UPDATE_BASE_URL =
   "https://api.j11.com.cn/api/tianjiang/v1/public/provider-sources/tianjiang";
 
 const vendor: VendorConfig = {
   id: "tianjiang",
-  version: "4.4",
+  version: "5.0",
   author: "JiasuAPI",
   name: "佳速 API",
   description:
@@ -205,12 +208,23 @@ function getApiKey(): string {
 
 function getBaseUrl(): string {
   const configured = String(vendor.inputValues.baseUrl ?? "").trim().replace(/\/+$/, "");
-  // 空配置使用佳速正式地址；显式地址仅用于受控测试或私有代理。
+  // 旧账号或云端同步回来的旧官方地址自动切换；显式私有代理保持不变。
+  if (/^https:\/\/js\.jiasuapi\.com(?:\/v1)?$/i.test(configured)) return PRODUCTION_BASE_URL;
   return configured || PRODUCTION_BASE_URL;
 }
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function safeReason(value: unknown, fallback: string): string {
+  const message = stringValue(value) || fallback;
+  const key = String(vendor.inputValues.apiKey ?? "").trim().replace(/^Bearer\s+/i, "");
+  // 供应商错误字段也不可信：移除密钥、Bearer 和内联素材后才进入任务诊断。
+  return (key ? message.split(key).join("[REDACTED_SECRET]") : message)
+    .replace(/Bearer\s+[^\s;,]+/gi, "Bearer [REDACTED_SECRET]")
+    .replace(/data:[^\s;,]+;base64,[a-z0-9+/=]+/gi, "[REDACTED_MEDIA]")
+    .slice(0, 1000);
 }
 
 function safeApiError(prefix: string, status: number, payload: ApiErrorPayload): Error {
@@ -233,7 +247,7 @@ function safeApiError(prefix: string, status: number, payload: ApiErrorPayload):
       : "请稍后手动重试");
   }
   // 不拼接原始响应体，避免密钥、素材或供应商内部信息进入错误日志。
-  const error = new Error(parts.join("；")) as Error & { httpStatus?: number };
+  const error = new Error(safeReason(parts.join("；"), prefix)) as Error & { httpStatus?: number };
   error.httpStatus = status;
   return error;
 }
@@ -258,26 +272,19 @@ async function requestJson(
   return payload;
 }
 
-function normalizeDimension(value: number): number {
-  return Math.max(8, Math.round(value / 8) * 8);
+function httpsUrl(value: unknown): string {
+  const url = stringValue(value);
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password ? url : "";
+  } catch { return ""; }
 }
 
-function imageSize(size: ImageConfig["size"], aspectRatio: string): string {
-  const longEdgeMap: Record<ImageConfig["size"], number> = { "1K": 1024, "2K": 2048, "4K": 4096 };
-  const longEdge = longEdgeMap[size] ?? 1024;
-  const [rawWidth, rawHeight] = aspectRatio.split(":").map(Number);
-  const widthRatio = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1;
-  const heightRatio = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 1;
-  if (widthRatio >= heightRatio) {
-    return `${longEdge}x${normalizeDimension(longEdge * heightRatio / widthRatio)}`;
-  }
-  return `${normalizeDimension(longEdge * widthRatio / heightRatio)}x${longEdge}`;
-}
-
-function resultUrl(payload: Record<string, any>, prefix: string): string {
-  const url = stringValue(payload?.data?.[0]?.url);
-  if (!url) throw new Error(`${prefix}：响应缺少图片 URL`);
-  return url;
+function createdTaskId(payload: Record<string, any>): string {
+  // 顶层 id/task_id 是公开任务 ID；查询 DTO 的 data.id 是数据库记录号，绝不使用。
+  const id = stringValue(payload.task_id) || stringValue(payload.id);
+  if (!id) throw new Error("生成请求响应缺少公开任务 ID，请查看任务中心，勿重复提交");
+  return id;
 }
 
 const textRequest = (model: TextModel) => {
@@ -286,16 +293,14 @@ const textRequest = (model: TextModel) => {
 };
 
 async function imageRequest(config: ImageConfig, model: ImageModel): Promise<string> {
-  const references = (config.referenceList ?? []).filter((item) => item.type === "image" && item.base64);
-  const size = imageSize(config.size, config.aspectRatio);
-  const images = references.map((item) => item.base64);
+  const images = referenceValues(config.referenceList ?? [], "image");
   const body: Record<string, unknown> = {
     model: model.modelName,
     prompt: config.prompt,
-    references: images,
-    n: 1,
-    size,
+    ratio: config.aspectRatio,
+    resolution: String(config.size).toLowerCase(),
   };
+  if (images.length) body.images = images;
 
   const payload = await requestJson(
     "/images/create",
@@ -309,14 +314,18 @@ async function imageRequest(config: ImageConfig, model: ImageModel): Promise<str
     },
     "图片生成请求失败",
   );
-  return resultUrl(payload, "图片生成请求失败");
+  return waitForTask(createdTaskId(payload), "image");
 }
 
 function referenceValues(references: ReferenceItem[], type: ReferenceItem["type"]): string[] {
-  // 佳速视频接口按素材类型分别接收数组，空值不进入请求体。
+  // 新协议数组仅接受 URL；素材转换由宿主暂存阶段完成，禁止把 Base64 塞进数组收费提交。
   return references
-    .filter((reference) => reference.type === type && reference.base64)
-    .map((reference) => reference.base64);
+    .filter((reference) => reference.type === type)
+    .map((reference) => {
+      const url = httpsUrl(reference.base64);
+      if (!url) throw new Error("参考素材必须先暂存为不含账号凭据的 HTTPS URL");
+      return url;
+    });
 }
 
 function getUpdateBaseUrl(): string {
@@ -326,39 +335,39 @@ function getUpdateBaseUrl(): string {
     .replace(/\/+$/, "");
 }
 
-function unwrapVideoTask(payload: Record<string, any>): VideoTaskPayload {
-  const nested = payload?.data;
-  return nested && typeof nested === "object" ? nested : payload;
+function taskKind(context?: TaskContext): TaskKind {
+  const hint = context?.remoteStatusHint || "";
+  if (/\/images?\//.test(hint)) return "image";
+  if (/\/videos?\//.test(hint)) return "video";
+  // 无创建路径的历史任务按已持久化业务类型判断；旧单参数 queryTask 默认仍为视频。
+  return /图|image/i.test(context?.taskClass || "") ? "image" : "video";
 }
 
-async function requestVideoTask(remoteTaskId: string): Promise<VideoTaskPayload> {
-  const response = await fetch(`${getBaseUrl()}/video/generations/${encodeURIComponent(remoteTaskId)}`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${getApiKey()}` },
-  });
-  const payload = await parseJsonResponse(response);
-  if (!response.ok) throw safeApiError("视频任务查询失败", Number(response.status), payload);
-  return unwrapVideoTask(payload);
-}
-
-function videoPollResult(task: VideoTaskPayload): PollResult {
+function normalizeTask(payload: Record<string, any>, kind: TaskKind): TaskResult {
+  if (kind === "image" && payload.code !== "success") {
+    return { state: "temporary_error", reason: safeReason(payload.message, "图片任务查询回执无效") };
+  }
+  const task = kind === "image" ? payload.data : payload;
+  if (!task || typeof task !== "object" || Array.isArray(task)) {
+    return { state: "temporary_error", reason: "任务查询响应格式无效" };
+  }
   const status = stringValue(task.status).toLowerCase();
-  if (["failed", "cancelled", "canceled"].includes(status)) {
-    const reason = stringValue((task.error as { message?: unknown } | undefined)?.message)
-      || stringValue(task.error)
-      || stringValue(task.message)
-      || "视频任务失败";
-    return { completed: false, error: reason };
+  if (status === "failure" || status === "failed") {
+    return { state: "failed", reason: safeReason(kind === "image" ? task.fail_reason : task.error?.message, "生成任务失败") };
   }
-  if (status === "completed" || status === "succeeded" || status === "success") {
-    const url = stringValue(task.url)
-      || stringValue(task.output?.url)
-      || stringValue(task.data?.[0]?.url);
-    return url
-      ? { completed: true, data: url }
-      : { completed: false, error: "视频任务已完成，但响应缺少视频 URL" };
+  if (status === (kind === "image" ? "success" : "completed")) {
+    const url = kind === "image"
+      ? httpsUrl(task.result_url)
+      : Array.isArray(task.result_urls) ? task.result_urls.map(httpsUrl).find(Boolean) : "";
+    // 完成但结果不完整只允许继续查询原任务，禁止读已废弃 url 或重新创建。
+    return url ? { state: "completed", url, output: { url }, artifact: { mediaType: kind, sourceKind: "remote_url", remoteUrl: url } }
+      : { state: "temporary_error", reason: "任务已完成，但查询响应缺少有效结果 URL" };
   }
-  return { completed: false };
+  const pending = kind === "image"
+    ? ["not_start", "submitted", "queued", "in_progress", "unknown"]
+    : ["queued", "in_progress", "unknown"];
+  return pending.includes(status) ? { state: "pending" }
+    : { state: "temporary_error", reason: "任务查询响应缺少有效状态" };
 }
 
 async function videoRequest(config: VideoConfig, model: VideoModel): Promise<string> {
@@ -373,9 +382,25 @@ async function videoRequest(config: VideoConfig, model: VideoModel): Promise<str
     ratio: config.aspectRatio,
     resolution: config.resolution,
   };
-  if (images.length > 0) body.images = images;
+  // 首尾帧模式显式标注方向；多参考模式仍用 images，模型名称不参与路由分支。
+  // 旧工作台直接传模式字符串，新画布可能传单元素数组，两种入口必须保持首尾帧方向一致。
+  const mode = typeof config.mode === "string" ? config.mode
+    : config.mode?.length === 1 ? config.mode[0] : undefined;
+  if (mode === "startEndRequired" || mode === "endFrameOptional" || mode === "startFrameOptional") {
+    if (images.length > 2 || images.length < (mode === "startEndRequired" ? 2 : 1)) {
+      throw new Error("首尾帧参考图数量与当前模式不匹配");
+    }
+    if (mode === "startFrameOptional" && images.length === 1) body.end_frame_url = images[0];
+    else {
+      body.first_frame_url = images[0];
+      if (images[1]) body.end_frame_url = images[1];
+    }
+  } else if (mode === "singleImage" && images.length === 1) body.image = images[0];
+  else if (images.length > 0) body.images = images;
   if (videos.length > 0) body.videos = videos;
   if (audios.length > 0) body.audios = audios;
+  if (stringValue(config.channel)) body.channel = config.channel;
+  if (stringValue(config.function_mode)) body.function_mode = config.function_mode;
 
   const created = await requestJson(
     "/video/generations",
@@ -389,50 +414,35 @@ async function videoRequest(config: VideoConfig, model: VideoModel): Promise<str
     },
     "视频生成请求失败",
   );
-  const remoteTaskId = stringValue(created.task_id) || stringValue(created.id);
-  if (!remoteTaskId) throw new Error("视频生成请求失败：响应缺少任务 ID");
-
-  const result = await pollTask(async () => videoPollResult(await requestVideoTask(remoteTaskId)));
-  if (result.error) throw new Error(`视频生成失败：${result.error}`);
-  if (!result.completed || !result.data) throw new Error("视频生成失败：任务未返回视频 URL");
-  return result.data;
+  return waitForTask(createdTaskId(created), "video");
 }
 
-async function queryTask(remoteTaskId: string): Promise<Record<string, unknown>> {
-  let task: VideoTaskPayload;
+async function queryTask(remoteTaskId: string, context?: TaskContext): Promise<TaskResult> {
+  const kind = taskKind(context);
   try {
-    task = await requestVideoTask(remoteTaskId);
+    const payload = await requestJson(`/${kind === "image" ? "images" : "videos"}/tasks/${encodeURIComponent(remoteTaskId)}`, {
+      method: "GET", headers: { Authorization: `Bearer ${getApiKey()}` },
+    }, "生成任务查询失败");
+    return normalizeTask(payload, kind);
   } catch (error) {
     const status = Number((error as { httpStatus?: unknown } | undefined)?.httpStatus);
     if (status === 404) return { state: "not_found", reason: "远端任务不存在" };
-    if (status === 410) return { state: "failed", reason: "视频任务已结束或媒体已过保留期" };
-    throw error;
+    if (status === 410) return { state: "failed", reason: "任务已结束或媒体已过保留期" };
+    return { state: "temporary_error", reason: safeReason((error as Error)?.message, "生成任务查询暂不可用") };
   }
-  const polled = videoPollResult(task);
-  if (polled.error && !polled.completed) {
-    const status = stringValue(task.status).toLowerCase();
-    if (["failed", "cancelled", "canceled"].includes(status) || polled.error.includes("缺少视频 URL")) {
-      return { state: "failed", reason: polled.error };
-    }
-  }
-  if (polled.completed && polled.data) {
-    return {
-      state: "completed",
-      url: polled.data,
-      output: { url: polled.data },
-    };
-  }
-  const status = stringValue(task.status).toLowerCase();
-  if (["failed", "cancelled", "canceled"].includes(status)) {
-    return {
-      state: "failed",
-      reason: stringValue((task.error as { message?: unknown } | undefined)?.message)
-        || stringValue(task.error)
-        || stringValue(task.message)
-        || "视频任务失败",
-    };
-  }
-  return { state: "pending" };
+}
+
+async function waitForTask(remoteTaskId: string, kind: TaskKind): Promise<string> {
+  const context = { remoteStatusHint: kind === "image" ? "/v1/images/create" : "/v1/video/generations" };
+  const result = await pollTask(async () => {
+    const task = await queryTask(remoteTaskId, context);
+    if (task.state === "completed") return { completed: true, data: task.url };
+    if (task.state === "pending") return { completed: false };
+    return { completed: false, error: task.reason || "任务查询失败" };
+  });
+  if (result.error) throw new Error(`生成任务未完成：${result.error}`);
+  if (!result.completed || !result.data) throw new Error("生成任务未返回结果 URL");
+  return result.data;
 }
 
 async function ttsRequest(): Promise<string> {

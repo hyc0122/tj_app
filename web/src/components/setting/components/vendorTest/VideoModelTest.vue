@@ -23,6 +23,7 @@
 
       <!-- 动态输入区 -->
       <div class="inputSection" v-if="selectedMode">
+        <p v-if="vendorId === 'tianjiang'">佳速参考素材测试请填写可公开访问的 HTTPS URL；账号级测试不会写入其他项目。</p>
         <!-- 文生视频：只需文本 -->
         <template v-if="selectedMode === 'text'">
           <t-form-item :label="$t('settings.vendor.test.prompt')">
@@ -38,7 +39,7 @@
         <template v-else-if="selectedMode === 'singleImage'">
           <t-form-item :label="$t('settings.vendor.test.referenceImage')">
             <div class="uploadRow">
-              <ImageUploadBox v-model="uploadedImages[0]" />
+              <ModelReferenceInput v-model="uploadedImages[0]" kind="image" :url-only="vendorId === 'tianjiang'" />
             </div>
           </t-form-item>
           <t-form-item :label="$t('settings.vendor.test.prompt')">
@@ -54,10 +55,10 @@
         <template v-else-if="selectedMode === 'startEndRequired'">
           <div class="frameRow">
             <t-form-item :label="$t('settings.vendor.test.startFrame')">
-              <ImageUploadBox v-model="uploadedImages[0]" />
+              <ModelReferenceInput v-model="uploadedImages[0]" kind="image" :url-only="vendorId === 'tianjiang'" />
             </t-form-item>
             <t-form-item :label="$t('settings.vendor.test.endFrame')">
-              <ImageUploadBox v-model="uploadedImages[1]" />
+              <ModelReferenceInput v-model="uploadedImages[1]" kind="image" :url-only="vendorId === 'tianjiang'" />
             </t-form-item>
           </div>
           <t-form-item :label="$t('settings.vendor.test.prompt')">
@@ -73,10 +74,10 @@
         <template v-else-if="selectedMode === 'endFrameOptional'">
           <div class="frameRow">
             <t-form-item :label="$t('settings.vendor.test.startFrame')">
-              <ImageUploadBox v-model="uploadedImages[0]" />
+              <ModelReferenceInput v-model="uploadedImages[0]" kind="image" :url-only="vendorId === 'tianjiang'" />
             </t-form-item>
             <t-form-item :label="$t('settings.vendor.test.endFrameOptional')">
-              <ImageUploadBox v-model="uploadedImages[1]" :optional="true" />
+              <ModelReferenceInput v-model="uploadedImages[1]" kind="image" :url-only="vendorId === 'tianjiang'" :optional="true" />
             </t-form-item>
           </div>
           <t-form-item :label="$t('settings.vendor.test.prompt')">
@@ -92,10 +93,10 @@
         <template v-else-if="selectedMode === 'startFrameOptional'">
           <div class="frameRow">
             <t-form-item :label="$t('settings.vendor.test.startFrameOptional')">
-              <ImageUploadBox v-model="uploadedImages[0]" :optional="true" />
+              <ModelReferenceInput v-model="uploadedImages[0]" kind="image" :url-only="vendorId === 'tianjiang'" :optional="true" />
             </t-form-item>
             <t-form-item :label="$t('settings.vendor.test.endFrame')">
-              <ImageUploadBox v-model="uploadedImages[1]" />
+              <ModelReferenceInput v-model="uploadedImages[1]" kind="image" :url-only="vendorId === 'tianjiang'" />
             </t-form-item>
           </div>
           <t-form-item :label="$t('settings.vendor.test.prompt')">
@@ -116,21 +117,21 @@
               <t-form-item :label="getRefLabel(ref)">
                 <div class="multiRefRow">
                   <template v-if="ref.type === 'imageReference'">
-                    <ImageUploadBox
+                    <ModelReferenceInput kind="image" :url-only="vendorId === 'tianjiang'"
                       v-for="i in ref.count"
                       :key="i"
                       v-model="uploadedImages[rIdx * 10 + i - 1]"
                       :label="`${$t('settings.vendor.test.image')} ${i}`" />
                   </template>
                   <template v-else-if="ref.type === 'videoReference'">
-                    <VideoUploadBox
+                    <ModelReferenceInput kind="video" :url-only="vendorId === 'tianjiang'"
                       v-for="i in ref.count"
                       :key="i"
                       v-model="uploadedVideos[rIdx * 10 + i - 1]"
                       :label="`${$t('settings.vendor.test.video')} ${i}`" />
                   </template>
                   <template v-else-if="ref.type === 'audioReference'">
-                    <AudioUploadBox
+                    <ModelReferenceInput kind="audio" :url-only="vendorId === 'tianjiang'"
                       v-for="i in ref.count"
                       :key="i"
                       v-model="uploadedAudios[rIdx * 10 + i - 1]"
@@ -155,7 +156,7 @@
       <!-- 底部操作 -->
       <div class="dialogFooter">
         <t-button variant="outline" @click="visible = false">{{ $t("settings.vendor.test.cancel") }}</t-button>
-        <t-button theme="primary" :loading="loading" @click="handleTest">
+        <t-button theme="primary" :loading="loading" :disabled="!canSubmit" @click="handleTest">
           <template #icon><i-lightning theme="outline" /></template>
           {{ $t("settings.vendor.test.startTest") }}
         </t-button>
@@ -166,9 +167,7 @@
 
 <script setup lang="ts">
 import axios from "@/utils/axios";
-import ImageUploadBox from "./ImageUploadBox.vue";
-import VideoUploadBox from "./VideoUploadBox.vue";
-import AudioUploadBox from "./AudioUploadBox.vue";
+import ModelReferenceInput from "./ModelReferenceInput.vue";
 
 type VideoRawMode =
   | "singleImage"
@@ -291,9 +290,9 @@ const currentModeInfo = computed(() => parsedModes.value.find((m) => m.key === s
 const currentMultiRefs = computed<RefItem[]>(() => currentModeInfo.value?.refs ?? []);
 
 const prompt = ref("");
-const uploadedImages = ref<(File | null)[]>(Array(30).fill(null));
-const uploadedVideos = ref<(File | null)[]>(Array(30).fill(null));
-const uploadedAudios = ref<(File | null)[]>(Array(30).fill(null));
+const uploadedImages = ref<(File | string | null)[]>(Array(30).fill(null));
+const uploadedVideos = ref<(File | string | null)[]>(Array(30).fill(null));
+const uploadedAudios = ref<(File | string | null)[]>(Array(30).fill(null));
 const loading = ref(false);
 const resultUrl = ref("");
 
@@ -310,7 +309,7 @@ const canSubmit = computed(() => {
   if (selectedMode.value === "startEndRequired") return !!uploadedImages.value[0] && !!uploadedImages.value[1];
   if (selectedMode.value === "endFrameOptional") return !!uploadedImages.value[0];
   if (selectedMode.value === "startFrameOptional") return !!uploadedImages.value[1];
-  if (selectedMode.value.startsWith("multiRef:")) {
+  if (selectedMode.value.startsWith("[")) {
     // 验证所有非可选 ref 都已上传
     for (let rIdx = 0; rIdx < currentMultiRefs.value.length; rIdx++) {
       const ref = currentMultiRefs.value[rIdx];
@@ -346,16 +345,18 @@ function mapTopType(mime = "") {
   if (mime.startsWith("audio/")) return "audio";
   return ""; // 不认识就空
 }
-async function encodeFiles(files: File[]) {
+async function encodeFiles(files: (File | string | null)[], kind: "image" | "video" | "audio") {
   const valid = (files || []).filter(Boolean);
   return Promise.all(
     valid.map(async (f) => ({
-      type: mapTopType(f.type),
-      base64: await fileToDataURL(f), // 带前缀 data:...;base64,...
+      type: typeof f === "string" ? kind : mapTopType(f!.type),
+      // 中文注释：佳速账号级测试只传 URL；其他供应商仍保持原文件输入。
+      base64: typeof f === "string" ? f.trim() : await fileToDataURL(f!),
     })),
   );
 }
 async function handleTest() {
+  if (!canSubmit.value) return;
   loading.value = true;
   resultUrl.value = "";
   try {
@@ -364,9 +365,9 @@ async function handleTest() {
       id: props.vendorId,
       mode: selectedMode.value,
       ...(prompt.value.trim() ? { prompt: prompt.value.trim() } : {}),
-      images: await encodeFiles(uploadedImages.value.filter(Boolean) as File[]),
-      videos: await encodeFiles(uploadedVideos.value.filter(Boolean) as File[]),
-      audios: await encodeFiles(uploadedAudios.value.filter(Boolean) as File[]),
+      images: await encodeFiles(uploadedImages.value, "image"),
+      videos: await encodeFiles(uploadedVideos.value, "video"),
+      audios: await encodeFiles(uploadedAudios.value, "audio"),
     };
     const { data } = await axios.post("/setting/vendorConfig/modelTest/videoTest", payload, {
       timeout: 30 * 60 * 1000,

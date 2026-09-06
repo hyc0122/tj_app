@@ -14,6 +14,8 @@ export interface ModelMediaResolver {
 export interface VendorMediaInputCapability {
   supportsUrl: boolean;
   supportsInline: boolean;
+  /** 中文注释：佳速新协议要求连旧瞬时 Base64 输入也先转成 URL，不改变其他供应商的旧合同。 */
+  requireUrl?: boolean;
 }
 
 const INLINE_MEDIA_MAX_BYTES = 10 * 1024 * 1024;
@@ -41,6 +43,12 @@ export async function prepareModelMediaReferences<T extends {
   return Promise.all(references.map(async (reference) => {
     if (!reference.media) {
       if (typeof reference.base64 !== "string") throw new Error("模型媒体引用缺少内容");
+      if (resolved.requireUrl) {
+        const payload = reference.base64.startsWith("data:")
+          ? await stageTransientMediaURL(reference.base64, reference.type)
+          : requireHttpsMediaUrl(reference.base64);
+        return { ...reference, base64: payload };
+      }
       // 兼容旧供应商的瞬时内存参数；该值仍会被所有持久化入口拒绝。
       return { ...reference, base64: reference.base64 };
     }
@@ -72,6 +80,16 @@ export function preflightModelMediaReferences<T extends {
   for (const reference of references ?? []) {
     if (!reference.media) {
       if (typeof reference.base64 !== "string") throw new Error("模型媒体引用缺少内容");
+      if (resolved.requireUrl) {
+        if (!resolved.supportsUrl) throw new Error("模型媒体 URL 能力配置无效");
+        if (reference.base64.startsWith("data:")) {
+          // 中文注释：只解码校验与检查能力；整批预检阶段严禁落盘、暂存和供应商请求。
+          requireTransientProjectContext();
+          const { decodeTransientMedia } = require("./transient-media") as typeof import("./transient-media");
+          decodeTransientMedia(reference.base64, reference.type);
+          if (!requireActiveResolver().stageLocalPath) throw new Error("缺少本地媒体暂存适配器");
+        } else requireHttpsMediaUrl(reference.base64);
+      }
       continue;
     }
     validatePersistedReference(reference.media);
@@ -102,12 +120,45 @@ function normalizeCapability(capability: boolean | VendorMediaInputCapability): 
   return {
     supportsUrl: capability.supportsUrl === true,
     supportsInline: capability.supportsInline === true,
+    requireUrl: capability.requireUrl === true,
   };
 }
 
 function requireActiveResolver(): ModelMediaResolver {
   if (!activeResolver) throw new Error("当前登录态未配置模型媒体短签适配器");
   return activeResolver;
+}
+
+function requireHttpsMediaUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "https:" && !parsed.username && !parsed.password) return value.trim();
+  } catch { /* 中文注释：不得在诊断中回显可能携带密钥的 URL。 */ }
+  throw new Error("参考素材必须是无账号凭据的 HTTPS URL");
+}
+
+function requireTransientProjectContext() {
+  const { currentUserStorage } = require("@/tianjiang/runtime/user-storage-context") as typeof import("@/tianjiang/runtime/user-storage-context");
+  const context = currentUserStorage();
+  if (!context?.projectUuid) throw new Error("参考素材暂存缺少当前项目身份");
+  return { ...context, projectUuid: context.projectUuid };
+}
+
+async function stageTransientMediaURL(value: string, kind: "image" | "audio" | "video"): Promise<string> {
+  const context = requireTransientProjectContext();
+  const resolver = requireActiveResolver();
+  if (!resolver.stageLocalPath) throw new Error("缺少本地媒体暂存适配器");
+  const { decodeTransientMedia } = require("./transient-media") as typeof import("./transient-media");
+  const { writeProjectFileAtomic } = require("./project-file-store") as typeof import("./project-file-store");
+  const getPath = (require("@/utils/getPath") as { default: () => string }).default;
+  const crypto = require("node:crypto") as typeof import("node:crypto");
+  const media = decodeTransientMedia(value, kind);
+  const hash = crypto.createHash("sha256").update(media.bytes).digest("hex");
+  // 中文注释：按内容寻址复用项目文件，不保存 Base64/短签；失败时保留参考原件供重试，不触发付费创建。
+  const written = writeProjectFileAtomic(getPath(), context.projectUuid, context.segment,
+    `files/${kind === "image" ? "images" : kind === "video" ? "videos" : "audios"}/jiasu-ref-${hash}.${media.extension}`, media.bytes);
+  return resolveModelMediaURL({ projectUuid: context.projectUuid, relativePath: written.relativePath, md5: written.md5, size: written.size },
+    resolver, { providerSupportsURL: true });
 }
 
 function assertProjectMediaIdentitySync(reference: PersistedMediaReference): void {

@@ -36,7 +36,7 @@ function loadRuntime(updateBaseUrl: string): UpdateRuntime {
 }
 
 async function createUpdateServer(options: { corruptHash?: boolean; version?: string } = {}) {
-  const version = options.version ?? "4.5";
+  const version = options.version ?? "5.1";
   const source = `
 exports.vendor = {
   id: "tianjiang",
@@ -87,14 +87,14 @@ exports.videoRequest = async () => "";
   };
 }
 
-test("佳速模板版本升级为 4.4，并从后台公开入口显式检查更新", async () => {
+test("佳速模板升级新协议后仍从后台公开入口显式检查后续更新", async () => {
   const fixture = await createUpdateServer();
   try {
     const runtime = loadRuntime(fixture.baseUrl);
-    assert.equal(runtime.vendor.version, "4.4");
+    assert.equal(runtime.vendor.version, "5.0");
     assert.deepEqual(await runtime.checkForUpdates(), {
       hasUpdate: true,
-      latestVersion: "4.5",
+      latestVersion: "5.1",
       notice: "佳速配置已更新",
     });
     assert.equal(await runtime.updateVendor(), fixture.source);
@@ -136,7 +136,7 @@ test("本地后端代理检查与下载，且不会把私有输入写入返回�
       privateInputs: { updateBaseUrl: fixture.baseUrl },
     }), {
       hasUpdate: true,
-      latestVersion: "4.5",
+      latestVersion: "5.1",
       notice: "佳速配置已更新",
     });
     assert.equal(await downloadRemoteVendorUpdate("tianjiang", {

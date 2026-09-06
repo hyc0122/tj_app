@@ -334,8 +334,8 @@ test("内置视频供应商参考素材能力必须按适配器真实合同分�
   const matrix = builtinVendorMediaCapabilityMatrix();
   assert.deepEqual(matrix.atlascloud, { image: "url", audio: "url", video: "url" });
   assert.deepEqual(matrix.grsai, { image: "url", audio: "none", video: "none" });
-  // 中文注释：内置 tianjiang 适配器声明 sourceType=base64，不能误走中央 URL 暂存。
-  assert.deepEqual(matrix.tianjiang, { image: "inline", audio: "inline", video: "inline" });
+  // 中文注释：佳速 5.0 的媒体数组只接收 URL，宿主必须在提交前完成暂存。
+  assert.deepEqual(matrix.tianjiang, { image: "url", audio: "url", video: "url" });
   assert.deepEqual(matrix.volcengine, { image: "url", audio: "url", video: "url" });
   assert.deepEqual(matrix.klingai, { image: "inline", audio: "none", video: "none" });
   assert.deepEqual(matrix.vidu, { image: "inline", audio: "none", video: "none" });
@@ -436,7 +436,7 @@ test("不支持参考素材的供应商必须先耐久受理，再由后台任�
   });
 });
 
-test("tianjiang 内联适配器只在最后阶段读项目文件，绝不调用中央 URL 暂存", async () => {
+test("tianjiang 新协议通过 URL 暂存读取项目文件，不向供应商发送本地路径", async () => {
   await withRuntime("r21-vendor-inline", async () => {
     const context = currentUserStorage();
     assert.ok(context);
@@ -457,7 +457,7 @@ test("tianjiang 内联适配器只在最后阶段读项目文件，绝不调用�
     configureModelMediaResolver({
       stageLocalPath: async () => {
         staged += 1;
-        throw new Error("tianjiang 不应调用中央暂存");
+        return "https://media.example/jiasu-reference.png";
       },
     });
     try {
@@ -467,10 +467,10 @@ test("tianjiang 内联适配器只在最后阶段读项目文件，绝不调用�
         { supportsUrl: capability === "url", supportsInline: capability === "inline" },
       );
       assert.equal(inlined.length, 1);
-      assert.match(inlined[0].base64, /^data:image\/png;base64,/);
+      assert.equal(inlined[0].base64, "https://media.example/jiasu-reference.png");
       assert.equal("media" in inlined[0], false);
       assert.doesNotMatch(inlined[0].base64, /files\/images/);
-      assert.equal(staged, 0);
+      assert.equal(staged, 1);
       await assert.rejects(
         () => prepareModelMediaReferences(
           [{ type: "image" as const, media }],
