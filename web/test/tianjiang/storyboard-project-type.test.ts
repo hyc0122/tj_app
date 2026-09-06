@@ -183,16 +183,17 @@ describe("分镜项目类型与创建入口", () => {
     } as any)).toThrow(/来源|storyboard|资产/);
   });
 
-  it("创建弹窗必须显示分镜管理，并允许填写描述、画风、画幅和默认语言", async () => {
+  it("创建弹窗显示简介和画幅，画风通过右侧手册选择并隐藏默认语言", async () => {
     const wrapper = mountDialog();
     await flushPromises();
     const optionValues = wrapper.findAll("option").map((node) => node.attributes("value"));
     expect(optionValues).toContain("storyboard");
     expect(wrapper.text()).toContain("分镜管理");
     expect(wrapper.text()).toMatch(/描述|简介/);
-    expect(wrapper.text()).toMatch(/画面风格|画风/);
+    // 画风只由右侧手册卡片选择，默认语言不再作为可见表单项。
+    expect(wrapper.find(".formRight .artStylePicker").exists()).toBe(true);
     expect(wrapper.text()).toMatch(/画幅|比例/);
-    expect(wrapper.text()).toMatch(/默认语言/);
+    expect(wrapper.text()).not.toMatch(/默认语言/);
     wrapper.unmount();
   });
 

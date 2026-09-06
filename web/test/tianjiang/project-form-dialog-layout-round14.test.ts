@@ -16,7 +16,8 @@ describe("ProjectFormDialog 布局合同", () => {
     );
     expect(css).toMatch(/width:\s*min\(1180px,\s*calc\(100vw - 48px\)\)/);
     expect(css).toMatch(/grid-template-columns:\s*minmax\(420px,\s*1fr\)\s+minmax\(420px,\s*1fr\)/);
-    expect(css).toMatch(/max-height:\s*calc\(100vh - 180px\)/);
+    // 与项目弹窗的标题、按钮和桌面标题栏预留高度保持一致。
+    expect(css).toMatch(/max-height:\s*calc\(100vh - 240px\)/);
     expect(css).not.toMatch(/\.gridItem/);
   });
 
