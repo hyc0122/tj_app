@@ -88,6 +88,7 @@ export function createProjectForm(
     directorManual: project?.directorManual || "",
     scope: project?.kind === "team" ? "team" : "personal",
     teamUuid: project?.teamUuid || "",
+    // 语言不作为表单选项展示：新建默认简体中文，编辑时保留项目已有语言。
     defaultLanguage: project?.defaultLanguage || "zh-CN",
     assetMode: project?.assetSourceProjectUuid ? "shared" : "independent",
     assetSourceProjectUuid: project?.assetSourceProjectUuid || "",

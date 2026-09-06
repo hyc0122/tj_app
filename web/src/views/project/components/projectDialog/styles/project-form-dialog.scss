@@ -5,21 +5,33 @@
 .formColumns {
   display: grid;
   grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 20px;
-  max-height: calc(100vh - 180px);
+  // 为弹窗标题、按钮和桌面标题栏留出空间，较矮窗口也能滚动到全部字段。
+  max-height: calc(100vh - 240px);
   overflow: hidden;
 
   .formLeft,
   .formRight {
     min-width: 0;
+    min-height: 0;
     overflow: auto;
+    scrollbar-gutter: stable;
   }
 }
 
 @media (max-width: 1180px) {
   .formColumns {
     grid-template-columns: 1fr;
+    grid-template-rows: max-content max-content;
     overflow-y: auto;
+
+    // 单列布局由外层统一滚动，避免上下两栏形成嵌套的独立滚动区域。
+    .formLeft,
+    .formRight {
+      overflow: visible;
+      scrollbar-gutter: auto;
+    }
   }
 }
 

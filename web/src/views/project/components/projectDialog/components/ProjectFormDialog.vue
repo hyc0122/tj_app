@@ -85,22 +85,6 @@
               />
             </t-select>
           </t-form-item>
-          <t-form-item :label="$t('workbench.project.dialog.defaultLanguage')">
-            <t-select
-              v-model="formState.defaultLanguage"
-              :placeholder="$t('workbench.project.dialog.defaultLanguagePh')"
-            >
-              <t-option value="zh-CN" :label="$t('workbench.project.dialog.langZhCN')" />
-              <t-option value="en" :label="$t('workbench.project.dialog.langEn')" />
-              <t-option value="ja_JP" :label="$t('workbench.project.dialog.langJa')" />
-            </t-select>
-          </t-form-item>
-          <t-form-item :label="$t('workbench.project.dialog.artStyle')">
-            <t-input
-              v-model="formState.artStyle"
-              :placeholder="$t('workbench.project.dialog.selectArtStyle')"
-            />
-          </t-form-item>
           <t-form-item :label="$t('workbench.project.dialog.projectName')">
             <t-input
               v-model="formState.name"
@@ -111,6 +95,14 @@
             <t-input
               v-model="formState.type"
               :placeholder="$t('workbench.project.dialog.novelTypePh')"
+            />
+          </t-form-item>
+          <!-- 简介属于项目基础信息，放在模型配置之前，避免长表单将其挤到末尾。 -->
+          <t-form-item :label="$t('workbench.project.dialog.novelIntro')">
+            <t-textarea
+              v-model="formState.intro"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+              :placeholder="$t('workbench.project.dialog.novelIntroPh')"
             />
           </t-form-item>
           <t-form-item :label="$t('workbench.project.dialog.modelData')">
@@ -152,19 +144,13 @@
           <t-form-item :label="$t('workbench.project.dialog.videoRatio')">
             <t-select v-model="formState.videoRatio" :options="RATIO_OPTIONS" />
           </t-form-item>
-          <t-form-item :label="$t('workbench.project.dialog.novelIntro')">
-            <t-textarea
-              v-model="formState.intro"
-              :autosize="{ minRows: 3, maxRows: 6 }"
-              :placeholder="$t('workbench.project.dialog.novelIntroPh')"
-            />
-          </t-form-item>
         </t-form>
       </div>
 
       <div class="formRight">
         <t-form label-align="top">
           <t-form-item>
+            <!-- 画风统一通过右侧视觉手册选择，选中值直接进入项目提交数据。 -->
             <ProjectManualPicker
               root-class="artStylePicker"
               header-class="artStyleHeader"
