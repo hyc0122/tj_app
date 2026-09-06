@@ -331,8 +331,9 @@ test("产品机器标识迁移独立，后续账号迁移保持追加顺序", ()
   assert.ok(product);
   assert.equal(product!.version, 30);
   const latest = migrations.at(-1);
-  assert.equal(latest?.version, 45);
-  assert.equal(latest?.name, "canvas-import-staging-reservations-v1");
+  assert.equal(latest?.version, 46);
+  assert.equal(latest?.name, "jiasu-provider-async-v5");
+  assert.equal(migrations.find((item) => item.name === "canvas-import-staging-reservations-v1")?.version, 45);
   assert.ok(migrations.some((item) => item.name === "jiasu-provider-model-catalog-v4-4"));
   assert.ok(migrations.some((item) => item.name === "video-prompt-default-zh-v1"));
   assert.ok(migrations.some((item) => item.name === "database-role-account-v1"));
