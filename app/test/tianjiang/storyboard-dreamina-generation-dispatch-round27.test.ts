@@ -587,6 +587,8 @@ test("生产分镜调度必须在零收费入队前解析即梦模式、模型�
             mode: "image2video",
             references: [{
               assetUuid: assetRows[0]!.assetUuid,
+              // 中文注释：公共分镜引用快照保留素材名称，不改变即梦 CLI 的参数合同。
+              name: "asset-101",
               relativePath: files.image1,
               mediaType: "image",
               md5: "0ba1dda1b72a37ce00f89edb426614b3",

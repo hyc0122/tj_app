@@ -550,6 +550,8 @@ test("普通供应商必须收到 Ai 图片/视频顶层参数与摘要确认过
 
       const persistentReference = {
         type: "image",
+        // 中文注释：完整对象合同也必须包含从项目资产读取并耐久保存的名称。
+        name: "参考角色",
         media: {
           projectUuid: PROJECT_UUID,
           relativePath,
