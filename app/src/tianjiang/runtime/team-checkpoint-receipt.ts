@@ -137,5 +137,19 @@ export function clearTeamCheckpointReceipt(
   projectUuid: string,
 ): void {
   const filename = checkpointPath(dataRoot, userSegment, projectUuid);
-  fs.rmSync(filename, { force: true });
+  try {
+    // receipt 只能是单文件；unlink 支持中文路径且不会递归删除异常目录。
+    fs.unlinkSync(filename);
+  } catch (error) {
+    // 只将真正不存在视为幂等成功，权限或占用错误必须保留给同步恢复流程。
+    if (isEnoent(error)) return;
+    throw error;
+  }
+  try {
+    fs.statSync(filename);
+    throw new Error("清理 team checkpoint receipt 后文件仍存在");
+  } catch (error) {
+    if (isEnoent(error)) return;
+    throw error;
+  }
 }

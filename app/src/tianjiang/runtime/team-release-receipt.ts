@@ -243,7 +243,8 @@ export function clearTeamReleaseReceipt(
     throw err instanceof Error ? err : new Error("访问 release receipt 失败");
   }
   try {
-    fs.rmSync(file, { force: false });
+    // 与 mutation intent 相同：单文件用 unlink 绕过旧 Node 的 Windows 中文路径删除缺陷。
+    fs.unlinkSync(file);
   } catch (err) {
     throw new Error(
       `清理 team release receipt 失败: ${err instanceof Error ? err.message : String(err)}`,

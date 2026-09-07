@@ -129,7 +129,9 @@ export function clearPendingLegacyMutationIntent(
     if (stat.isDirectory()) {
       throw new Error("mutation intent 路径异常为目录，清理失败");
     }
-    fs.rmSync(file, { force: false });
+    // Electron 40 内置 Node 的 rmSync 存在 Windows 中文路径缺陷；单文件用 libuv unlink 删除。
+    // 不递归删除，也不跳过下方的删除后校验，避免把未清理的恢复标记误判为成功。
+    fs.unlinkSync(file);
   } catch (err) {
     if (fs.existsSync(file)) {
       const msg = err instanceof Error ? err.message : "清理 mutation intent 失败";
