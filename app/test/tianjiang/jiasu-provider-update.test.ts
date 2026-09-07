@@ -36,7 +36,8 @@ function loadRuntime(updateBaseUrl: string): UpdateRuntime {
 }
 
 async function createUpdateServer(options: { corruptHash?: boolean; version?: string } = {}) {
-  const version = options.version ?? "5.1";
+  // 中文注释：更新夹具必须高于内置 5.1，才能覆盖确有后续版本的分支。
+  const version = options.version ?? "5.2";
   const source = `
 exports.vendor = {
   id: "tianjiang",
@@ -91,10 +92,10 @@ test("佳速模板升级新协议后仍从后台公开入口显式检查后续�
   const fixture = await createUpdateServer();
   try {
     const runtime = loadRuntime(fixture.baseUrl);
-    assert.equal(runtime.vendor.version, "5.0");
+    assert.equal(runtime.vendor.version, "5.1");
     assert.deepEqual(await runtime.checkForUpdates(), {
       hasUpdate: true,
-      latestVersion: "5.1",
+      latestVersion: "5.2",
       notice: "佳速配置已更新",
     });
     assert.equal(await runtime.updateVendor(), fixture.source);
@@ -136,7 +137,7 @@ test("本地后端代理检查与下载，且不会把私有输入写入返回�
       privateInputs: { updateBaseUrl: fixture.baseUrl },
     }), {
       hasUpdate: true,
-      latestVersion: "5.1",
+      latestVersion: "5.2",
       notice: "佳速配置已更新",
     });
     assert.equal(await downloadRemoteVendorUpdate("tianjiang", {

@@ -116,3 +116,15 @@ export async function migrateJiasuProviderAsyncV5(
     });
   }
 }
+
+/** 中文注释：只升级已安装适配器的命名素材协议，账号密钥、代理、模型映射与开关一字不改。 */
+export async function migrateJiasuProviderNamedMaterialsV51(
+  database: Knex | Knex.Transaction,
+  dependencies: JiasuProviderMigrationDependencies,
+): Promise<void> {
+  if (!(await database.schema.hasTable("o_vendorConfig"))) return;
+  const row = await database<VendorConfigRow>("o_vendorConfig").where({ id: "tianjiang" }).first();
+  if (!row || isVersionAtLeast(dependencies.readInstalledVersion(), [5, 1])) return;
+  if (!dependencies.builtinSource.trim()) throw new Error("佳速 API 5.1 内置模板缺失");
+  dependencies.writeInstalledSource(dependencies.builtinSource);
+}

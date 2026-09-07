@@ -668,6 +668,8 @@ function hasDurableRequestSnapshot(task: Record<string, unknown>): boolean {
 
 function durableMediaReference(reference: ProjectMediaReference): ProjectMediaReference {
   return {
+    // 中文注释：恢复任务必须携带确认时的名称，不能仅保存文件身份而丢失 @素材绑定。
+    ...(typeof reference.name === "string" ? { name: reference.name } : {}),
     ...(typeof reference.assetUuid === "string" ? { assetUuid: reference.assetUuid } : {}),
     ...(typeof reference.relativePath === "string" ? { relativePath: reference.relativePath } : {}),
     ...(reference.mediaType ? { mediaType: reference.mediaType } : {}),

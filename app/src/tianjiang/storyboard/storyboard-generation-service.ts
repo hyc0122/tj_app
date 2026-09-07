@@ -47,6 +47,8 @@ export interface StoryboardWorkspaceSettings {
 
 export interface ProjectMediaReference {
   assetUuid?: string;
+  /** 中文注释：素材名称随请求快照冻结，排队后重命名不会改变已确认的 @引用。 */
+  name?: string;
   relativePath?: string;
   mediaType?: "image" | "video" | "audio";
   md5?: string;
@@ -747,7 +749,7 @@ export async function resolveStoryboardProjectReferences(input: {
   const context = currentUserStorage();
   if (!context) throw Object.assign(new Error("缺少账号上下文，无法解析分镜素材"), { status: 403 });
   const resolved: ProjectMediaReference[] = [];
-  const seenAudioPaths = new Set<string>();
+  const seenAudioReferences = new Set<string>();
   for (const binding of input.bindings) {
     if (binding.sourceProjectUuid !== input.projectUuid) {
       throw Object.assign(new Error("分镜参考素材不属于当前项目"), { status: 400 });
@@ -791,15 +793,19 @@ export async function resolveStoryboardProjectReferences(input: {
     // 中文注释：持久化 POSIX 相对路径，禁止泄露设备盘符或跨设备绝对路径。
     resolved.push({
       assetUuid: binding.assetUuid,
+      ...(asset.name?.trim() ? { name: asset.name.trim() } : {}),
       relativePath: path.posix.normalize(relativePath),
       mediaType,
     });
     const roleType = String(binding.assetType ?? asset.type ?? "");
     const voiceEnabled = binding.voiceEnabled !== false;
     if (roleType === "role" && voiceEnabled) {
-      const audioPath = await runWithProjectStorage(input.projectUuid, () => resolveRoleAudioRelativePath(Number(asset.id)));
-      if (audioPath && !seenAudioPaths.has(audioPath)) {
-        seenAudioPaths.add(audioPath);
+      const audioReference = await runWithProjectStorage(input.projectUuid, () => resolveRoleAudioReference(Number(asset.id)));
+      const audioPath = audioReference?.relativePath;
+      // 中文注释：同文件的不同素材名代表不同 @引用；仅合并路径与名称都一致的共享音色。
+      const audioReferenceKey = JSON.stringify([audioPath, audioReference?.name ?? ""]);
+      if (audioPath && !seenAudioReferences.has(audioReferenceKey)) {
+        seenAudioReferences.add(audioReferenceKey);
         let audioAbsolute: string;
         try {
           audioAbsolute = resolveProjectFilePath(getPath(), input.projectUuid, context.segment, audioPath);
@@ -815,6 +821,8 @@ export async function resolveStoryboardProjectReferences(input: {
         if (audioReadable) {
           resolved.push({
             assetUuid: binding.assetUuid,
+            // 中文注释：音色使用绑定音频素材的真实名称，不复用角色图片名称。
+            ...(audioReference?.name ? { name: audioReference.name } : {}),
             relativePath: path.posix.normalize(audioPath),
             mediaType: "audio",
           });
@@ -825,12 +833,15 @@ export async function resolveStoryboardProjectReferences(input: {
   return resolved;
 }
 
-async function resolveRoleAudioRelativePath(roleAssetId: number): Promise<string | null> {
+async function resolveRoleAudioReference(roleAssetId: number): Promise<{ relativePath: string; name?: string } | null> {
   if (!Number.isInteger(roleAssetId) || roleAssetId <= 0) return null;
   const { loadBoundRoleAudioInputs, resolveSafeProjectAudioLogicalPath } = await import("./related-audio-dto");
   const grouped = await loadBoundRoleAudioInputs(activeDb, [roleAssetId]);
   const first = grouped[roleAssetId]?.[0];
-  return resolveSafeProjectAudioLogicalPath(first?.filePath);
+  const relativePath = resolveSafeProjectAudioLogicalPath(first?.filePath);
+  if (!relativePath) return null;
+  const name = first?.name?.trim();
+  return { relativePath, ...(name ? { name } : {}) };
 }
 
 function enrichDreaminaReferenceIdentity(
@@ -949,6 +960,7 @@ function toVendorMediaReference(
   }
   return {
     type: reference.mediaType,
+    ...(reference.name ? { name: reference.name } : {}),
     media: {
       projectUuid,
       relativePath: reference.relativePath,

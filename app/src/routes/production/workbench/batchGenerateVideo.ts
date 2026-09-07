@@ -124,9 +124,10 @@ export default router.post(
                     .db("o_assets")
                     .where("o_assets.id", item.id)
                     .leftJoin("o_image", "o_assets.imageId", "o_image.id")
-                    .select("o_image.filePath", "o_image.type")
+                    .select("o_image.filePath", "o_image.type", "o_assets.name")
                     .first();
-                  return { path: filePath?.filePath, sources: filePath.type };
+                  // 中文注释：批量和单次生成使用同一项目素材名称，不按批次重新编号。
+                  return { path: filePath?.filePath, sources: filePath?.type, name: filePath?.name ?? undefined };
                 }
               }),
             );
@@ -148,7 +149,7 @@ export default router.post(
           const base64 = await Promise.all(
             images.map(async (item) => {
               if (!item) return null;
-              return { base64: await u.oss.getImageBase64(item.path), type: item.sources == "audio" ? "audio" : "image" };
+              return { base64: await u.oss.getImageBase64(item.path), type: item.sources === "audio" ? "audio" : item.sources === "video" ? "video" : "image", name: item.name };
             }),
           );
           const relatedObjects = stringifyGenerationCompletionContract(createGenerationCompletionContract({

@@ -1470,11 +1470,11 @@ test("单活动账号切换会原子覆盖 active 数据，旧账号仅进入 re
     "SELECT version FROM schema_migrations ORDER BY version",
   ).all() as Array<{ version: number }>;
   bobDatabase.close();
-  // 中文注释：账号切换必须应用追加后的完整迁移链，v5 佳速协议迁移固定为第 46 条。
+  // 中文注释：账号切换必须应用追加后的完整迁移链，佳速 v5.1 命名素材迁移为第 47 条。
   assert.deepEqual(
     bobMigrationVersions.map((row) => row.version),
-    Array.from({ length: 46 }, (_unused, index) => index + 1),
-    "账号切换只允许把完整迁移链应用到 Bob 目标库（含即梦启用、暂停原因、轮询间隔、佳速模型目录、画布 staging 预留与佳速异步 v5 迁移）",
+    Array.from({ length: 47 }, (_unused, index) => index + 1),
+    "账号切换只允许把完整迁移链应用到 Bob 目标库（含即梦启用、暂停原因、轮询间隔、佳速模型目录、画布 staging 预留、佳速异步 v5 与 v5.1 命名素材迁移）",
   );
 
   assert.equal(fs.existsSync(recoveryRoot), true);

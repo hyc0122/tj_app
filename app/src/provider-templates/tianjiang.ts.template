@@ -69,6 +69,8 @@ interface RemoteModel {
 
 type ReferenceItem = {
   type: "image" | "audio" | "video";
+  // 中文注释：由宿主从项目素材读取，视频参考的 @名称 与此字段对应。
+  name?: string;
   // 宿主沿用 base64 字段名，但在进入新协议前已将参考素材暂存为 HTTPS URL。
   sourceType?: "base64" | "url";
   base64: string;
@@ -163,7 +165,7 @@ const PROVIDER_UPDATE_BASE_URL =
 
 const vendor: VendorConfig = {
   id: "tianjiang",
-  version: "5.0",
+  version: "5.1",
   author: "JiasuAPI",
   name: "佳速 API",
   description:
@@ -328,6 +330,16 @@ function referenceValues(references: ReferenceItem[], type: ReferenceItem["type"
     });
 }
 
+function namedVideoReferences(references: ReferenceItem[], type: ReferenceItem["type"]): Array<{ url: string; name?: string }> {
+  // 中文注释：仅视频创建协议支持命名对象；图片创建及首尾帧字段仍使用原 URL 合同。
+  const selected = references.filter((reference) => reference.type === type);
+  return referenceValues(selected, type).map((url, index) => {
+    const name = typeof selected[index].name === "string" ? selected[index].name!.trim() : "";
+    // 中文注释：无名称时让服务端按媒体类型编号，不改写提示词，也不按 URL 去重导致引用错位。
+    return name ? { url, name } : { url };
+  });
+}
+
 function getUpdateBaseUrl(): string {
   // updateBaseUrl 不展示在凭据表单中，仅供本地合同测试或受控部署覆盖。
   return String(vendor.inputValues.updateBaseUrl || PROVIDER_UPDATE_BASE_URL)
@@ -372,9 +384,9 @@ function normalizeTask(payload: Record<string, any>, kind: TaskKind): TaskResult
 
 async function videoRequest(config: VideoConfig, model: VideoModel): Promise<string> {
   const references = config.referenceList ?? [];
-  const images = referenceValues(references, "image");
-  const videos = referenceValues(references, "video");
-  const audios = referenceValues(references, "audio");
+  const images = namedVideoReferences(references, "image");
+  const videos = namedVideoReferences(references, "video");
+  const audios = namedVideoReferences(references, "audio");
   const body: Record<string, unknown> = {
     model: model.modelName,
     prompt: config.prompt,
@@ -390,12 +402,12 @@ async function videoRequest(config: VideoConfig, model: VideoModel): Promise<str
     if (images.length > 2 || images.length < (mode === "startEndRequired" ? 2 : 1)) {
       throw new Error("首尾帧参考图数量与当前模式不匹配");
     }
-    if (mode === "startFrameOptional" && images.length === 1) body.end_frame_url = images[0];
+    if (mode === "startFrameOptional" && images.length === 1) body.end_frame_url = images[0].url;
     else {
-      body.first_frame_url = images[0];
-      if (images[1]) body.end_frame_url = images[1];
+      body.first_frame_url = images[0].url;
+      if (images[1]) body.end_frame_url = images[1].url;
     }
-  } else if (mode === "singleImage" && images.length === 1) body.image = images[0];
+  } else if (mode === "singleImage" && images.length === 1) body.image = images[0].url;
   else if (images.length > 0) body.images = images;
   if (videos.length > 0) body.videos = videos;
   if (audios.length > 0) body.audios = audios;

@@ -202,7 +202,7 @@ test("佳速 API 模板使用正式 OpenAPI 的文本、图片、视频基准模
   const source = fs.readFileSync(templatePath, "utf8");
   const runtime = loadTemplate("http://127.0.0.1:1/v1");
   assert.equal(runtime.vendor.name, "佳速 API");
-  assert.equal(runtime.vendor.version, "5.0");
+  assert.equal(runtime.vendor.version, "5.1");
   assert.match(runtime.vendor.description, /https:\/\/jsapi\.apifox\.cn\//);
   assert.match(runtime.vendor.description, /https:\/\/js\.jiasuapi\.com\//);
   assert.match(runtime.vendor.description, /https:\/\/js\.jiasuapi\.com\/keys/);
@@ -404,14 +404,44 @@ test("视频只创建一次并在持久化远端 ID 后 GET 查询原任务", as
     assert.equal(createBody.duration, 5);
     assert.equal(createBody.ratio, "16:9");
     assert.equal(createBody.resolution, "720p");
-    assert.deepEqual(createBody.images, ["https://media.example/reference.png"]);
-    assert.deepEqual(createBody.videos, ["https://media.example/reference.mp4"]);
-    assert.deepEqual(createBody.audios, ["https://media.example/reference.mp3"]);
+    assert.deepEqual(createBody.images, [{ url: "https://media.example/reference.png" }]);
+    assert.deepEqual(createBody.videos, [{ url: "https://media.example/reference.mp4" }]);
+    assert.deepEqual(createBody.audios, [{ url: "https://media.example/reference.mp3" }]);
     assert.equal("generate_audio" in createBody, false);
     assert.equal("content" in createBody, false);
   } finally {
     await fixture.close();
   }
+});
+
+test("视频参考保留项目名称、媒体顺序及同 URL 不同名称，空名由上游编号且不重复提交 materials", async () => {
+  const fixture = await createMockServer();
+  try {
+    const runtime = loadTemplate(fixture.baseUrl);
+    const prompt = "@角色甲和@角色乙在@场景中，@角色甲的音色用于角色甲";
+    await runtime.videoRequest({
+      prompt, duration: 5, resolution: "720p", aspectRatio: "16:9", mode: [["imageReference:3", "videoReference:1", "audioReference:1"]],
+      referenceList: [
+        { type: "image", base64: "https://media.example/shared.png", name: "角色甲" },
+        { type: "audio", base64: "https://media.example/voice.mp3", name: "角色甲的音色" },
+        { type: "image", base64: "https://media.example/shared.png", name: "角色乙" },
+        { type: "video", base64: "https://media.example/ref.mp4", name: "  " },
+        { type: "image", base64: "https://media.example/scene.png", name: "场景" },
+      ],
+    }, { modelName: "existing-user-mapping", type: "video" });
+    const body = JSON.parse(fixture.requests[0].body.toString("utf8"));
+    assert.equal(body.model, "existing-user-mapping");
+    assert.equal(body.prompt, prompt);
+    assert.deepEqual(body.images, [
+      { url: "https://media.example/shared.png", name: "角色甲" },
+      { url: "https://media.example/shared.png", name: "角色乙" },
+      { url: "https://media.example/scene.png", name: "场景" },
+    ]);
+    assert.deepEqual(body.audios, [{ url: "https://media.example/voice.mp3", name: "角色甲的音色" }]);
+    assert.deepEqual(body.videos, [{ url: "https://media.example/ref.mp4" }]);
+    assert.equal("materials" in body, false);
+    assert.equal(fixture.requests.filter((request) => request.method === "POST").length, 1);
+  } finally { await fixture.close(); }
 });
 
 test("获取模型列表只返回去重后的非空模型 ID", async () => {

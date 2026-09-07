@@ -313,3 +313,35 @@ test("voiceEnabled=false 时解析引用不得包含该角色音频，开启时�
     assert.ok(disabled.some((item) => item.mediaType === "image"), "关闭后仍保留角色图片");
   });
 });
+
+test("命名音色引用保留同文件不同名，并合并同文件同名", async () => {
+  await withTempRuntime("named-audio-refs", [catalogRow(PROJECT_A)], async (port) => {
+    const firstRole = await createRoleWithMedia(port, "角色甲");
+    const secondRole = await createRoleWithMedia(port, "角色乙");
+    const bindings = [firstRole, secondRole].map((assetUuid) => ({
+      sourceProjectUuid: PROJECT_A, assetUuid, assetType: "role", relationRole: "appear", voiceEnabled: true,
+    }));
+    const initial = await resolveStoryboardProjectReferences({ projectUuid: PROJECT_A, bindings });
+    const firstAudioPath = initial.find((reference) => reference.mediaType === "audio")?.relativePath;
+    assert.ok(firstAudioPath);
+    const audioAssetIds: number[] = [];
+    await runWithProjectStorage(PROJECT_A, async () => {
+      for (const [index, assetUuid] of [firstRole, secondRole].entries()) {
+        const role = await activeDb("o_assets").where({ assetUuid }).first();
+        const binding = await activeDb("o_assetsRole2Audio").where({ assetsRoleId: role.id }).first();
+        audioAssetIds.push(Number(binding.assetsAudioId));
+        await activeDb("o_assets").where({ id: binding.assetsAudioId }).update({ name: index === 0 ? "甲的音色" : "乙的音色" });
+        const imageIds = (await activeDb("o_assets").where({ id: binding.assetsAudioId })
+          .orWhere({ assetsId: binding.assetsAudioId }).pluck("imageId")).filter((id) => id != null);
+        // 中文注释：显式让两份不同名称的音频资产指向同一个文件，避免依赖上传端的去重实现。
+        await activeDb("o_image").whereIn("id", imageIds).update({ filePath: firstAudioPath });
+      }
+    });
+    const distinct = await resolveStoryboardProjectReferences({ projectUuid: PROJECT_A, bindings });
+    assert.deepEqual(distinct.filter((reference) => reference.mediaType === "audio").map((reference) => reference.name),
+      ["甲的音色", "乙的音色"]);
+    await runWithProjectStorage(PROJECT_A, () => activeDb("o_assets").where({ id: audioAssetIds[1] }).update({ name: "甲的音色" }));
+    const shared = await resolveStoryboardProjectReferences({ projectUuid: PROJECT_A, bindings });
+    assert.deepEqual(shared.filter((reference) => reference.mediaType === "audio").map((reference) => reference.name), ["甲的音色"]);
+  });
+});

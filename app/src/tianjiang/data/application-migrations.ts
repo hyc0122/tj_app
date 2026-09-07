@@ -16,6 +16,7 @@ import {
 import {
   migrateJiasuProviderAsyncV5,
   migrateJiasuProviderModelCatalogV44,
+  migrateJiasuProviderNamedMaterialsV51,
   migrateJiasuProviderV4,
 } from "./jiasu-provider-migration";
 import { migrateProviderImageRecovery } from "./provider-image-recovery-migration";
@@ -427,6 +428,27 @@ export function buildApplicationMigrations(
                     return String(u.vendor.getVendor("tianjiang")?.version ?? "");
                   } catch {
                     // 中文注释：旧源码无效时只修复适配器，不清空账号密钥或模型配置。
+                    return undefined;
+                  }
+                },
+                writeInstalledSource: (source) => u.vendor.writeCode("tianjiang", source),
+              });
+            },
+          } satisfies SqliteMigration,
+          {
+            // 中文注释：追加独立账号版本，使已经跑过 v5 迁移的老用户也能收到命名素材适配器。
+            version: tableMigrations.length + 21,
+            name: "jiasu-provider-named-materials-v5-1",
+            checksumSource: "account tianjiang named video materials v5.1 source only preserve all account configuration v1",
+            up: async (database) => {
+              await migrateJiasuProviderNamedMaterialsV51(database, {
+                builtinSource: rawVendorData["tianjiang.ts"],
+                readInstalledVersion: () => {
+                  try {
+                    if (!u.vendor.getCode("tianjiang")) return undefined;
+                    return String(u.vendor.getVendor("tianjiang")?.version ?? "");
+                  } catch {
+                    // 中文注释：损坏的源码允许修复，但不得借此重建或清空账号配置。
                     return undefined;
                   }
                 },

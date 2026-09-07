@@ -9,6 +9,7 @@ import { getInitialTableSchemas } from "../../src/lib/initDB";
 import { buildApplicationMigrations } from "../../src/tianjiang/data/application-migrations";
 import {
   migrateJiasuProviderAsyncV5,
+  migrateJiasuProviderNamedMaterialsV51,
   migrateJiasuProviderModelCatalogV44,
   migrateJiasuProviderV4,
 } from "../../src/tianjiang/data/jiasu-provider-migration";
@@ -273,7 +274,7 @@ test("账号库注册佳速 4.4 源码升级迁移，项目库不得重复改写
   assert.ok(accountMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"));
   assert.equal(
     accountMigrations.at(-1)?.name,
-    "jiasu-provider-async-v5",
+    "jiasu-provider-named-materials-v5-1",
   );
   assert.equal(
     projectMigrations.some((migration) => migration.name === "jiasu-provider-model-catalog-v4-4"),
@@ -327,7 +328,32 @@ test("佳速新协议迁移保留显式私有代理，损坏配置不写源码�
 test("新协议迁移只注册到账号库，不在项目库升级共享源码", () => {
   const account = buildApplicationMigrations({ role: "account", skipEmbeddingInit: true });
   const project = buildApplicationMigrations({ role: "project", skipEmbeddingInit: true });
-  assert.equal(account.at(-1)?.name, "jiasu-provider-async-v5");
+  assert.equal(account.at(-1)?.name, "jiasu-provider-named-materials-v5-1");
   assert.equal(project.some((migration) => migration.name === "jiasu-provider-async-v5"), false);
+  assert.equal(project.some((migration) => migration.name === "jiasu-provider-named-materials-v5-1"), false);
   assert.equal(new Set(account.map((migration) => migration.version)).size, account.length);
+});
+
+test("命名素材升级只写 5.1 源码，保留密钥代理模型开关且重跑不降级", async () => {
+  const { database, root } = await createDatabase("tj-jiasu-v51-");
+  try {
+    const row = { id: "tianjiang", inputValues: '{"apiKey":"existing-secret","baseUrl":"https://proxy.example/v1","custom":true}', models: '{"custom":[{"modelName":"existing-map","type":"video"}]}', enable: 0 };
+    await database("o_vendorConfig").insert(row);
+    let installed = "5.0";
+    const writes: string[] = [];
+    const dependencies = {
+      builtinSource: "exports.vendor={version:'5.1'}",
+      readInstalledVersion: () => installed,
+      writeInstalledSource: (source: string) => { writes.push(source); installed = "5.1"; },
+    };
+    await migrateJiasuProviderNamedMaterialsV51(database, dependencies);
+    await migrateJiasuProviderNamedMaterialsV51(database, dependencies);
+    installed = "5.2";
+    await migrateJiasuProviderNamedMaterialsV51(database, dependencies);
+    assert.deepEqual(writes, [dependencies.builtinSource]);
+    const saved = await database("o_vendorConfig").where({ id: "tianjiang" }).first();
+    assert.equal(saved.inputValues, row.inputValues);
+    assert.equal(saved.models, row.models);
+    assert.equal(saved.enable, row.enable);
+  } finally { await database.destroy(); fs.rmSync(root, { recursive: true, force: true }); }
 });

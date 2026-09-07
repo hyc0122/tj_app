@@ -370,8 +370,11 @@ function referenceList2imageBase64ByVersion(version: unknown, input: any) {
 }
 
 type MediaPayload =
-  | { base64: string; media?: never }
-  | { media: PersistedMediaReference; base64?: never };
+  // 中文注释：name 是项目素材的显示名称，跟随引用暂存，不使用文件名或数组序号替代。
+  ({ name?: string } & (
+    | { base64: string; media?: never }
+    | { media: PersistedMediaReference; base64?: never }
+  ));
 export type ReferenceList =
   | ({ type: "image" } & MediaPayload)
   | ({ type: "audio" } & MediaPayload)
@@ -398,10 +401,10 @@ async function prepareVendorInput<T extends { referenceList?: ReferenceList[] }>
   provider: string,
   input: T,
   vendorMetadata?: Record<string, unknown>,
-): Promise<T & { referenceList: Array<{ type: "image" | "audio" | "video"; base64: string }> }> {
+): Promise<T & { referenceList: Array<{ type: "image" | "audio" | "video"; base64: string; name?: string }> }> {
   const metadata = vendorMetadata ?? {};
   preflightVendorInput(provider, input, metadata);
-  const prepared = [] as Array<{ type: "image" | "audio" | "video"; base64: string }>;
+  const prepared = [] as Array<{ type: "image" | "audio" | "video"; base64: string; name?: string }>;
   for (const reference of input.referenceList ?? []) {
     const [item] = await prepareModelMediaReferences(
       [reference],

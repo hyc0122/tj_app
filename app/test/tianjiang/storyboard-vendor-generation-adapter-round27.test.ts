@@ -83,6 +83,16 @@ function vendorRequest(
   };
 }
 
+test("分镜供应商适配保留项目素材名称及内容身份", () => {
+  const request = vendorRequest("video", "multimodal2video", ["image", "video", "audio"]);
+  const names = ["角色甲", "转场参考", "角色甲的音色"];
+  request.references.forEach((reference, index) => { reference.name = names[index]; });
+  const adapted = adaptVendorGenerationRequest({ projectUuid: PROJECT_UUID, mediaType: "video", request });
+  assert.deepEqual(adapted.config.referenceList?.map((reference) => reference.name), names);
+  assert.deepEqual(adapted.config.referenceList?.map((reference) => reference.media?.relativePath),
+    request.references.map((reference) => reference.relativePath));
+});
+
 test("普通供应商模式必须与真实引用数量及 JSON 描述完全一致", () => {
   const invalidCases: Array<{ mediaType: "image" | "video"; mode: string; refs: Array<"image" | "video" | "audio"> }> = [
     { mediaType: "image", mode: "text2image", refs: ["image"] },

@@ -33,12 +33,13 @@ test("佳速旧内联素材在项目暂存后才变成 URL，预检不落盘或�
         assert.equal(reference.size, MINIMAL_PNG.length);
         return "https://media.example/signed-reference.png";
       } });
-      const references = [{ type: "image" as const, base64: png }];
+      const references = [{ type: "image" as const, base64: png, name: "项目角色甲" }];
       preflightModelMediaReferences(references, urlCapability);
       assert.equal(staged, 0);
       assert.equal(fs.existsSync(path.join(root, "data")), false);
       const result = await prepareModelMediaReferences(references, urlCapability);
       assert.equal(result[0].base64, "https://media.example/signed-reference.png");
+      assert.equal(result[0].name, "项目角色甲");
       assert.equal(staged, 1);
       assert.equal(references[0].base64, png);
     }));
